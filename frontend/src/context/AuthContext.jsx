@@ -161,7 +161,11 @@ export const AuthProvider = ({ children }) => {
         setUser(data.user);
         return data.user;
       } else {
-        throw new Error('Server returned an invalid response. Verify your backend is running and the database is configured.');
+        const text = await res.text();
+        const snippet = text.slice(0, 100).replace(/<[^>]*>/g, '').trim();
+        throw new Error(
+          `Server returned an invalid response (HTTP ${res.status}${snippet ? `: ${snippet}` : ''}). Verify your backend is running and the database is configured.`
+        );
       }
     } catch (error) {
       throw new Error(error.message || 'Failed to connect to authentication server. Is the database running?');
