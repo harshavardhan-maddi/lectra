@@ -285,6 +285,14 @@ export const AuthProvider = ({ children }) => {
     if (!res.ok) {
       throw new Error(data.message || 'Failed to update user');
     }
+
+    // If the updated user is the currently logged-in user, keep local session in sync
+    if (user && data.user && data.user.id === user.id) {
+      const updatedUser = { ...user, ...data.user };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    }
+
     return data.user;
   };
 

@@ -184,16 +184,12 @@ CREATE TABLE IF NOT EXISTS `absentee_call_logs` (
 --   Username: TE_HOD
 --   Password: HOD_TE
 -- --------------------------------------------------------
-INSERT INTO `users` (`name`, `user_id`, `password`, `role`, `class_name`, `created_at`, `fingerprint_enabled`)
+INSERT IGNORE INTO `users` (`name`, `user_id`, `password`, `role`, `class_name`, `created_at`, `fingerprint_enabled`)
 VALUES
   ('Dr. Rajesh Sharma (HOD)', 'TE_HOD', '$2a$10$yw.07lMQB1jXvm4ln/GpouAV3SL3ORAVaRStAtG2/7scoCM7UKPr2', 'HOD', NULL, NOW(), 0),
   ('Prof. Anjali Verma (Sub Admin)', 'subadmin123', '$2a$10$YcXb0398vYXHSw4MOCjFMeAkP4j1/Ppox5G9/MK7xmpKeJTE8Wcqq', 'SUB_ADMIN', NULL, NOW(), 0),
   ('Rahul Kumar (CR CSE 3)', 'cr_cse3', '$2a$10$YcXb0398vYXHSw4MOCjFMeAkP4j1/Ppox5G9/MK7xmpKeJTE8Wcqq', 'CR', 'CSE 3rd Year', NOW(), 0),
   ('Sneha Reddy (CR CSE 4)', 'cr_cse4', '$2a$10$YcXb0398vYXHSw4MOCjFMeAkP4j1/Ppox5G9/MK7xmpKeJTE8Wcqq', 'CR', 'CSE 4th Year', NOW(), 0),
-  ('Absent Controller', 'ac123', '$2a$10$YcXb0398vYXHSw4MOCjFMeAkP4j1/Ppox5G9/MK7xmpKeJTE8Wcqq', 'ABSENT_CONTROLLER', NULL, NOW(), 0)
-ON DUPLICATE KEY UPDATE
-  `password` = VALUES(`password`),
-  `role` = VALUES(`role`),
-  `name` = VALUES(`name`);
+  ('Absent Controller', 'ac123', '$2a$10$YcXb0398vYXHSw4MOCjFMeAkP4j1/Ppox5G9/MK7xmpKeJTE8Wcqq', 'ABSENT_CONTROLLER', NULL, NOW(), 0);
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -331,9 +331,9 @@ const updateUser = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Protection: only Super Admin can modify HOD or Super Admin accounts
-    if ((existingUser.role === 'SUPER_ADMIN' || existingUser.role === 'HOD') && req.user.role !== 'SUPER_ADMIN') {
-      return res.status(403).json({ message: 'Only a Super Admin can modify HOD or Super Admin accounts' });
+    // Protection: only Super Admin can modify other HOD or Super Admin accounts
+    if ((existingUser.role === 'SUPER_ADMIN' || existingUser.role === 'HOD') && req.user.role !== 'SUPER_ADMIN' && req.user.id !== numId) {
+      return res.status(403).json({ message: 'Only a Super Admin can modify other HOD or Super Admin accounts' });
     }
 
     // Protection: HOD can only modify users in their own department
@@ -342,10 +342,13 @@ const updateUser = async (req, res) => {
     }
 
     const updateData = {};
-    if (name) updateData.name = name;
+    if (name && name.trim()) updateData.name = name.trim();
     if (role) {
       if (role === 'SUPER_ADMIN' && req.user.role !== 'SUPER_ADMIN') {
         return res.status(403).json({ message: 'Only a Super Admin can assign the Super Admin role' });
+      }
+      if (req.user.role !== 'SUPER_ADMIN' && role !== existingUser.role) {
+        return res.status(403).json({ message: 'You cannot change your own role' });
       }
       updateData.role = role;
     }
@@ -424,8 +427,6 @@ const getUsers = async (req, res) => {
     }
 
     res.json(combined);
-
-    res.json(combined);
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -446,17 +447,21 @@ const getDepartments = async (req, res) => {
       distinct: ['department'],
     });
 
-    const customSetting = await prisma.systemSetting.findUnique({
-      where: { key: 'known_departments' },
-    });
-    const customList = customSetting ? JSON.parse(customSetting.value || '[]') : [];
-
-    const deptsSet = new Set([
-      'Department of CSE(emerging Technologies)',
-      ...userDepts.map(u => u.department).filter(Boolean),
-      ...classroomDepts.map(c => c.department).filter(Boolean),
-      ...customList,
+    const deptsSet = new Set(['Department of CSE(emerging Technologies)']);
+    
+    // Find distinct departments from users, faculty, students, classrooms
+    const [userDepts, facultyDepts, studentDepts, classroomDepts] = await Promise.all([
+      prisma.user.findMany({ select: { department: true }, distinct: ['department'] }),
+      prisma.faculty.findMany({ select: { department: true }, distinct: ['department'] }),
+      prisma.student.findMany({ select: { department: true }, distinct: ['department'] }),
+      prisma.classroom.findMany({ select: { department: true }, distinct: ['department'] }),
     ]);
+
+    [...userDepts, ...facultyDepts, ...studentDepts, ...classroomDepts].forEach(d => {
+      if (d.department && d.department.trim()) {
+        deptsSet.add(d.department.trim());
+      }
+    });
 
     res.json(Array.from(deptsSet).filter(Boolean).sort());
   } catch (error) {
@@ -518,8 +523,8 @@ const updateProfile = async (req, res) => {
 
     const updateData = {};
 
-    if (name) {
-      updateData.name = name;
+    if (name && name.trim()) {
+      updateData.name = name.trim();
     }
 
     if (userId && userId !== user.userId) {

@@ -37,7 +37,7 @@ async function ensureSuperAdminAccount() {
     const salt = await bcrypt.genSalt(10);
     const superPassword = await bcrypt.hash('nrtec@nec', salt);
 
-    // If legacy 'SUPER_ADMIN' account exists, migrate it to 'SANEC' with the new password
+    // If legacy 'SUPER_ADMIN' account exists, migrate it to 'SANEC'
     try {
       const legacyAdmin = await prisma.user.findUnique({ where: { userId: 'SUPER_ADMIN' } });
       if (legacyAdmin) {
@@ -45,33 +45,37 @@ async function ensureSuperAdminAccount() {
           where: { id: legacyAdmin.id },
           data: {
             userId: 'SANEC',
-            password: superPassword,
-            name: 'Super Administrator',
             role: 'SUPER_ADMIN',
           },
         });
-        console.log('[Auto-Init] Migrated legacy SUPER_ADMIN user ID to SANEC with new password.');
+        console.log('[Auto-Init] Migrated legacy SUPER_ADMIN user ID to SANEC.');
       }
     } catch (migErr) {
       // Ignore if update fails or already handled
     }
 
-    await prisma.user.upsert({
-      where: { userId: 'SANEC' },
-      update: {
-        role: 'SUPER_ADMIN',
-        password: superPassword,
-        name: 'Super Administrator',
-      },
-      create: {
-        name: 'Super Administrator',
-        userId: 'SANEC',
-        password: superPassword,
-        role: 'SUPER_ADMIN',
-        className: null,
-      },
-    });
-    console.log('[Auto-Init] Verified Super Admin account (Username: SANEC, Password: nrtec@nec).');
+    const existingAdmin = await prisma.user.findUnique({ where: { userId: 'SANEC' } });
+    if (!existingAdmin) {
+      await prisma.user.create({
+        data: {
+          name: 'Super Administrator',
+          userId: 'SANEC',
+          password: superPassword,
+          role: 'SUPER_ADMIN',
+          className: null,
+        },
+      });
+      console.log('[Auto-Init] Created Super Admin account (Username: SANEC, Password: nrtec@nec).');
+    } else {
+      // Admin exists: NEVER overwrite custom name or password!
+      if (existingAdmin.role !== 'SUPER_ADMIN') {
+        await prisma.user.update({
+          where: { id: existingAdmin.id },
+          data: { role: 'SUPER_ADMIN' },
+        });
+      }
+      console.log('[Auto-Init] Verified existing Super Admin account (custom name & password preserved).');
+    }
   } catch (err) {
     console.warn('[Auto-Init] Could not verify Super Admin account:', err.message);
   }
@@ -82,24 +86,32 @@ async function ensureHODAccount() {
     const salt = await bcrypt.genSalt(10);
     const hodPassword = await bcrypt.hash('HOD_TE', salt);
 
-    await prisma.user.upsert({
-      where: { userId: 'TE_HOD' },
-      update: {
-        password: hodPassword,
-        role: 'HOD',
-        name: 'Dr. Rajesh Sharma (HOD)',
-        department: 'Department of CSE(emerging Technologies)',
-      },
-      create: {
-        name: 'Dr. Rajesh Sharma (HOD)',
-        userId: 'TE_HOD',
-        password: hodPassword,
-        role: 'HOD',
-        className: null,
-        department: 'Department of CSE(emerging Technologies)',
-      },
-    });
-    console.log('[Auto-Init] Verified TE_HOD user account (Username: TE_HOD, Password: HOD_TE, Dept: Department of CSE(emerging Technologies)).');
+    const existingHOD = await prisma.user.findUnique({ where: { userId: 'TE_HOD' } });
+    if (!existingHOD) {
+      await prisma.user.create({
+        data: {
+          name: 'Dr. Rajesh Sharma (HOD)',
+          userId: 'TE_HOD',
+          password: hodPassword,
+          role: 'HOD',
+          className: null,
+          department: 'Department of CSE(emerging Technologies)',
+        },
+      });
+      console.log('[Auto-Init] Created initial TE_HOD account (Username: TE_HOD, Password: HOD_TE, Dept: Department of CSE(emerging Technologies)).');
+    } else {
+      // HOD exists: NEVER overwrite custom name or password!
+      const updates = {};
+      if (existingHOD.role !== 'HOD') updates.role = 'HOD';
+      if (!existingHOD.department) updates.department = 'Department of CSE(emerging Technologies)';
+      if (Object.keys(updates).length > 0) {
+        await prisma.user.update({
+          where: { id: existingHOD.id },
+          data: updates,
+        });
+      }
+      console.log('[Auto-Init] Verified existing TE_HOD user account (custom name & password preserved).');
+    }
   } catch (err) {
     console.warn('[Auto-Init] Could not verify HOD account via Prisma:', err.message);
   }

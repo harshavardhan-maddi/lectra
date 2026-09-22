@@ -5,23 +5,23 @@ async function main() {
   const salt = await bcrypt.genSalt(10);
   const hodPassword = await bcrypt.hash('HOD_TE', salt);
 
-  // Guarantee TE_HOD is set up with HOD_TE credentials
-  await prisma.user.upsert({
-    where: { userId: 'TE_HOD' },
-    update: {
-      password: hodPassword,
-      role: 'HOD',
-      name: 'Dr. Rajesh Sharma',
-    },
-    create: {
-      name: 'Dr. Rajesh Sharma',
-      userId: 'TE_HOD',
-      password: hodPassword,
-      role: 'HOD',
-      className: null,
-    },
-  });
-  console.log('[Seeder] TE_HOD credentials set (Username: TE_HOD, Password: HOD_TE)');
+  // Ensure TE_HOD exists if table is empty
+  const existingHOD = await prisma.user.findUnique({ where: { userId: 'TE_HOD' } });
+  if (!existingHOD) {
+    await prisma.user.create({
+      data: {
+        name: 'Dr. Rajesh Sharma (HOD)',
+        userId: 'TE_HOD',
+        password: hodPassword,
+        role: 'HOD',
+        className: null,
+        department: 'Department of CSE(emerging Technologies)',
+      },
+    });
+    console.log('[Seeder] TE_HOD credentials set (Username: TE_HOD, Password: HOD_TE)');
+  } else {
+    console.log('[Seeder] TE_HOD already exists. Preserving custom name and password.');
+  }
 
   const userCount = await prisma.user.count();
   if (userCount > 1) {
