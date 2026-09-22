@@ -1,7 +1,5 @@
-const { PrismaClient } = require('../src/generated/client');
+const prisma = require('../src/db');
 const bcrypt = require('bcryptjs');
-
-const prisma = new PrismaClient();
 
 async function main() {
   const userCount = await prisma.user.count();

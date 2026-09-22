@@ -1,18 +1,19 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
+  mysql:
+    image: mysql:8.0
     container_name: faculty_tracker_db
     ports:
-      - "5432:5432"
+      - "3306:3306"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: faculty_tracker
+      MYSQL_ROOT_PASSWORD: password123
+      MYSQL_DATABASE: faculty_tracker
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password123
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     restart: always
 
 volumes:
-  postgres_data:
+  mysql_data:

@@ -2,15 +2,19 @@
   "name": "faculty-tracker",
   "version": "1.0.0",
   "description": "Lectra with Real-Time Updates",
-  "scripts": {
+    "start": "node server.js",
     "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "build": "node scripts/build.js",
     "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "db:generate": "npx prisma generate --schema=backend/prisma/schema.prisma",
+    "db:push": "npx prisma db push --schema=backend/prisma/schema.prisma",
+    "db:seed": "node backend/prisma/seed.js",
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
+    "@simplewebauthn/server": "^13.3.2",
     "adm-zip": "^0.5.18",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

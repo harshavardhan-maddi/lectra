@@ -4,6 +4,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
+const path = require('path');
+const fs = require('fs');
 const prisma = require('./db');
 const { initSocket } = require('./services/socket.service');
 const { startCron } = require('./services/cron.service');
@@ -28,7 +30,7 @@ initSocket(server);
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/classrooms', classroomRoutes);
 app.use('/api/timetables', timetableRoutes);
@@ -44,6 +46,23 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date() });
 });
 
+// Serve frontend build in production / Hostinger deployment
+const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/health') || req.path.startsWith('/socket.io')) {
+      return next();
+    }
+    const indexPath = path.join(frontendDistPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+    next();
+  });
+}
+
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('[Global Error Logger]', err);
@@ -58,7 +77,7 @@ const startServer = async () => {
   try {
     // Test database connection
     await prisma.$connect();
-    console.log('[Database] Connected to PostgreSQL via Prisma ORM.');
+    console.log('[Database] Connected to MySQL via Prisma ORM.');
 
     // Start background auto-expiry cron
     startCron();

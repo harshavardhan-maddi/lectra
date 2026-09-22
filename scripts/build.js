@@ -13,9 +13,13 @@ try {
 
   // 2. Generate Prisma Client
   console.log('[Build Script] Step 2: Generating Prisma Client...');
-  const prismaPath = path.join(backendDir, 'node_modules/prisma/build/index.js');
   const schemaPath = path.join(backendDir, 'prisma/schema.prisma');
-  execSync(`node "${prismaPath}" generate --schema="${schemaPath}"`, { cwd: backendDir, stdio: 'inherit' });
+  try {
+    execSync(`npx prisma generate --schema="${schemaPath}"`, { cwd: backendDir, stdio: 'inherit' });
+  } catch (err) {
+    const prismaPath = path.join(backendDir, 'node_modules/prisma/build/index.js');
+    execSync(`node "${prismaPath}" generate --schema="${schemaPath}"`, { cwd: backendDir, stdio: 'inherit' });
+  }
   console.log('[Build Script] Prisma Client generated successfully.');
 
   // 3. Install Frontend Dependencies
@@ -26,8 +30,12 @@ try {
 
   // 4. Build Frontend with Vite
   console.log('[Build Script] Step 4: Compiling frontend...');
-  const vitePath = path.join(__dirname, '../frontend/node_modules/vite/bin/vite.js');
-  execSync(`node "${vitePath}" build`, { cwd: frontendDir, stdio: 'inherit' });
+  try {
+    execSync('npm run build', { cwd: frontendDir, stdio: 'inherit' });
+  } catch (err) {
+    const vitePath = path.join(frontendDir, 'node_modules/vite/bin/vite.js');
+    execSync(`node "${vitePath}" build`, { cwd: frontendDir, stdio: 'inherit' });
+  }
   console.log('[Build Script] Frontend built successfully.');
 
   console.log('[Build Script] Build completed successfully!');

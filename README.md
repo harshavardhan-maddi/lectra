@@ -10,7 +10,7 @@ Class Representatives (CRs) log faculty entry inside classrooms during active ti
 - **Frontend**: React (Vite), Tailwind CSS (Soft Academic Modern custom palette), Socket.IO Client, Lucide Icons, React Router DOM.
 - **Backend**: Node.js, Express.js, Socket.IO, JWT Authentication, BCrypt (Password Hashing), Node-Cron (Background auto-expiry task).
 - **ORM**: Prisma Client.
-- **Database**: PostgreSQL (configured via Docker Compose or manual PostgreSQL instance).
+- **Database**: MySQL 8.0+ / MariaDB 10.3+ (configured via Docker Compose, Hostinger hPanel, or local MySQL).
 
 ---
 
@@ -18,11 +18,15 @@ Class Representatives (CRs) log faculty entry inside classrooms during active ti
 ```
 faculty-tracker/
   ├── package.json               # Root scripts to run both servers concurrently
-  ├── docker-compose.yml         # Starts PostgreSQL container
+  ├── server.js                  # Production root entry point (Hostinger / PM2 / Passenger)
+  ├── .htaccess                  # LiteSpeed / Apache reverse proxy for Hostinger
+  ├── HOSTINGER_DEPLOYMENT.md    # Step-by-step Hostinger deployment instructions
+  ├── docker-compose.yml         # Starts MySQL 8.0 container
   ├── backend/
   │    ├── package.json
   │    ├── prisma/
-  │    │    ├── schema.prisma    # Database schema definition
+  │    │    ├── schema.prisma    # MySQL Database schema definition
+  │    │    ├── mysql_schema.sql # Direct DDL script for phpMyAdmin import
   │    │    └── seed.js          # Pre-fills sandbox DB with schedules & accounts
   │    ├── src/
   │    │    ├── controllers/     # Route business logic
@@ -51,17 +55,17 @@ faculty-tracker/
 ## 🚀 Installation & Local Setup
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v16+ recommended)
-- [Docker & Docker Compose](https://www.docker.com/) (to run PostgreSQL database, or run a local PostgreSQL instance manually).
+- [Node.js](https://nodejs.org/) (v18+ or v20+ recommended)
+- [Docker & Docker Compose](https://www.docker.com/) (to run MySQL 8 container, or run a local MySQL instance manually).
 
 ---
 
 ### Step 1: Clone & Configure Databases
-If using Docker, run this command in the project root to spin up the PostgreSQL database:
+If using Docker, run this command in the project root to spin up the MySQL database:
 ```bash
 docker-compose up -d
 ```
-The database will listen on `localhost:5432` with username `postgres` and password `password123` inside the database `faculty_tracker`.
+The database will listen on `localhost:3306` with username `user` and password `password123` inside the database `faculty_tracker`.
 
 ---
 
@@ -69,7 +73,7 @@ The database will listen on `localhost:5432` with username `postgres` and passwo
 Verify or edit `backend/.env`. It should resemble the following:
 ```env
 PORT=5000
-DATABASE_URL="postgresql://postgres:xxxxxxx@localhost:5432/faculty_tracker?schema=public"
+DATABASE_URL="mysql://root:password@localhost:3306/faculty_tracker"
 JWT_SECRET="supersecret_facultytrackerkey_2026"
 NODE_ENV=development
 ```
@@ -92,7 +96,7 @@ npx prisma db push
 npm run db:seed
 cd ..
 ```
-*Note: `npx prisma db push` will build the schema directly on the PostgreSQL database, and `npm run db:seed` will populate all the required metadata.*
+*Note: `npx prisma db push` will build the schema directly on the MySQL database, and `npm run db:seed` will populate all the required metadata.*
 
 ---
 

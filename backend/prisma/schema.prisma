@@ -1,11 +1,11 @@
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-1.1.x", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
 enum Role {
@@ -79,7 +79,7 @@ model FacultyLog {
 model SystemSetting {
   id        Int      @id @default(autoincrement())
   key       String   @unique
-  value     String
+  value     String   @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -89,10 +89,10 @@ model SystemSetting {
 model Fingerprint {
   id           Int      @id @default(autoincrement())
   userId       String   @unique @map("user_id")
-  credentialId String   @map("credential_id")
-  publicKey    String   @map("public_key")
+  credentialId String   @db.Text @map("credential_id")
+  publicKey    String   @db.Text @map("public_key")
   counter      Int      @default(0)
-  transports   String?
+  transports   String?  @db.Text
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@map("fingerprints")
@@ -102,7 +102,7 @@ model FingerprintAuditLog {
   id        Int      @id @default(autoincrement())
   userId    String   @map("user_id")
   action    String   // "REGISTRATION", "REMOVAL", "LOGIN_SUCCESS", "LOGIN_FAILURE", "TOGGLE_ON", "TOGGLE_OFF"
-  details   String?
+  details   String?  @db.Text
   ipAddress String?  @map("ip_address")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -118,7 +118,7 @@ model Student {
   parentMobile     String            @map("parent_mobile")
   preExcusedStart  String?           @map("pre_excused_start")
   preExcusedEnd    String?           @map("pre_excused_end")
-  preExcusedReason String?           @map("pre_excused_reason")
+  preExcusedReason String?           @db.Text @map("pre_excused_reason")
   createdAt        DateTime          @default(now()) @map("created_at")
   attendance       Attendance[]
   callLogs         AbsenteeCallLog[]
@@ -146,7 +146,7 @@ model AbsenteeCallLog {
   student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   date        String   // Format: "YYYY-MM-DD"
   answered    Boolean  // true if answered, false if not
-  reason      String?  // Reason for absent if answered
+  reason      String?  @db.Text // Reason for absent if answered
   calledById  Int      @map("called_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   callType    String   @default("ABSENT") @map("call_type")

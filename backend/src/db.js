@@ -6,8 +6,8 @@ if (process.env.DATABASE_URL) {
     url = url.slice(1, -1);
   }
   
-  // Ensure connection limit is set to 1 for serverless environments to prevent pooler exhaustion
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+  // Limit connections to 1 for serverless environments (e.g. Vercel) to prevent pool exhaustion
+  if (process.env.VERCEL) {
     if (!url.includes('connection_limit=')) {
       const separator = url.includes('?') ? '&' : '?';
       url += `${separator}connection_limit=1`;

@@ -174,7 +174,7 @@ async function exportOverallData(adminUser) {
     backupVersion: BACKUP_VERSION,
     creationDate: creationDate.toISOString(),
     applicationVersion: APP_VERSION,
-    databaseType: 'PostgreSQL',
+    databaseType: 'MySQL',
     sourceApplication: 'Lectra Attendance & Ticketing System',
     exportedBy: {
       userId: adminUser?.userId || 'ADMIN',
