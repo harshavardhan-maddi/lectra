@@ -108,6 +108,50 @@ const AppRoutes = () => {
       />
 
       <Route
+        path="/students"
+        element={
+          <PrivateRoute allowedRoles={['HOD', 'SUB_ADMIN']}>
+            <Layout>
+              <Dashboard initialTab="students" />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/absentees"
+        element={
+          <PrivateRoute allowedRoles={['HOD', 'SUB_ADMIN']}>
+            <Layout>
+              <Dashboard initialTab="absentees" />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/outpasses"
+        element={
+          <PrivateRoute allowedRoles={['HOD', 'SUB_ADMIN']}>
+            <Layout>
+              <Dashboard initialTab="outpassApprovals" />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/backup"
+        element={
+          <PrivateRoute allowedRoles={['HOD', 'SUB_ADMIN']}>
+            <Layout>
+              <Dashboard initialTab="dataBackup" />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
         path="/classrooms"
         element={
           <PrivateRoute allowedRoles={['HOD', 'SUB_ADMIN']}>

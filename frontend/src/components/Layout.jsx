@@ -18,7 +18,12 @@ import {
   Clock,
   UserCheck,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  GraduationCap,
+  AlertCircle,
+  FileText,
+  Database,
+  UserX
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -113,26 +118,34 @@ const Layout = ({ children }) => {
   if (user?.role === 'SUPER_ADMIN') {
     navLinks.push(
       { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'Student Registry', path: '/students', icon: GraduationCap },
+      { name: 'Absentees Tracking', path: '/absentees', icon: AlertCircle },
+      { name: 'Outpass Approvals', path: '/outpasses', icon: FileText },
       { name: 'Manage All Users', path: '/users', icon: Users },
       { name: 'Classrooms', path: '/classrooms', icon: CalendarDays },
       { name: 'Faculty Contacts', path: '/faculty', icon: UserCheck },
       { name: 'Reports', path: '/reports', icon: FileSpreadsheet },
       { name: 'Gate & Outpasses', path: '/watchman-dashboard', icon: ShieldCheck },
-      { name: 'Absent Control', path: '/absent-controller', icon: Users },
+      { name: 'Absent Control', path: '/absent-controller', icon: UserX },
       { name: 'Faculty Portal', path: '/faculty-dashboard', icon: LayoutDashboard },
+      { name: 'Data Backup', path: '/backup', icon: Database },
       { name: 'System Settings', path: '/settings', icon: Settings }
     );
   } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN') {
     navLinks.push(
       { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'Student Registry', path: '/students', icon: GraduationCap },
+      { name: 'Absentees Tracking', path: '/absentees', icon: AlertCircle },
+      { name: 'Outpass Approvals', path: '/outpasses', icon: FileText },
       { name: 'Classrooms', path: '/classrooms', icon: CalendarDays },
       { name: 'Faculty Contacts', path: '/faculty', icon: UserCheck },
       { name: 'Reports', path: '/reports', icon: FileSpreadsheet },
-      { name: 'Fingerprint Settings', path: '/settings', icon: Settings }
     );
     if (user?.role === 'HOD') {
       navLinks.push({ name: 'Manage Users', path: '/users', icon: Users });
+      navLinks.push({ name: 'Data Backup', path: '/backup', icon: Database });
     }
+    navLinks.push({ name: 'Fingerprint Settings', path: '/settings', icon: Settings });
   } else if (user?.role === 'CR') {
     navLinks.push({ name: 'My Timetable', path: '/cr-dashboard', icon: CalendarDays });
   } else if (user?.role === 'ABSENT_CONTROLLER') {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import StatCard from '../components/StatCard';
@@ -61,12 +62,42 @@ import {
   getMigrationHistory
 } from '../services/backupService';
 
-const Dashboard = () => {
+const Dashboard = ({ initialTab }) => {
   const { token, user, selectedDepartment } = useAuth();
   const { socket } = useSocket();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  // Active Tab: 'faculty', 'students', 'absentees', 'settings', 'outpassApprovals'
-  const [activeTab, setActiveTab] = useState('faculty');
+  const getResolvedTab = () => {
+    if (initialTab) return initialTab;
+    const qTab = searchParams.get('tab');
+    if (qTab) return qTab;
+    if (location.pathname === '/students') return 'students';
+    if (location.pathname === '/absentees') return 'absentees';
+    if (location.pathname === '/outpasses') return 'outpassApprovals';
+    if (location.pathname === '/backup') return 'dataBackup';
+    return 'faculty';
+  };
+
+  // Active Tab: 'faculty', 'students', 'absentees', 'settings', 'outpassApprovals', 'dataBackup'
+  const [activeTab, setActiveTab] = useState(getResolvedTab);
+
+  useEffect(() => {
+    const target = getResolvedTab();
+    if (target !== activeTab) {
+      setActiveTab(target);
+    }
+  }, [location.pathname, searchParams, initialTab]);
+
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    if (newTab === 'students') navigate('/students');
+    else if (newTab === 'absentees') navigate('/absentees');
+    else if (newTab === 'outpassApprovals') navigate('/outpasses');
+    else if (newTab === 'dataBackup') navigate('/backup');
+    else if (newTab === 'faculty') navigate('/dashboard');
+  };
   const [success, setSuccess] = useState('');
 
   // HOD Outpass Approvals state
@@ -1019,7 +1050,7 @@ const Dashboard = () => {
       {(user?.role === 'HOD' || user?.role === 'SUPER_ADMIN') && (
         <div className="flex border-b border-slate-200 dark:border-slate-800">
           <button
-            onClick={() => setActiveTab('faculty')}
+            onClick={() => handleTabChange('faculty')}
             className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
               activeTab === 'faculty' 
                 ? 'border-primary text-primary-dark dark:text-primary font-bold' 
@@ -1030,7 +1061,7 @@ const Dashboard = () => {
             <span>Faculty Monitor</span>
           </button>
           <button
-            onClick={() => setActiveTab('students')}
+            onClick={() => handleTabChange('students')}
             className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
               activeTab === 'students' 
                 ? 'border-primary text-primary-dark dark:text-primary font-bold' 
@@ -1041,7 +1072,7 @@ const Dashboard = () => {
             <span>Student Registry</span>
           </button>
           <button
-            onClick={() => setActiveTab('absentees')}
+            onClick={() => handleTabChange('absentees')}
             className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
               activeTab === 'absentees' 
                 ? 'border-primary text-primary-dark dark:text-primary font-bold' 
@@ -1052,7 +1083,7 @@ const Dashboard = () => {
             <span>Absentees Tracking</span>
           </button>
           <button
-            onClick={() => setActiveTab('settings')}
+            onClick={() => handleTabChange('settings')}
             className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
               activeTab === 'settings' 
                 ? 'border-primary text-primary-dark dark:text-primary font-bold' 
@@ -1063,7 +1094,7 @@ const Dashboard = () => {
             <span>Attendance Timings</span>
           </button>
           <button
-            onClick={() => setActiveTab('outpassApprovals')}
+            onClick={() => handleTabChange('outpassApprovals')}
             className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all relative ${
               activeTab === 'outpassApprovals' 
                 ? 'border-primary text-primary-dark dark:text-primary font-bold' 
@@ -1079,7 +1110,7 @@ const Dashboard = () => {
             )}
           </button>
           <button
-            onClick={() => setActiveTab('dataBackup')}
+            onClick={() => handleTabChange('dataBackup')}
             className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
               activeTab === 'dataBackup' 
                 ? 'border-primary text-primary-dark dark:text-primary font-bold' 
