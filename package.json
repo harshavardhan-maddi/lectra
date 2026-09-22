@@ -10,6 +10,7 @@
     "db:generate": "npx prisma generate --schema=backend/prisma/schema.prisma",
     "db:push": "npx prisma db push --schema=backend/prisma/schema.prisma",
     "db:seed": "node backend/prisma/seed.js",
+    "set:hod": "node backend/set_hod.js",
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down"
   },

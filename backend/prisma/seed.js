@@ -2,9 +2,30 @@ const prisma = require('../src/db');
 const bcrypt = require('bcryptjs');
 
 async function main() {
+  const salt = await bcrypt.genSalt(10);
+  const hodPassword = await bcrypt.hash('HOD_TE', salt);
+
+  // Guarantee TE_HOD is set up with HOD_TE credentials
+  await prisma.user.upsert({
+    where: { userId: 'TE_HOD' },
+    update: {
+      password: hodPassword,
+      role: 'HOD',
+      name: 'Dr. Rajesh Sharma',
+    },
+    create: {
+      name: 'Dr. Rajesh Sharma',
+      userId: 'TE_HOD',
+      password: hodPassword,
+      role: 'HOD',
+      className: null,
+    },
+  });
+  console.log('[Seeder] TE_HOD credentials set (Username: TE_HOD, Password: HOD_TE)');
+
   const userCount = await prisma.user.count();
-  if (userCount > 0) {
-    console.log('[Seeder] Database already contains user accounts. Skipping default seeder to protect your existing classrooms, faculty logs, and timetables.');
+  if (userCount > 1) {
+    console.log('[Seeder] Database already contains records. Full seed skipped to protect existing data.');
     return;
   }
 
