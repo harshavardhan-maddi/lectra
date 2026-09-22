@@ -32,6 +32,11 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
   };
 
   const isFaculty = ticket.applicantType === 'FACULTY';
+  const facultyDeptName = (ticket.department && ticket.department !== 'General')
+    ? ticket.department
+    : (ticket.section && ticket.section !== 'General' && ticket.section !== 'Faculty'
+        ? ticket.section
+        : 'Department of CSE(emerging Technologies)');
 
   // Status visual mapping
   const getStatusBadge = (status) => {
@@ -194,7 +199,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                     Narasaraopeta Engineering College
                   </h1>
                   <p className="text-[11px] font-extrabold text-primary-dark tracking-wide uppercase mt-0.5">
-                    (AUTONOMOUS)
+                    {isFaculty ? facultyDeptName : '(AUTONOMOUS)'}
                   </p>
                   <p className="text-[9px] text-slate-600 font-medium leading-tight mt-0.5">
                     Approved by AICTE, New Delhi & Permanently Affiliated to JNTUK, Kakinada<br />
@@ -254,8 +259,8 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
                         Department
                       </td>
-                      <td className="p-2 font-extrabold text-slate-950 border-r border-slate-300">
-                        {ticket.department || ticket.section}
+                      <td className="p-2 font-black text-slate-950 border-r border-slate-300">
+                        {facultyDeptName}
                       </td>
                       <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
                         Permission Type

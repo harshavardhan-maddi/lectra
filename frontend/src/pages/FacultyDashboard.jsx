@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   Users, 
@@ -47,11 +48,21 @@ const ABSENCE_REASONS = {
 
 const FacultyDashboard = () => {
   const { token, user } = useAuth();
+  const [searchParams] = useSearchParams();
 
   // Navigation & Dropdown States
   const [classrooms, setClassrooms] = useState([]);
   const [selectedSection, setSelectedSection] = useState('');
-  const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' or 'calls'
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'attendance');
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    } else {
+      setActiveTab('attendance');
+    }
+  }, [searchParams]);
   
   // Data States
   const [students, setStudents] = useState([]);
@@ -147,11 +158,12 @@ const FacultyDashboard = () => {
 
     try {
       setApplyingLeave(true);
+      const facultyDept = user?.department || 'Department of CSE(emerging Technologies)';
       const ticket = await applyFacultyLeave({
         facultyId: user?.id,
         facultyUserId: user?.userId,
         facultyName: user?.name,
-        department: user?.className || 'General',
+        department: facultyDept,
         type: leaveType,
         date: leaveDate || todayDate,
         leaveTime: leaveType === 'FACULTY_EARLY_OUT' ? leaveTime : 'Full Day',
@@ -467,46 +479,53 @@ const FacultyDashboard = () => {
         </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 no-print">
-        <button
-          onClick={() => setActiveTab('attendance')}
-          className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-            activeTab === 'attendance'
-              ? 'border-primary text-primary-dark dark:text-primary font-bold'
-              : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-          }`}
-        >
-          <Users size={16} />
-          <span>Attendance Registry</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('calls')}
-          className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-            activeTab === 'calls'
-              ? 'border-primary text-primary-dark dark:text-primary font-bold'
-              : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-          }`}
-        >
-          <PhoneCall size={16} />
-          <span>Parent Call Logs</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('leaves')}
-          className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-            activeTab === 'leaves'
-              ? 'border-primary text-primary-dark dark:text-primary font-bold'
-              : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-          }`}
-        >
-          <Calendar size={16} />
-          <span>Leave & Early Out Gate Pass</span>
-          {facultyTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-700 dark:text-amber-400">
-              {facultyTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length} Pending
-            </span>
+      {/* Active Section Header (Feature selection driven by Left Menu) */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 gap-3 no-print">
+        <div className="flex items-center gap-3">
+          {activeTab === 'attendance' && (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <Users size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Student Attendance Registry</h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Mark student presence, absentees, and late arrivals for your assigned classes</p>
+              </div>
+            </>
           )}
-        </button>
+          {activeTab === 'calls' && (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <PhoneCall size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Parent Call Logs & Calling Desk</h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Follow up with parents of absent students and log reason feedback</p>
+              </div>
+            </>
+          )}
+          {activeTab === 'leaves' && (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <Calendar size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Leave & Early Out Gate Pass</h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Apply for leaves, same-day early out permissions, and download official departure slips</p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {activeTab === 'leaves' && (
+          <button
+            onClick={() => setShowApplyModal(true)}
+            className="btn-primary py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-primary/20 shrink-0"
+          >
+            <Plus size={16} />
+            <span>Apply Leave / Early Out</span>
+          </button>
+        )}
       </div>
 
       {/* Direct Call Registry Portal */}

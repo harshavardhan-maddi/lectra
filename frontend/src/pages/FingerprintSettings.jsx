@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { startRegistration } from '@simplewebauthn/browser';
 import {
@@ -16,9 +17,21 @@ import {
 
 const FingerprintSettings = () => {
   const { token, user } = useAuth();
+  const [searchParams] = useSearchParams();
   
-  // Tabs State
-  const [activeTab, setActiveTab] = useState(user?.role === 'ABSENT_CONTROLLER' ? 'overrides' : 'security');
+  // Tabs State (driven by menu or default)
+  const [activeTab, setActiveTab] = useState(
+    searchParams.get('tab') || (user?.role === 'ABSENT_CONTROLLER' ? 'overrides' : 'security')
+  );
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    } else {
+      setActiveTab(user?.role === 'ABSENT_CONTROLLER' ? 'overrides' : 'security');
+    }
+  }, [searchParams, user]);
 
   // Fingerprint Settings state
   const [settings, setSettings] = useState(null);
@@ -258,31 +271,13 @@ const FingerprintSettings = () => {
         </p>
       </div>
 
-      {/* Navigation Tabs (Only visible for HOD/Sub-Admin who have both panels) */}
+      {/* Active Section Header */}
       {user?.role !== 'ABSENT_CONTROLLER' && (
-        <div className="flex border-b border-slate-200 dark:border-slate-800 no-print">
-          <button
-            onClick={() => setActiveTab('security')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeTab === 'security' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <Fingerprint size={16} />
-            <span>Fingerprint Security</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('overrides')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeTab === 'overrides' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <ShieldCheck size={16} />
-            <span>CR Attendance Overrides</span>
-          </button>
+        <div className="flex items-center gap-3 py-2 no-print">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary/10 text-primary-dark dark:text-primary font-bold text-sm border border-primary/20">
+            {activeTab === 'security' ? <Fingerprint size={16} /> : <ShieldCheck size={16} />}
+            <span>{activeTab === 'security' ? 'Fingerprint Security Module' : 'CR Attendance Overrides'}</span>
+          </div>
         </div>
       )}
 

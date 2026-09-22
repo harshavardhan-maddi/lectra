@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { 
@@ -8,21 +9,31 @@ import {
   AlertCircle, 
   Sparkles, 
   Users, 
-  CalendarDays,
-  UserCheck,
-  UserX,
-  PlusCircle,
-  TrendingUp,
-  Save
+  CalendarDays, 
+  UserCheck, 
+  UserX, 
+  PlusCircle, 
+  TrendingUp, 
+  Save 
 } from 'lucide-react';
 import Loading from '../components/Loading';
 
 const CRDashboard = () => {
   const { token, user } = useAuth();
   const { socket } = useSocket();
+  const [searchParams] = useSearchParams();
 
-  // Tab state: 'faculty' or 'students'
-  const [activeTab, setActiveTab] = useState('faculty');
+  // Tab state: 'faculty' or 'students' (driven by URL query and left menu)
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'faculty');
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    } else {
+      setActiveTab('faculty');
+    }
+  }, [searchParams]);
 
   // Faculty Schedule States
   const [classroom, setClassroom] = useState(null);
@@ -428,30 +439,31 @@ const CRDashboard = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800">
-        <button
-          onClick={() => setActiveTab('faculty')}
-          className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-            activeTab === 'faculty' 
-              ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-              : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-          }`}
-        >
-          <CalendarDays size={16} />
-          <span>Faculty Timetable</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('students')}
-          className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-            activeTab === 'students' 
-              ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-              : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-          }`}
-        >
-          <Users size={16} />
-          <span>Student Attendance</span>
-        </button>
+      {/* Active Section Header (Feature selection driven by Left Menu) */}
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          {activeTab === 'faculty' ? (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <CalendarDays size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Faculty Schedule & Period Presence</h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Track current period, timetable, and mark faculty presence in class</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <Users size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Student Attendance Registry</h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Submit morning and afternoon session attendance and mark late arrivals</p>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* TAB 1: FACULTY TIMETABLE */}

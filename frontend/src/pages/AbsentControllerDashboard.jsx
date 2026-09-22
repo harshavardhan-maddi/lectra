@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   Users, 
@@ -44,10 +45,20 @@ const ABSENCE_REASONS = {
 
 const AbsentControllerDashboard = () => {
   const { token, user } = useAuth();
+  const [searchParams] = useSearchParams();
   
   const [classrooms, setClassrooms] = useState([]);
   const [selectedSection, setSelectedSection] = useState('');
-  const [activeBoardTab, setActiveBoardTab] = useState('sectionWise'); // 'sectionWise' or 'allSections'
+  const [activeBoardTab, setActiveBoardTab] = useState(searchParams.get('tab') || 'sectionWise'); // 'sectionWise' | 'allSections' | 'outpassRequests'
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveBoardTab(tabParam);
+    } else {
+      setActiveBoardTab('sectionWise');
+    }
+  }, [searchParams]);
   const [students, setStudents] = useState([]);
   const [absentees, setAbsentees] = useState([]);
   
@@ -474,47 +485,54 @@ const AbsentControllerDashboard = () => {
         </div>
       )}
 
-      {/* Tabs Layout */}
-      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 no-print flex-wrap">
-        <div className="flex flex-wrap">
-          <button
-            onClick={() => setActiveBoardTab('sectionWise')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeBoardTab === 'sectionWise' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <Users size={16} />
-            <span>Section Wise Absentees</span>
-          </button>
-          <button
-            onClick={() => setActiveBoardTab('allSections')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeBoardTab === 'allSections' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <AlertCircle size={16} className="text-red-500" />
-            <span>All Section Absentees</span>
-          </button>
-          <button
-            onClick={() => setActiveBoardTab('outpassRequests')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all relative ${
-              activeBoardTab === 'outpassRequests' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <FileText size={16} />
-            <span>Outpass Permissions</span>
-            {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
-              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white animate-pulse">
-                {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length}
-              </span>
-            )}
-          </button>
+      {/* Active Section Header (Feature selection driven by Left Menu) */}
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 no-print flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          {activeBoardTab === 'sectionWise' && (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <Users size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
+                  Section Wise Absentee Calling Board
+                </h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                  Select a classroom section to monitor absentees, place calls to parents, and record feedback
+                </p>
+              </div>
+            </>
+          )}
+          {activeBoardTab === 'allSections' && (
+            <>
+              <div className="p-2.5 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
+                  All Section Consolidated Absentees
+                </h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                  Complete college-wide view of today's absent students with quick calling action
+                </p>
+              </div>
+            </>
+          )}
+          {activeBoardTab === 'outpassRequests' && (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
+                  Student Outpass Clearance & Parent Verification
+                </h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                  Verify student leave requests with parents over phone and forward approved requests to HOD
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         <button

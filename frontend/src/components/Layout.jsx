@@ -21,9 +21,13 @@ import {
   ShieldCheck,
   GraduationCap,
   AlertCircle,
-  FileText,
   Database,
-  UserX
+  UserX,
+  DoorOpen,
+  CheckCircle2,
+  PhoneCall,
+  Calendar,
+  FileText
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -125,11 +129,17 @@ const Layout = ({ children }) => {
       { name: 'Classrooms', path: '/classrooms', icon: CalendarDays },
       { name: 'Faculty Contacts', path: '/faculty', icon: UserCheck },
       { name: 'Reports', path: '/reports', icon: FileSpreadsheet },
-      { name: 'Gate & Outpasses', path: '/watchman-dashboard', icon: ShieldCheck },
-      { name: 'Absent Control', path: '/absent-controller', icon: UserX },
-      { name: 'Faculty Portal', path: '/faculty-dashboard', icon: LayoutDashboard },
+      { name: 'Gate Exit Clearance', path: '/watchman-dashboard', icon: DoorOpen },
+      { name: 'Gate Exit History', path: '/watchman-dashboard?tab=exitHistory', icon: CheckCircle2 },
+      { name: 'Section Absentees', path: '/absent-controller', icon: Users },
+      { name: 'All Section Absentees', path: '/absent-controller?tab=allSections', icon: AlertCircle },
+      { name: 'Student Outpasses', path: '/absent-controller?tab=outpassRequests', icon: FileText },
+      { name: 'Attendance Registry', path: '/faculty-dashboard', icon: UserCheck },
+      { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
+      { name: 'Faculty Leave Slip', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
       { name: 'Data Backup', path: '/backup', icon: Database },
-      { name: 'System Settings', path: '/settings', icon: Settings }
+      { name: 'Fingerprint Settings', path: '/settings', icon: Settings },
+      { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
     );
   } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN') {
     navLinks.push(
@@ -139,30 +149,61 @@ const Layout = ({ children }) => {
       { name: 'Outpass Approvals', path: '/outpasses', icon: FileText },
       { name: 'Classrooms', path: '/classrooms', icon: CalendarDays },
       { name: 'Faculty Contacts', path: '/faculty', icon: UserCheck },
-      { name: 'Reports', path: '/reports', icon: FileSpreadsheet },
+      { name: 'Reports', path: '/reports', icon: FileSpreadsheet }
     );
     if (user?.role === 'HOD') {
       navLinks.push({ name: 'Manage Users', path: '/users', icon: Users });
       navLinks.push({ name: 'Data Backup', path: '/backup', icon: Database });
     }
-    navLinks.push({ name: 'Fingerprint Settings', path: '/settings', icon: Settings });
+    navLinks.push(
+      { name: 'Fingerprint Settings', path: '/settings', icon: Settings },
+      { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
+    );
   } else if (user?.role === 'CR') {
-    navLinks.push({ name: 'My Timetable', path: '/cr-dashboard', icon: CalendarDays });
+    navLinks.push(
+      { name: 'Faculty Schedule', path: '/cr-dashboard', icon: CalendarDays },
+      { name: 'Student Attendance', path: '/cr-dashboard?tab=students', icon: Users }
+    );
   } else if (user?.role === 'ABSENT_CONTROLLER') {
     navLinks.push(
-      { name: 'Absent Control', path: '/absent-controller', icon: Users },
-      { name: 'Reports', path: '/reports', icon: FileSpreadsheet },
-      { name: 'Settings', path: '/settings', icon: Settings }
+      { name: 'Section Absentees', path: '/absent-controller', icon: Users },
+      { name: 'All Absentees', path: '/absent-controller?tab=allSections', icon: AlertCircle },
+      { name: 'Outpass Requests', path: '/absent-controller?tab=outpassRequests', icon: FileText },
+      { name: 'Attendance Reports', path: '/reports', icon: FileSpreadsheet },
+      { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
     );
   } else if (user?.role === 'FACULTY') {
     navLinks.push(
-      { name: 'Faculty Portal', path: '/faculty-dashboard', icon: LayoutDashboard }
+      { name: 'Attendance Registry', path: '/faculty-dashboard', icon: UserCheck },
+      { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
+      { name: 'Leave & Gate Pass', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
     );
   } else if (user?.role === 'WATCHMAN') {
     navLinks.push(
-      { name: 'Gate Security & Outpass', path: '/watchman-dashboard', icon: ShieldCheck }
+      { name: 'Gate Exit Clearance', path: '/watchman-dashboard', icon: DoorOpen },
+      { name: 'Gate Exit History', path: '/watchman-dashboard?tab=exitHistory', icon: CheckCircle2 }
     );
   }
+
+  const isLinkActive = (linkPath) => {
+    const currentPath = location.pathname;
+    const currentSearch = location.search;
+
+    if (linkPath.includes('?')) {
+      const [path, query] = linkPath.split('?');
+      return currentPath === path && currentSearch.includes(query);
+    }
+
+    if (currentPath !== linkPath) return false;
+
+    // Base path check: if current search has query params matching another navLink, this base shouldn't be active
+    const siblings = navLinks.filter(l => l.path.startsWith(linkPath + '?'));
+    if (siblings.length > 0 && currentSearch) {
+      return !siblings.some(s => currentSearch.includes(s.path.split('?')[1]));
+    }
+
+    return true;
+  };
 
   const formatClockTime = (date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -194,7 +235,7 @@ const Layout = ({ children }) => {
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
           {navLinks.map((link) => {
             const Icon = link.icon;
-            const isActive = location.pathname === link.path;
+            const isActive = isLinkActive(link.path);
             return (
               <Link
                 key={link.path}
@@ -277,7 +318,7 @@ const Layout = ({ children }) => {
             <nav className="flex-1 py-6 space-y-1">
               {navLinks.map((link) => {
                 const Icon = link.icon;
-                const isActive = location.pathname === link.path;
+                const isActive = isLinkActive(link.path);
                 return (
                   <Link
                     key={link.path}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   getAllOutpasses, 
@@ -24,10 +25,20 @@ import {
 
 const WatchmanDashboard = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [tickets, setTickets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [activeTab, setActiveTab] = useState('pendingExit'); // 'pendingExit' | 'exitHistory'
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'pendingExit'); // 'pendingExit' | 'exitHistory'
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    } else {
+      setActiveTab('pendingExit');
+    }
+  }, [searchParams]);
   const [applicantFilter, setApplicantFilter] = useState('ALL'); // 'ALL' | 'FACULTY' | 'STUDENT'
   const [verifyingIdMap, setVerifyingIdMap] = useState({});
   const [actionSuccess, setActionSuccess] = useState('');
@@ -148,32 +159,38 @@ const WatchmanDashboard = () => {
         </div>
       )}
 
-      {/* Tabs & Search Bar */}
+      {/* Header & Search Bar (Feature selection driven by Left Menu) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveTab('pendingExit')}
-            className={`flex items-center gap-2 py-2.5 px-5 rounded-2xl text-xs font-bold transition-all ${
-              activeTab === 'pendingExit'
-                ? 'bg-primary text-white shadow-md shadow-primary/20'
-                : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'
-            }`}
-          >
-            <DoorOpen size={16} />
-            <span>Ready for Exit ({pendingExitTickets.length})</span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('exitHistory')}
-            className={`flex items-center gap-2 py-2.5 px-5 rounded-2xl text-xs font-bold transition-all ${
-              activeTab === 'exitHistory'
-                ? 'bg-primary text-white shadow-md shadow-primary/20'
-                : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'
-            }`}
-          >
-            <CheckCircle2 size={16} />
-            <span>Passed & Departed ({exitedTickets.length})</span>
-          </button>
+        <div className="flex items-center gap-3">
+          {activeTab === 'pendingExit' ? (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <DoorOpen size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
+                  Gate Exit Clearance ({pendingExitTickets.length})
+                </h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                  Verify approved student & faculty passes and authorize gate departure
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary-dark dark:text-primary">
+                <CheckCircle2 size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
+                  Gate Exit History & Clearance Logs ({exitedTickets.length})
+                </h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                  Complete audit trail of students and faculty departed through campus gates
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Search */}

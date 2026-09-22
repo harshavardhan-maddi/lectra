@@ -232,7 +232,17 @@ export const getAllOutpasses = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const list = JSON.parse(raw);
+    return list.map(t => {
+      if (t.applicantType === 'FACULTY' && (!t.department || t.department === 'General' || t.section === 'General' || t.section === 'Faculty')) {
+        return {
+          ...t,
+          department: t.department && t.department !== 'General' ? t.department : 'Department of CSE(emerging Technologies)',
+          section: t.section && t.section !== 'General' && t.section !== 'Faculty' ? t.section : 'Department of CSE(emerging Technologies)'
+        };
+      }
+      return t;
+    });
   } catch (e) {
     console.error('Failed to parse outpasses:', e);
     return [];
@@ -638,7 +648,7 @@ export const applyFacultyLeave = async ({
   facultyId,
   facultyUserId,
   facultyName,
-  department = 'General',
+  department = 'Department of CSE(emerging Technologies)',
   type = 'FACULTY_LEAVE', // 'FACULTY_LEAVE' or 'FACULTY_EARLY_OUT'
   date,
   leaveTime,
@@ -649,6 +659,7 @@ export const applyFacultyLeave = async ({
   }
 
   const selectedDate = date || new Date().toISOString().slice(0, 10);
+  const cleanDepartment = (department && department !== 'General') ? department : 'Department of CSE(emerging Technologies)';
 
   if (type === 'FACULTY_EARLY_OUT' && (!leaveTime || !leaveTime.trim())) {
     throw new Error('Please specify the time you need to leave early.');
@@ -673,7 +684,7 @@ export const applyFacultyLeave = async ({
     facultyId,
     facultyUserId: facultyUserId || '',
     facultyName: facultyName || 'Faculty Member',
-    department: department || 'General',
+    department: cleanDepartment,
     date: selectedDate,
     leaveTime: type === 'FACULTY_EARLY_OUT' ? leaveTime : 'Full Day',
     purpose: purpose.trim(),
@@ -681,7 +692,7 @@ export const applyFacultyLeave = async ({
     destination: 'Personal / Official Duty',
     rollNumber: facultyUserId || 'FACULTY',
     studentName: facultyName || 'Faculty Member',
-    section: department || 'Faculty',
+    section: cleanDepartment,
     appliedAt: now.toISOString(),
     appliedDate: now.toLocaleDateString('en-GB'),
     appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
