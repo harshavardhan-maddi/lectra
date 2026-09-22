@@ -31,8 +31,45 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
     }, 1000);
   };
 
+  const isFaculty = ticket.applicantType === 'FACULTY';
+
   // Status visual mapping
   const getStatusBadge = (status) => {
+    if (isFaculty) {
+      switch (status) {
+        case 'FORWARDED_TO_HOD':
+          return {
+            label: 'Awaiting HOD Approval',
+            color: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30',
+            step: 1
+          };
+        case 'PERMISSION_GRANTED':
+          return {
+            label: 'PERMISSION ACCEPTED BY HOD • FORWARDED TO WATCHMAN',
+            color: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/40 font-black',
+            step: 2
+          };
+        case 'SENT_OUT':
+          return {
+            label: 'FINAL SLIP GENERATED • FACULTY DEPARTED',
+            color: 'bg-purple-500/15 text-purple-800 dark:text-purple-300 border-purple-500/40 font-black',
+            step: 3
+          };
+        case 'REJECTED':
+          return {
+            label: 'LEAVE REQUEST REJECTED BY HOD',
+            color: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold',
+            step: -1
+          };
+        default:
+          return {
+            label: status,
+            color: 'bg-slate-100 text-slate-700 border-slate-300',
+            step: 1
+          };
+      }
+    }
+
     switch (status) {
       case 'PENDING_PARENT_CALL':
         return {
@@ -92,7 +129,9 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             </span>
             <div>
               <h3 className="font-extrabold text-sm text-customText dark:text-customText-dark">
-                Official Leave Granted Slip
+                {isFaculty 
+                  ? (ticket.type === 'FACULTY_EARLY_OUT' ? 'Faculty Early Out Final Slip' : 'Faculty Official Leave Slip')
+                  : 'Official Leave Granted Slip'}
               </h3>
               <p className="text-[11px] text-customText-muted dark:text-customText-mutedDark">
                 Ref ID: <span className="font-mono font-bold text-primary">{ticket.id}</span>
@@ -122,12 +161,16 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
         {/* Scrollable Modal Content (Becomes Single Page Official Slip on Print) */}
         <div className="p-4 sm:p-6 overflow-y-auto print:overflow-visible print:p-0">
           
-          {/* Prominent Student Alert (hidden on print) */}
+          {/* Prominent Alert (hidden on print) */}
           <div className="mb-4 p-3 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-900 dark:text-amber-200 flex items-center gap-3 font-black text-xs shadow-sm print:hidden">
             <AlertCircle size={20} className="text-amber-600 dark:text-amber-400 shrink-0" />
             <div>
               <span className="uppercase tracking-wider block text-[10px] font-black text-amber-700 dark:text-amber-400">Important Instruction</span>
-              <span>Note: do not close app till goes out. Show this slip at the Main Security Gate.</span>
+              <span>
+                {isFaculty 
+                  ? 'Official Final Departure Slip. Watchman directly authorizes gate exit without student ID verification.'
+                  : 'Note: do not close app till goes out. Show this slip at the Main Security Gate.'}
+              </span>
             </div>
           </div>
 
@@ -161,7 +204,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                 </div>
                 <div className="w-16 sm:w-20 shrink-0 flex flex-col items-center justify-center">
                   <span className="p-1.5 rounded-lg border border-slate-300 bg-slate-50 text-[9px] font-mono font-black uppercase text-center block leading-tight">
-                    Official<br />Gate Pass
+                    {isFaculty ? <>Faculty<br />Pass</> : <>Official<br />Gate Pass</>}
                   </span>
                 </div>
               </div>
@@ -178,145 +221,255 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             {/* Document Subtitle */}
             <div className="text-center py-1 bg-slate-100 border border-slate-300 rounded-lg">
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-900">
-                Official Student Leave & Campus Gate Pass Slip
+                {isFaculty 
+                  ? (ticket.type === 'FACULTY_EARLY_OUT' ? 'Official Faculty Early Out Departure Slip' : 'Official Faculty Leave & Gate Clearance Slip')
+                  : 'Official Student Leave & Campus Gate Pass Slip'}
               </h2>
             </div>
 
-            {/* Student Particulars (Clean Table) */}
+            {/* Particulars (Clean Table) */}
             <div>
               <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-1">
-                1. Student Particulars
+                {isFaculty ? '1. Faculty Particulars' : '1. Student Particulars'}
               </h3>
-              <table className="w-full border-collapse border border-slate-300 text-xs">
-                <tbody>
-                  <tr className="border-b border-slate-300">
-                    <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                      Student Full Name
-                    </td>
-                    <td className="w-1/4 p-2 font-black text-slate-950 border-r border-slate-300">
-                      {ticket.studentName}
-                    </td>
-                    <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                      College Roll Number
-                    </td>
-                    <td className="w-1/4 p-2 font-mono font-black text-slate-950">
-                      {ticket.rollNumber}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-slate-300">
-                    <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                      Branch & Section
-                    </td>
-                    <td className="p-2 font-extrabold text-slate-950 border-r border-slate-300">
-                      {ticket.section}
-                    </td>
-                    <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                      Parent Contact No.
-                    </td>
-                    <td className="p-2 font-mono font-black text-slate-950">
-                      +91 {ticket.parentMobile}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-slate-300">
-                    <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                      Destination / Place
-                    </td>
-                    <td colSpan={3} className="p-2 font-semibold text-slate-900">
-                      {ticket.destination || 'Home / Medical Emergency'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                      Reason Stated for Leave
-                    </td>
-                    <td colSpan={3} className="p-2 font-semibold italic text-slate-950">
-                      "{ticket.reason}"
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              
+              {isFaculty ? (
+                <table className="w-full border-collapse border border-slate-300 text-xs">
+                  <tbody>
+                    <tr className="border-b border-slate-300">
+                      <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Faculty Name
+                      </td>
+                      <td className="w-1/4 p-2 font-black text-slate-950 border-r border-slate-300">
+                        {ticket.facultyName || ticket.studentName}
+                      </td>
+                      <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Faculty User ID
+                      </td>
+                      <td className="w-1/4 p-2 font-mono font-black text-slate-950">
+                        {ticket.facultyUserId || ticket.rollNumber}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-300">
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Department
+                      </td>
+                      <td className="p-2 font-extrabold text-slate-950 border-r border-slate-300">
+                        {ticket.department || ticket.section}
+                      </td>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Permission Type
+                      </td>
+                      <td className="p-2 font-bold text-primary-dark">
+                        {ticket.type === 'FACULTY_EARLY_OUT' ? 'Early Out Permission (Same Day)' : 'Full-Day Leave'}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-300">
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Scheduled Date
+                      </td>
+                      <td className="p-2 font-semibold text-slate-900 border-r border-slate-300">
+                        {ticket.date || ticket.appliedDate}
+                      </td>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Time to Leave / Departure
+                      </td>
+                      <td className="p-2 font-bold text-slate-900">
+                        {ticket.leaveTime || 'Full Day'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Purpose Stated
+                      </td>
+                      <td colSpan={3} className="p-2 font-semibold italic text-slate-950">
+                        "{ticket.purpose || ticket.reason}"
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              ) : (
+                <table className="w-full border-collapse border border-slate-300 text-xs">
+                  <tbody>
+                    <tr className="border-b border-slate-300">
+                      <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Student Full Name
+                      </td>
+                      <td className="w-1/4 p-2 font-black text-slate-950 border-r border-slate-300">
+                        {ticket.studentName}
+                      </td>
+                      <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        College Roll Number
+                      </td>
+                      <td className="w-1/4 p-2 font-mono font-black text-slate-950">
+                        {ticket.rollNumber}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-300">
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Branch & Section
+                      </td>
+                      <td className="p-2 font-extrabold text-slate-950 border-r border-slate-300">
+                        {ticket.section}
+                      </td>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Parent Contact No.
+                      </td>
+                      <td className="p-2 font-mono font-black text-slate-950">
+                        +91 {ticket.parentMobile}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-300">
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Destination / Place
+                      </td>
+                      <td colSpan={3} className="p-2 font-semibold text-slate-900">
+                        {ticket.destination || 'Home / Medical Emergency'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Reason Stated for Leave
+                      </td>
+                      <td colSpan={3} className="p-2 font-semibold italic text-slate-950">
+                        "{ticket.reason}"
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
             </div>
 
-            {/* Official Verification & Audit Trail with Timestamps */}
+            {/* Official Verification & Audit Trail */}
             <div>
               <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-1">
                 2. Clearance & Approval Timeline
               </h3>
-              <table className="w-full border-collapse border border-slate-300 text-xs">
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold text-slate-700 uppercase">
-                    <th className="p-2 text-left border-r border-slate-300 w-1/4">Stage</th>
-                    <th className="p-2 text-left border-r border-slate-300 w-1/4">Authorized Officer</th>
-                    <th className="p-2 text-left border-r border-slate-300 w-1/4">Timestamp</th>
-                    <th className="p-2 text-left w-1/4">Status & Remarks</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-300 text-[11px]">
-                  <tr>
-                    <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">1. Student Application</td>
-                    <td className="p-2 border-r border-slate-300">{ticket.studentName}</td>
-                    <td className="p-2 font-mono border-r border-slate-300">{ticket.appliedDate} {ticket.appliedTime}</td>
-                    <td className="p-2 font-semibold text-emerald-700">Submitted Online</td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">2. Parent Phone Call</td>
-                    <td className="p-2 border-r border-slate-300 font-bold">
-                      {ticket.absentControllerAction?.controllerName || 'Absent Controller'}
-                    </td>
-                    <td className="p-2 font-mono border-r border-slate-300">
-                      {ticket.absentControllerAction?.displayDate || ticket.appliedDate} {ticket.absentControllerAction?.displayTime || '—'}
-                    </td>
-                    <td className="p-2 font-semibold text-emerald-700">
-                      {ticket.absentControllerAction?.confirmed 
-                        ? `✓ ${ticket.absentControllerAction.remarks || 'Parent Confirmed over Phone'}`
-                        : (ticket.status === 'REJECTED' ? '✕ Parent Denied' : 'Pending Verification')}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Department Head</td>
-                    <td className="p-2 border-r border-slate-300 font-bold">
-                      {ticket.hodAction?.hodName || 'Dr. Rajesh Sharma (HOD CSE)'}
-                    </td>
-                    <td className="p-2 font-mono border-r border-slate-300">
-                      {ticket.hodAction?.approvedAt 
-                        ? new Date(ticket.hodAction.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : (ticket.hodAction?.displayTime || '—')}
-                    </td>
-                    <td className="p-2 font-black text-emerald-700">
-                      {ticket.hodAction?.granted 
-                        ? '✓ PERMISSION GRANTED' 
-                        : (ticket.status === 'REJECTED' ? '✕ DENIED BY HOD' : 'Pending HOD Approval')}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">4. Main Gate Exit</td>
-                    <td className="p-2 border-r border-slate-300 font-bold">
-                      {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security'}
-                    </td>
-                    <td className="p-2 font-mono border-r border-slate-300">
-                      {ticket.watchmanAction?.displayTime || '—'}
-                    </td>
-                    <td className="p-2 font-semibold text-purple-700">
-                      {ticket.watchmanAction?.sentOut ? '✓ Student Exited Campus' : 'Ready at Gate (Physical ID req.)'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              
+              {isFaculty ? (
+                <table className="w-full border-collapse border border-slate-300 text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold text-slate-700 uppercase">
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Stage</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Authorized Officer</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Timestamp</th>
+                      <th className="p-2 text-left w-1/4">Status & Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-300 text-[11px]">
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">1. Faculty Application</td>
+                      <td className="p-2 border-r border-slate-300">{ticket.facultyName || ticket.studentName}</td>
+                      <td className="p-2 font-mono border-r border-slate-300">{ticket.appliedDate} {ticket.appliedTime}</td>
+                      <td className="p-2 font-semibold text-emerald-700">Applied Online</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">2. Department Head (HOD)</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {ticket.hodAction?.hodName || 'Dr. Rajesh Sharma (HOD)'}
+                      </td>
+                      <td className="p-2 font-mono border-r border-slate-300">
+                        {ticket.hodAction?.displayDate || ticket.appliedDate} {ticket.hodAction?.displayTime || '—'}
+                      </td>
+                      <td className="p-2 font-black text-emerald-700">
+                        {ticket.hodAction?.granted 
+                          ? '✓ ACCEPTED & FORWARDED TO WATCHMAN' 
+                          : (ticket.status === 'REJECTED' ? '✕ REJECTED BY HOD' : 'Pending HOD Approval')}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Main Gate Security</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security'}
+                      </td>
+                      <td className="p-2 font-mono border-r border-slate-300">
+                        {ticket.watchmanAction?.displayTime || '—'}
+                      </td>
+                      <td className="p-2 font-semibold text-purple-700">
+                        {ticket.watchmanAction?.sentOut ? '✓ Final Slip Generated & Departed' : (ticket.status === 'PERMISSION_GRANTED' ? 'Gate Pass Approved • Final Slip Issued' : 'Awaiting Gate Clearance')}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              ) : (
+                <table className="w-full border-collapse border border-slate-300 text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold text-slate-700 uppercase">
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Stage</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Authorized Officer</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Timestamp</th>
+                      <th className="p-2 text-left w-1/4">Status & Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-300 text-[11px]">
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">1. Student Application</td>
+                      <td className="p-2 border-r border-slate-300">{ticket.studentName}</td>
+                      <td className="p-2 font-mono border-r border-slate-300">{ticket.appliedDate} {ticket.appliedTime}</td>
+                      <td className="p-2 font-semibold text-emerald-700">Submitted Online</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">2. Parent Phone Call</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {ticket.absentControllerAction?.controllerName || 'Absent Controller'}
+                      </td>
+                      <td className="p-2 font-mono border-r border-slate-300">
+                        {ticket.absentControllerAction?.displayDate || ticket.appliedDate} {ticket.absentControllerAction?.displayTime || '—'}
+                      </td>
+                      <td className="p-2 font-semibold text-emerald-700">
+                        {ticket.absentControllerAction?.confirmed 
+                          ? `✓ ${ticket.absentControllerAction.remarks || 'Parent Confirmed over Phone'}`
+                          : (ticket.status === 'REJECTED' ? '✕ Parent Denied' : 'Pending Verification')}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Department Head</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {ticket.hodAction?.hodName || 'Dr. Rajesh Sharma (HOD CSE)'}
+                      </td>
+                      <td className="p-2 font-mono border-r border-slate-300">
+                        {ticket.hodAction?.approvedAt 
+                          ? new Date(ticket.hodAction.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : (ticket.hodAction?.displayTime || '—')}
+                      </td>
+                      <td className="p-2 font-black text-emerald-700">
+                        {ticket.hodAction?.granted 
+                          ? '✓ PERMISSION GRANTED' 
+                          : (ticket.status === 'REJECTED' ? '✕ DENIED BY HOD' : 'Pending HOD Approval')}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">4. Main Gate Exit</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security'}
+                      </td>
+                      <td className="p-2 font-mono border-r border-slate-300">
+                        {ticket.watchmanAction?.displayTime || '—'}
+                      </td>
+                      <td className="p-2 font-semibold text-purple-700">
+                        {ticket.watchmanAction?.sentOut ? '✓ Student Exited Campus' : 'Ready at Gate (Physical ID req.)'}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
             </div>
 
             {/* Official Signatures & Seal Block */}
             <div className="pt-3 border-t-2 border-slate-900 grid grid-cols-3 gap-4 text-center">
               
-              {/* Signature 1: Absent Controller */}
+              {/* Signature 1 */}
               <div className="flex flex-col justify-between h-20 border border-slate-300 rounded-xl p-2 bg-slate-50/60">
                 <div className="text-[9px] font-bold text-slate-500 uppercase">
-                  Parent Verification
+                  {isFaculty ? 'Applicant' : 'Parent Verification'}
                 </div>
                 <div className="font-serif italic font-bold text-slate-800 text-xs">
-                  {ticket.absentControllerAction?.controllerName || 'Absent Controller'}
+                  {isFaculty 
+                    ? (ticket.facultyName || ticket.studentName)
+                    : (ticket.absentControllerAction?.controllerName || 'Absent Controller')}
                 </div>
                 <div className="border-t border-slate-400 pt-0.5 text-[8px] font-black uppercase text-slate-700">
-                  Signature of Absent Controller
+                  {isFaculty ? 'Faculty Signature' : 'Signature of Absent Controller'}
                 </div>
               </div>
 
@@ -346,7 +499,15 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
 
             {/* Security Clearance Footer */}
             <div className="p-2 border border-slate-400 bg-slate-50 rounded-xl text-center text-[9px] text-slate-600 font-medium leading-tight">
-              <span className="font-bold text-slate-900">MAIN GATE SECURITY INSTRUCTION:</span> Verify student's Physical College ID Card with Roll Number <strong>{ticket.rollNumber}</strong> before gate release. Authenticated under Lectra Campus Management System.
+              {isFaculty ? (
+                <>
+                  <span className="font-bold text-slate-900">MAIN GATE SECURITY INSTRUCTION:</span> Faculty Gate Pass & Departure Clearance. No ID card verification required per college administration policy. Slip verified and departure authorized.
+                </>
+              ) : (
+                <>
+                  <span className="font-bold text-slate-900">MAIN GATE SECURITY INSTRUCTION:</span> Verify student's Physical College ID Card with Roll Number <strong>{ticket.rollNumber}</strong> before gate release. Authenticated under Lectra Campus Management System.
+                </>
+              )}
             </div>
 
           </div>

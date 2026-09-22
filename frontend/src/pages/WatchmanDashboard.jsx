@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   getAllOutpasses, 
   watchmanReleaseStudent, 
+  watchmanReleaseFaculty,
   subscribeToOutpasses 
 } from '../services/outpassService';
 import OutpassTicketModal from '../components/OutpassTicketModal';
@@ -17,7 +18,8 @@ import {
   FileText,
   BadgeCheck,
   DoorOpen,
-  ArrowRight
+  ArrowRight,
+  Printer
 } from 'lucide-react';
 
 const WatchmanDashboard = () => {
@@ -26,6 +28,7 @@ const WatchmanDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [activeTab, setActiveTab] = useState('pendingExit'); // 'pendingExit' | 'exitHistory'
+  const [applicantFilter, setApplicantFilter] = useState('ALL'); // 'ALL' | 'FACULTY' | 'STUDENT'
   const [verifyingIdMap, setVerifyingIdMap] = useState({});
   const [actionSuccess, setActionSuccess] = useState('');
   const [actionError, setActionError] = useState('');
@@ -44,12 +47,19 @@ const WatchmanDashboard = () => {
   const pendingExitTickets = tickets.filter(t => t.status === 'PERMISSION_GRANTED');
   const exitedTickets = tickets.filter(t => t.status === 'SENT_OUT');
 
-  const filteredTickets = (activeTab === 'pendingExit' ? pendingExitTickets : exitedTickets).filter(t =>
-    t.rollNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.section.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTickets = (activeTab === 'pendingExit' ? pendingExitTickets : exitedTickets).filter(t => {
+    // Role filter
+    if (applicantFilter === 'FACULTY' && t.applicantType !== 'FACULTY') return false;
+    if (applicantFilter === 'STUDENT' && t.applicantType === 'FACULTY') return false;
+
+    // Search filter
+    const q = searchQuery.toLowerCase();
+    const name = (t.studentName || t.facultyName || '').toLowerCase();
+    const id = (t.id || '').toLowerCase();
+    const roll = (t.rollNumber || t.facultyUserId || '').toLowerCase();
+    const sec = (t.section || t.department || '').toLowerCase();
+    return name.includes(q) || id.includes(q) || roll.includes(q) || sec.includes(q);
+  });
 
   const handleSendStudentOut = (ticket) => {
     const isIdChecked = verifyingIdMap[ticket.id];
@@ -68,6 +78,21 @@ const WatchmanDashboard = () => {
       setTimeout(() => setActionSuccess(''), 4000);
     } catch (err) {
       setActionError(err.message || 'Failed to update ticket status');
+    }
+  };
+
+  // Release faculty member without requiring physical ID check
+  const handleReleaseFaculty = (ticket) => {
+    try {
+      setActionError('');
+      watchmanReleaseFaculty(ticket.id, {
+        watchmanName: user?.name || 'Main Gate Security Officer',
+        remarks: 'Final slip generated. Faculty departure permitted.'
+      });
+      setActionSuccess(`Gate departure cleared! Faculty ${ticket.facultyName || ticket.studentName} has been marked as DEPARTED.`);
+      setTimeout(() => setActionSuccess(''), 4000);
+    } catch (err) {
+      setActionError(err.message || 'Failed to record faculty departure');
     }
   };
 
@@ -147,7 +172,7 @@ const WatchmanDashboard = () => {
             }`}
           >
             <CheckCircle2 size={16} />
-            <span>Students Sent Out ({exitedTickets.length})</span>
+            <span>Passed & Departed ({exitedTickets.length})</span>
           </button>
         </div>
 
@@ -160,10 +185,50 @@ const WatchmanDashboard = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search Roll No, Name or Ticket ID..."
+            placeholder="Search Name, ID, Roll No or Pass Ref..."
             className="glass-input pl-10 pr-4 py-2 text-xs w-full"
           />
         </div>
+      </div>
+
+      {/* Role Filter Category Pills */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setApplicantFilter('ALL')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            applicantFilter === 'ALL'
+              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+              : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'
+          }`}
+        >
+          All ({activeTab === 'pendingExit' ? pendingExitTickets.length : exitedTickets.length})
+        </button>
+        <button
+          onClick={() => setApplicantFilter('FACULTY')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            applicantFilter === 'FACULTY'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'
+          }`}
+        >
+          <span>Faculty Passes</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/20 font-black">
+            {(activeTab === 'pendingExit' ? pendingExitTickets : exitedTickets).filter(t => t.applicantType === 'FACULTY').length}
+          </span>
+        </button>
+        <button
+          onClick={() => setApplicantFilter('STUDENT')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            applicantFilter === 'STUDENT'
+              ? 'bg-primary text-white shadow-sm'
+              : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'
+          }`}
+        >
+          <span>Student Outpasses</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary/20 font-black">
+            {(activeTab === 'pendingExit' ? pendingExitTickets : exitedTickets).filter(t => t.applicantType !== 'FACULTY').length}
+          </span>
+        </button>
       </div>
 
       {/* Tickets List View */}
@@ -173,18 +238,19 @@ const WatchmanDashboard = () => {
             <ShieldCheck size={24} />
           </div>
           <h4 className="font-bold text-customText dark:text-customText-dark">
-            {activeTab === 'pendingExit' ? 'No Students Waiting for Gate Exit' : 'No Exit History Found'}
+            {activeTab === 'pendingExit' ? 'No Gate Passes Awaiting Clearance' : 'No Exit History Found'}
           </h4>
           <p className="text-xs text-customText-muted dark:text-customText-mutedDark max-w-sm mx-auto">
             {activeTab === 'pendingExit'
-              ? 'When HOD grants permission to student outpass applications, they appear here for physical ID verification.'
-              : 'Students who have physically exited the gate today will be listed here.'}
+              ? 'When HOD grants permission to student outpasses or faculty leave/early out requests, they appear here.'
+              : 'Individuals who have physically departed through the gate today will be listed here.'}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredTickets.map((ticket) => {
             const isIdChecked = !!verifyingIdMap[ticket.id];
+            const isFaculty = ticket.applicantType === 'FACULTY';
 
             return (
               <div 
@@ -198,15 +264,31 @@ const WatchmanDashboard = () => {
                       {ticket.id}
                     </span>
                     <h3 className="text-lg font-black text-customText dark:text-customText-dark mt-0.5">
-                      {ticket.studentName}
+                      {isFaculty ? (ticket.facultyName || ticket.studentName) : ticket.studentName}
                     </h3>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-xs font-extrabold text-customText">
-                        {ticket.rollNumber}
+                        {isFaculty ? (ticket.facultyUserId || 'FACULTY') : ticket.rollNumber}
                       </span>
                       <span className="text-xs text-customText-muted font-medium">
-                        {ticket.section}
+                        {isFaculty ? (ticket.department || ticket.section) : ticket.section}
                       </span>
+
+                      {isFaculty ? (
+                        ticket.type === 'FACULTY_EARLY_OUT' ? (
+                          <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 font-black text-[11px] border border-amber-500/30">
+                            Faculty Early Out ({ticket.leaveTime})
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-lg bg-purple-500/15 text-purple-700 dark:text-purple-400 font-black text-[11px] border border-purple-500/30">
+                            Faculty Full-Day Leave
+                          </span>
+                        )
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 font-bold text-[10px]">
+                          Student Outpass
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -214,10 +296,10 @@ const WatchmanDashboard = () => {
                     type="button"
                     onClick={() => setSelectedTicket(ticket)}
                     className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 hover:text-primary transition-colors text-customText-muted text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
-                    title="View Official Ticket"
+                    title={isFaculty ? "View / Generate Official Faculty Slip" : "View Official Outpass Ticket"}
                   >
                     <FileText size={15} />
-                    <span>View Ticket</span>
+                    <span>{isFaculty ? 'Final Slip' : 'View Ticket'}</span>
                   </button>
                 </div>
 
@@ -225,76 +307,132 @@ const WatchmanDashboard = () => {
                 <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80 space-y-2 text-xs">
                   <div>
                     <span className="text-[10px] font-bold text-customText-muted uppercase block">
-                      Reason for Going Out:
+                      {isFaculty ? 'Purpose Stated for Absence / Early Out:' : 'Reason for Going Out:'}
                     </span>
                     <p className="font-medium text-customText dark:text-customText-dark mt-0.5 italic">
-                      "{ticket.reason}"
+                      "{ticket.purpose || ticket.reason}"
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 text-[11px]">
-                    <div>
-                      <span className="text-[9px] font-bold text-customText-muted uppercase block">
-                        Parent Call:
-                      </span>
-                      <span className="text-emerald-600 font-bold flex items-center gap-1">
-                        <CheckCircle2 size={12} /> Confirmed OK
-                      </span>
+                  {isFaculty ? (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 text-[11px]">
+                      <div>
+                        <span className="text-[9px] font-bold text-customText-muted uppercase block">
+                          Scheduled Date & Time:
+                        </span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {ticket.date || ticket.appliedDate} • {ticket.leaveTime || 'Full Day'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-customText-muted uppercase block">
+                          HOD Status:
+                        </span>
+                        <span className="text-emerald-600 font-bold flex items-center gap-1">
+                          <BadgeCheck size={12} /> Accepted & Forwarded
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-customText-muted uppercase block">
-                        HOD Approval:
-                      </span>
-                      <span className="text-emerald-600 font-bold flex items-center gap-1">
-                        <BadgeCheck size={12} /> Permission Granted
-                      </span>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 text-[11px]">
+                      <div>
+                        <span className="text-[9px] font-bold text-customText-muted uppercase block">
+                          Parent Call:
+                        </span>
+                        <span className="text-emerald-600 font-bold flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Confirmed OK
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-customText-muted uppercase block">
+                          HOD Approval:
+                        </span>
+                        <span className="text-emerald-600 font-bold flex items-center gap-1">
+                          <BadgeCheck size={12} /> Permission Granted
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Watchman Action Area */}
                 {ticket.status === 'PERMISSION_GRANTED' ? (
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
                     
-                    {/* Mandatory Physical ID Checkbox */}
-                    <label className="flex items-center gap-3 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20 cursor-pointer hover:bg-purple-500/10 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={isIdChecked}
-                        onChange={(e) => {
-                          setVerifyingIdMap({
-                            ...verifyingIdMap,
-                            [ticket.id]: e.target.checked
-                          });
-                          if (actionError) setActionError('');
-                        }}
-                        className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300"
-                      />
-                      <span className="text-xs font-bold text-customText dark:text-customText-dark">
-                        I have verified student's Physical College ID Card
-                      </span>
-                    </label>
+                    {isFaculty ? (
+                      /* Faculty Workflow: NO ID Check Required. Direct Final Slip & Departure */
+                      <div className="space-y-2.5">
+                        <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-800 dark:text-purple-300 text-xs font-semibold flex items-center gap-2">
+                          <ShieldCheck size={16} className="text-purple-600 shrink-0" />
+                          <span>Faculty Gate Pass: No ID card verification required. Generate final slip and permit departure.</span>
+                        </div>
 
-                    {/* Send Student Out Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleSendStudentOut(ticket)}
-                      className={`w-full py-3 px-4 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer ${
-                        isIdChecked
-                          ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-600/20 active:scale-[0.98]'
-                          : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                      }`}
-                    >
-                      <DoorOpen size={16} />
-                      <span>Send Student Out (Sent)</span>
-                      <ArrowRight size={14} />
-                    </button>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {/* Button 1: Generate Final Slip */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTicket(ticket)}
+                            className="py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-customText font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+                          >
+                            <Printer size={15} className="text-primary" />
+                            <span>Generate Final Slip</span>
+                          </button>
+
+                          {/* Button 2: Mark Departed */}
+                          <button
+                            type="button"
+                            onClick={() => handleReleaseFaculty(ticket)}
+                            className="py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-purple-600/20 transition-all cursor-pointer active:scale-95"
+                          >
+                            <DoorOpen size={16} />
+                            <span>Allow Gate Exit (Departed)</span>
+                            <ArrowRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Student Workflow: Requires Physical ID verification */
+                      <>
+                        <label className="flex items-center gap-3 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20 cursor-pointer hover:bg-purple-500/10 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={isIdChecked}
+                            onChange={(e) => {
+                              setVerifyingIdMap({
+                                ...verifyingIdMap,
+                                [ticket.id]: e.target.checked
+                              });
+                              if (actionError) setActionError('');
+                            }}
+                            className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300"
+                          />
+                          <span className="text-xs font-bold text-customText dark:text-customText-dark">
+                            I have verified student's Physical College ID Card
+                          </span>
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSendStudentOut(ticket)}
+                          className={`w-full py-3 px-4 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer ${
+                            isIdChecked
+                              ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-600/20 active:scale-[0.98]'
+                              : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                          }`}
+                        >
+                          <DoorOpen size={16} />
+                          <span>Send Student Out (Sent)</span>
+                          <ArrowRight size={14} />
+                        </button>
+                      </>
+                    )}
+
                   </div>
                 ) : (
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 font-extrabold">
                       <CheckCircle2 size={16} />
-                      <span>Student Sent Out ({ticket.watchmanAction?.displayTime})</span>
+                      <span>{isFaculty ? 'Faculty Departed' : 'Student Sent Out'} ({ticket.watchmanAction?.displayTime})</span>
                     </div>
                     <span className="text-[10px] text-customText-muted">
                       Gate Officer: {ticket.watchmanAction?.watchmanName || 'Security'}
@@ -307,7 +445,7 @@ const WatchmanDashboard = () => {
         </div>
       )}
 
-      {/* Official Outpass Ticket Modal for view & print */}
+      {/* Official Outpass / Final Slip Modal */}
       {selectedTicket && (
         <OutpassTicketModal
           ticket={selectedTicket}

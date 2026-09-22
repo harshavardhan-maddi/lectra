@@ -16,9 +16,21 @@ import {
   UserX,
   ChevronDown,
   FileText,
-  History
+  History,
+  Plus,
+  ArrowRight,
+  ShieldCheck,
+  LogOut,
+  AlertTriangle
 } from 'lucide-react';
 import Loading from '../components/Loading';
+import OutpassTicketModal from '../components/OutpassTicketModal';
+import { 
+  applyFacultyLeave, 
+  getFacultyMonthlyLeaveUsage, 
+  getFacultyLeaveHistory, 
+  subscribeToOutpasses 
+} from '../services/outpassService';
 
 const ABSENCE_REASONS = {
   "Medical": ["Fever", "Hospital", "Injury", "Medical Check-up"],
@@ -76,6 +88,86 @@ const FacultyDashboard = () => {
   };
 
   const todayDate = getTodayDateString();
+
+  // Faculty Leaves & Early Out States
+  const [facultyTickets, setFacultyTickets] = useState([]);
+  const [selectedTicketForModal, setSelectedTicketForModal] = useState(null);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [leaveType, setLeaveType] = useState('FACULTY_LEAVE'); // 'FACULTY_LEAVE' or 'FACULTY_EARLY_OUT'
+  const [leaveDate, setLeaveDate] = useState(todayDate);
+  const [leaveTime, setLeaveTime] = useState('14:30');
+  const [leavePurpose, setLeavePurpose] = useState('');
+  const [applyingLeave, setApplyingLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
+  const [leaveSuccess, setLeaveSuccess] = useState('');
+
+  // Subscribe to live outpasses and filter for this faculty user
+  useEffect(() => {
+    const updateTickets = () => {
+      if (user) {
+        setFacultyTickets(getFacultyLeaveHistory(user.userId || user.name || user.id));
+      }
+    };
+    updateTickets();
+    const unsub = subscribeToOutpasses(updateTickets);
+    return () => unsub();
+  }, [user]);
+
+  // Current month quota check
+  const facultyMonthlyQuota = getFacultyMonthlyLeaveUsage(
+    user?.userId || user?.name || user?.id,
+    leaveDate || todayDate
+  );
+
+  const handleApplyLeave = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setLeaveError('');
+    setLeaveSuccess('');
+
+    // Pre-check monthly quota (Strict limit: 2 leaves per month, no carryover)
+    const currentQuota = getFacultyMonthlyLeaveUsage(
+      user?.userId || user?.name || user?.id,
+      leaveDate || todayDate
+    );
+
+    if (currentQuota.count >= 2) {
+      setLeaveError("your limit for leaves has been completed , consult principal.");
+      return;
+    }
+
+    if (!leavePurpose || !leavePurpose.trim()) {
+      setLeaveError('Please specify a valid and proper purpose for your request.');
+      return;
+    }
+
+    if (leaveType === 'FACULTY_EARLY_OUT' && (!leaveTime || !leaveTime.trim())) {
+      setLeaveError('Please specify the time you need to leave early.');
+      return;
+    }
+
+    try {
+      setApplyingLeave(true);
+      const ticket = await applyFacultyLeave({
+        facultyId: user?.id,
+        facultyUserId: user?.userId,
+        facultyName: user?.name,
+        department: user?.className || 'General',
+        type: leaveType,
+        date: leaveDate || todayDate,
+        leaveTime: leaveType === 'FACULTY_EARLY_OUT' ? leaveTime : 'Full Day',
+        purpose: leavePurpose
+      });
+
+      setLeaveSuccess(`Application submitted successfully! Ref ID: ${ticket.id}. Forwarded to HOD for approval.`);
+      setShowApplyModal(false);
+      setLeavePurpose('');
+      setTimeout(() => setLeaveSuccess(''), 5000);
+    } catch (err) {
+      setLeaveError(err.message || 'Failed to submit application.');
+    } finally {
+      setApplyingLeave(false);
+    }
+  };
 
   // 1. Fetch all classrooms on mount
   useEffect(() => {
@@ -398,6 +490,22 @@ const FacultyDashboard = () => {
         >
           <PhoneCall size={16} />
           <span>Parent Call Logs</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('leaves')}
+          className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
+            activeTab === 'leaves'
+              ? 'border-primary text-primary-dark dark:text-primary font-bold'
+              : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
+          }`}
+        >
+          <Calendar size={16} />
+          <span>Leave & Early Out Gate Pass</span>
+          {facultyTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-700 dark:text-amber-400">
+              {facultyTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length} Pending
+            </span>
+          )}
         </button>
       </div>
 
@@ -1051,6 +1159,440 @@ const FacultyDashboard = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* TAB 3: Faculty Leave & Early Out Gate Pass */}
+      {activeTab === 'leaves' && (
+        <div className="space-y-6 animate-fade-in">
+          
+          {/* Notifications */}
+          {leaveSuccess && (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-semibold flex items-center gap-2 animate-fade-in">
+              <CheckCircle2 size={18} className="shrink-0" />
+              <span>{leaveSuccess}</span>
+            </div>
+          )}
+
+          {leaveError && (
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-sm font-semibold flex items-center gap-2 animate-fade-in">
+              <AlertTriangle size={18} className="shrink-0" />
+              <span>{leaveError}</span>
+            </div>
+          )}
+
+          {/* Quota Exhaustion Warning Banner */}
+          {facultyMonthlyQuota.isLimitExceeded && (
+            <div className="p-5 rounded-3xl bg-rose-500/15 border-2 border-rose-500/40 text-rose-900 dark:text-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-fade-in">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-rose-600/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <h4 className="text-base font-black tracking-tight uppercase text-rose-700 dark:text-rose-400">
+                    your limit for leaves has been completed , consult principal.
+                  </h4>
+                  <p className="text-xs text-rose-800 dark:text-rose-300 font-medium mt-0.5">
+                    You have utilized your maximum allowance of 2 leaves for {facultyMonthlyQuota.monthName}. Monthly quotas reset every calendar month and do not accumulate.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Monthly Quota & Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* Metric 1: Monthly Usage */}
+            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
+                  Monthly Leaves Used
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                  facultyMonthlyQuota.count >= 2 
+                    ? 'bg-rose-500/10 text-rose-600 border border-rose-500/30' 
+                    : 'bg-primary/10 text-primary-dark dark:text-primary'
+                }`}>
+                  {facultyMonthlyQuota.monthName}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-customText dark:text-customText-dark">
+                  {facultyMonthlyQuota.count}
+                </span>
+                <span className="text-sm font-bold text-customText-muted">/ 2 Leaves</span>
+              </div>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all ${facultyMonthlyQuota.count >= 2 ? 'bg-rose-500' : 'bg-primary'}`}
+                  style={{ width: `${Math.min(100, (facultyMonthlyQuota.count / 2) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-customText-muted">
+                Strict limit: 2 leaves per month. Unused leaves do not roll over.
+              </p>
+            </div>
+
+            {/* Metric 2: Remaining Leaves */}
+            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
+                Remaining Leaves
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className={`text-3xl font-black ${
+                  facultyMonthlyQuota.remaining === 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {facultyMonthlyQuota.remaining}
+                </span>
+                <span className="text-sm font-bold text-customText-muted">Available</span>
+              </div>
+              <p className="text-[10px] text-customText-muted">
+                {facultyMonthlyQuota.remaining === 0 
+                  ? 'Limit reached for this month. Consult principal.' 
+                  : 'Valid only for current calendar month.'}
+              </p>
+            </div>
+
+            {/* Metric 3: Approved / Passes */}
+            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
+                Approved Gate Passes
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-purple-600 dark:text-purple-400">
+                  {facultyTickets.filter(t => t.status === 'PERMISSION_GRANTED' || t.status === 'SENT_OUT').length}
+                </span>
+                <span className="text-sm font-bold text-customText-muted">Total</span>
+              </div>
+              <p className="text-[10px] text-customText-muted">
+                {facultyTickets.filter(t => t.status === 'PERMISSION_GRANTED').length} active at gate now
+              </p>
+            </div>
+
+            {/* Action Card: Apply Button */}
+            <div className="p-5 rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 shadow-sm flex flex-col justify-between space-y-3">
+              <div>
+                <span className="text-xs font-black uppercase text-primary-dark dark:text-primary tracking-wider block">
+                  Quick Application
+                </span>
+                <p className="text-[11px] text-customText-muted mt-0.5">
+                  Apply for a full-day leave or same-day early departure pass.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLeaveError('');
+                  setShowApplyModal(true);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
+              >
+                <Plus size={16} />
+                <span>Apply Leave / Early Out</span>
+              </button>
+            </div>
+
+          </div>
+
+          {/* Requests History & Gate Pass Slips Table */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="text-lg font-black text-customText dark:text-customText-dark">
+                  My Leave & Early Out Applications
+                </h3>
+                <p className="text-xs text-customText-muted">
+                  Live status of your requested leaves, HOD approvals, and Watchman gate departure slips
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLeaveError('');
+                  setShowApplyModal(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary-dark dark:text-primary font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                <Plus size={14} />
+                <span>New Request</span>
+              </button>
+            </div>
+
+            {facultyTickets.length === 0 ? (
+              <div className="p-12 text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
+                  <Calendar size={28} />
+                </div>
+                <h4 className="font-bold text-customText dark:text-customText-dark">
+                  No Applications Found
+                </h4>
+                <p className="text-xs text-customText-muted max-w-sm mx-auto">
+                  You haven't submitted any leave or early out requests yet. Click the button above to apply.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {facultyTickets.map((ticket) => {
+                  return (
+                    <div 
+                      key={ticket.id}
+                      className="p-5 sm:p-6 hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      {/* Left: Info */}
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-primary">
+                            {ticket.id}
+                          </span>
+
+                          {ticket.type === 'FACULTY_EARLY_OUT' ? (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[11px] font-black border border-amber-500/30">
+                              Early Out at {ticket.leaveTime}
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-400 text-[11px] font-black border border-blue-500/30">
+                              Full-Day Leave
+                            </span>
+                          )}
+
+                          {ticket.status === 'FORWARDED_TO_HOD' && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-extrabold">
+                              Awaiting HOD Approval
+                            </span>
+                          )}
+
+                          {ticket.status === 'PERMISSION_GRANTED' && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/30">
+                              Accepted by HOD • Forwarded to Watchman
+                            </span>
+                          )}
+
+                          {ticket.status === 'SENT_OUT' && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-400 text-[10px] font-black border border-purple-500/30">
+                              Departed • Slip Generated ({ticket.watchmanAction?.displayTime || 'Out'})
+                            </span>
+                          )}
+
+                          {ticket.status === 'REJECTED' && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 text-[10px] font-black">
+                              Rejected by HOD
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-customText-muted">
+                          <span><strong>Date:</strong> {ticket.date || ticket.appliedDate}</span>
+                          <span><strong>Applied:</strong> {ticket.appliedDate} {ticket.appliedTime}</span>
+                          {ticket.hodAction?.hodName && (
+                            <span><strong>HOD:</strong> {ticket.hodAction.hodName}</span>
+                          )}
+                        </div>
+
+                        <p className="text-xs font-medium text-customText dark:text-customText-dark italic mt-1">
+                          "{ticket.purpose || ticket.reason}"
+                        </p>
+                      </div>
+
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTicketForModal(ticket)}
+                          className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 hover:text-primary transition-colors text-customText text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <FileText size={15} />
+                          <span>View Official Slip</span>
+                        </button>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* Modal: Apply Leave or Early Out */}
+      {showApplyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-scale-in">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Calendar size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-customText dark:text-customText-dark">
+                    Apply Leave / Early Out
+                  </h3>
+                  <p className="text-xs text-customText-muted">
+                    Narasaraopeta Engineering College • Faculty Portal
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApplyModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleApplyLeave} className="p-6 space-y-4">
+              
+              {/* Quota Exhaustion Alert inside Modal */}
+              {facultyMonthlyQuota.isLimitExceeded ? (
+                <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-black space-y-1">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                    <span>your limit for leaves has been completed , consult principal.</span>
+                  </div>
+                  <p className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
+                    You have already used {facultyMonthlyQuota.count} / 2 leaves for this calendar month. Unused leaves do not carry forward.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 text-xs flex items-center justify-between">
+                  <span className="text-customText-muted font-bold">Monthly Quota Status:</span>
+                  <span className="font-black text-emerald-600 dark:text-emerald-400">
+                    {facultyMonthlyQuota.count} / 2 leaves used ({facultyMonthlyQuota.remaining} left)
+                  </span>
+                </div>
+              )}
+
+              {/* Leave Type Toggle */}
+              <div>
+                <label className="text-xs font-bold uppercase text-customText-muted block mb-2">
+                  Request Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLeaveType('FACULTY_LEAVE')}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all flex items-center justify-center gap-2 ${
+                      leaveType === 'FACULTY_LEAVE'
+                        ? 'bg-primary text-white border-primary shadow-sm shadow-primary/20'
+                        : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
+                    }`}
+                  >
+                    <Calendar size={14} />
+                    <span>Full-Day Leave</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLeaveType('FACULTY_EARLY_OUT');
+                      setLeaveDate(todayDate);
+                    }}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all flex items-center justify-center gap-2 ${
+                      leaveType === 'FACULTY_EARLY_OUT'
+                        ? 'bg-primary text-white border-primary shadow-sm shadow-primary/20'
+                        : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
+                    }`}
+                  >
+                    <Clock size={14} />
+                    <span>Early Out (Same Day)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Date & Time Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                    {leaveType === 'FACULTY_EARLY_OUT' ? 'Date (Same Day)' : 'Leave Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={leaveDate}
+                    onChange={(e) => setLeaveDate(e.target.value)}
+                    className="glass-input text-xs w-full font-semibold"
+                    required
+                  />
+                </div>
+
+                {leaveType === 'FACULTY_EARLY_OUT' && (
+                  <div>
+                    <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                      Time to Leave <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={leaveTime}
+                      onChange={(e) => setLeaveTime(e.target.value)}
+                      className="glass-input text-xs w-full font-semibold"
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Proper Purpose / Reason */}
+              <div>
+                <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                  Proper Purpose / Reason for Leave <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={leavePurpose}
+                  onChange={(e) => setLeavePurpose(e.target.value)}
+                  placeholder="State the proper and specific purpose for your absence / early out..."
+                  rows={3}
+                  className="glass-input text-xs w-full resize-none font-medium"
+                  required
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowApplyModal(false)}
+                  className="btn-secondary py-2.5 px-4 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={applyingLeave || facultyMonthlyQuota.isLimitExceeded}
+                  className={`py-2.5 px-5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    facultyMonthlyQuota.isLimitExceeded
+                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                      : 'bg-primary hover:bg-primary-dark text-white shadow-md shadow-primary/20 active:scale-95'
+                  }`}
+                >
+                  {applyingLeave ? (
+                    <span>Submitting...</span>
+                  ) : (
+                    <>
+                      <span>Submit to HOD</span>
+                      <ArrowRight size={14} />
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* Official Leave & Gate Pass Ticket Modal */}
+      {selectedTicketForModal && (
+        <OutpassTicketModal
+          ticket={selectedTicketForModal}
+          onClose={() => setSelectedTicketForModal(null)}
+        />
       )}
 
 

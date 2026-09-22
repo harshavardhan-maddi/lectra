@@ -579,3 +579,214 @@ export const subscribeToOutpasses = (callback) => {
     clearInterval(pollInterval);
   };
 };
+
+// ==========================================
+// FACULTY LEAVE & EARLY OUT SERVICE METHODS
+// ==========================================
+
+// Calculate faculty monthly leaves usage (Strict limit: 2 leaves per calendar month, no rollover)
+export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = null) => {
+  if (!facultyIdentifier) {
+    return { count: 0, limit: 2, remaining: 2, isLimitExceeded: false, monthKey: '' };
+  }
+
+  const cleanId = String(facultyIdentifier).trim().toLowerCase();
+  const d = targetDateStr ? new Date(targetDateStr) : new Date();
+  const year = isNaN(d.getFullYear()) ? new Date().getFullYear() : d.getFullYear();
+  const month = isNaN(d.getMonth()) ? String(new Date().getMonth() + 1).padStart(2, '0') : String(d.getMonth() + 1).padStart(2, '0');
+  const targetMonthKey = `${year}-${month}`; // e.g. "2026-09"
+
+  const all = getAllOutpasses();
+  const facultyMonthTickets = all.filter(t => {
+    if (t.applicantType !== 'FACULTY') return false;
+    
+    const matchesUser = 
+      (t.facultyUserId && String(t.facultyUserId).trim().toLowerCase() === cleanId) ||
+      (t.facultyName && String(t.facultyName).trim().toLowerCase() === cleanId) ||
+      (t.facultyId && String(t.facultyId) === cleanId) ||
+      (t.rollNumber && String(t.rollNumber).trim().toLowerCase() === cleanId);
+    
+    if (!matchesUser) return false;
+    if (t.status === 'REJECTED') return false; // Rejected leaves do not consume the quota
+
+    // Determine the ticket's month (strictly based on leave date or applied date)
+    const ticketDateStr = t.date || (t.appliedAt ? t.appliedAt.slice(0, 10) : '');
+    const ticketMonthKey = ticketDateStr.slice(0, 7);
+
+    return ticketMonthKey === targetMonthKey;
+  });
+
+  const count = facultyMonthTickets.length;
+  const limit = 2;
+  const remaining = Math.max(0, limit - count);
+  const isLimitExceeded = count >= limit;
+
+  return {
+    count,
+    limit,
+    remaining,
+    isLimitExceeded,
+    monthKey: targetMonthKey,
+    monthName: new Date(year, parseInt(month, 10) - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' }),
+    tickets: facultyMonthTickets,
+    message: isLimitExceeded ? "your limit for leaves has been completed , consult principal." : ""
+  };
+};
+
+// Apply for Faculty Full-Day Leave or Early Out Permission
+export const applyFacultyLeave = async ({
+  facultyId,
+  facultyUserId,
+  facultyName,
+  department = 'General',
+  type = 'FACULTY_LEAVE', // 'FACULTY_LEAVE' or 'FACULTY_EARLY_OUT'
+  date,
+  leaveTime,
+  purpose
+}) => {
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Please specify a valid and proper purpose for your request.');
+  }
+
+  const selectedDate = date || new Date().toISOString().slice(0, 10);
+
+  if (type === 'FACULTY_EARLY_OUT' && (!leaveTime || !leaveTime.trim())) {
+    throw new Error('Please specify the time you need to leave early.');
+  }
+
+  // 1. Strict Monthly Limit Check (2 leaves per month, resets every month, no carryover)
+  const quota = getFacultyMonthlyLeaveUsage(facultyUserId || facultyName || facultyId, selectedDate);
+  if (quota.isLimitExceeded) {
+    throw new Error("your limit for leaves has been completed , consult principal.");
+  }
+
+  const now = new Date();
+  const dateCompact = selectedDate.replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const prefix = type === 'FACULTY_EARLY_OUT' ? 'NEC-FAC-EARLY' : 'NEC-FAC-LEAVE';
+  const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
+
+  const newTicket = {
+    id: ticketId,
+    applicantType: 'FACULTY',
+    type, // 'FACULTY_LEAVE' | 'FACULTY_EARLY_OUT'
+    facultyId,
+    facultyUserId: facultyUserId || '',
+    facultyName: facultyName || 'Faculty Member',
+    department: department || 'General',
+    date: selectedDate,
+    leaveTime: type === 'FACULTY_EARLY_OUT' ? leaveTime : 'Full Day',
+    purpose: purpose.trim(),
+    reason: purpose.trim(), // for unified compatibility
+    destination: 'Personal / Official Duty',
+    rollNumber: facultyUserId || 'FACULTY',
+    studentName: facultyName || 'Faculty Member',
+    section: department || 'Faculty',
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    
+    // Status Flow for Faculty:
+    // 1. FORWARDED_TO_HOD: Faculty submitted -> Goes directly to HOD (no parent call needed)
+    // 2. PERMISSION_GRANTED: HOD accepted & forwarded to watchman -> Watchman sees at gate
+    // 3. SENT_OUT: Watchman generated final slip & allowed gate departure
+    // 4. REJECTED: HOD rejected the request
+    status: 'FORWARDED_TO_HOD',
+    hodAction: null,
+    watchmanAction: null
+  };
+
+  // Save locally and sync immediately to central database
+  const currentTickets = getAllOutpasses();
+  const updatedLocal = [newTicket, ...currentTickets.filter(t => t.id !== newTicket.id)];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLocal));
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: updatedLocal }));
+
+  try {
+    const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({ tickets: [newTicket] })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
+      }
+    }
+  } catch (e) {
+    console.warn('Network sync note on faculty leave submit:', e);
+  }
+
+  return newTicket;
+};
+
+// HOD accepts Faculty Leave / Early Out & forwards to Watchman role login
+export const hodApproveFacultyLeave = (ticketId, { hodName = 'Dr. Rajesh Sharma (HOD)', remarks = 'Accepted and forwarded to watchman login.', timeToLeave = null } = {}) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) throw new Error('Leave application not found');
+
+  const now = new Date();
+  ticket.status = 'PERMISSION_GRANTED';
+  if (timeToLeave) {
+    ticket.leaveTime = timeToLeave;
+  }
+
+  ticket.hodAction = {
+    granted: true,
+    approvedAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks: remarks || `Permission accepted for ${ticket.type === 'FACULTY_EARLY_OUT' ? `early out at ${ticket.leaveTime}` : 'full day leave'}. Forwarded to watchman login.`,
+    hodName,
+    timeToLeave: ticket.leaveTime
+  };
+
+  saveOutpasses(tickets);
+  return ticket;
+};
+
+// Watchman generates final slip and marks faculty departed (NO ID check needed for faculty)
+export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Main Gate Security Officer', remarks = 'Final slip generated. Faculty departure permitted.' } = {}) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) throw new Error('Faculty gate pass not found');
+
+  const now = new Date();
+  ticket.status = 'SENT_OUT';
+  ticket.watchmanAction = {
+    sentOut: true,
+    physicalIdVerified: false, // Bypassed for faculty as requested
+    finalSlipGenerated: true,
+    exitTime: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    watchmanName
+  };
+
+  saveOutpasses(tickets);
+  return ticket;
+};
+
+// Get faculty leave history for a specific faculty member
+export const getFacultyLeaveHistory = (facultyIdentifier) => {
+  if (!facultyIdentifier) return [];
+  const cleanId = String(facultyIdentifier).trim().toLowerCase();
+  const all = getAllOutpasses();
+  return all.filter(t => {
+    if (t.applicantType !== 'FACULTY') return false;
+    return (
+      (t.facultyUserId && String(t.facultyUserId).trim().toLowerCase() === cleanId) ||
+      (t.facultyName && String(t.facultyName).trim().toLowerCase() === cleanId) ||
+      (t.facultyId && String(t.facultyId) === cleanId) ||
+      (t.rollNumber && String(t.rollNumber).trim().toLowerCase() === cleanId)
+    );
+  }).sort((a, b) => new Date(b.appliedAt || 0) - new Date(a.appliedAt || 0));
+};
+
