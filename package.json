@@ -2,6 +2,7 @@
   "name": "faculty-tracker",
   "version": "1.0.0",
   "description": "Lectra with Real-Time Updates",
+  "scripts": {
     "start": "node server.js",
     "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "build": "node scripts/build.js",
