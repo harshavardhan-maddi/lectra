@@ -743,6 +743,16 @@ async function executeImportToMySQL(zipBuffer, adminUser, mysqlConfig = null) {
       multipleStatements: true,
       connectTimeout: 10000
     };
+  } else if (process.env.DB_HOST && process.env.DB_USER) {
+    connectionOptions = {
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'lectra',
+      multipleStatements: true,
+      connectTimeout: 10000
+    };
   } else if (connectionUrl) {
     connectionOptions = connectionUrl;
   }
