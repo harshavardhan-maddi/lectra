@@ -1046,82 +1046,7 @@ const Dashboard = ({ initialTab }) => {
   return (
     <div className="space-y-6">
       
-      {/* Tab Navigation header (For HOD & Super Admin) */}
-      {(user?.role === 'HOD' || user?.role === 'SUPER_ADMIN') && (
-        <div className="flex border-b border-slate-200 dark:border-slate-800">
-          <button
-            onClick={() => handleTabChange('faculty')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeTab === 'faculty' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <CalendarDays size={16} />
-            <span>Faculty Monitor</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('students')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeTab === 'students' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <Users size={16} />
-            <span>Student Registry</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('absentees')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeTab === 'absentees' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <AlertCircle size={16} />
-            <span>Absentees Tracking</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('settings')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeTab === 'settings' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <Settings size={16} />
-            <span>Attendance Timings</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('outpassApprovals')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all relative ${
-              activeTab === 'outpassApprovals' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <FileText size={16} />
-            <span>Outpass Approvals</span>
-            {outpassTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length > 0 && (
-              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-primary text-white animate-pulse">
-                {outpassTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => handleTabChange('dataBackup')}
-            className={`flex items-center gap-2 py-3 px-6 text-sm font-semibold border-b-2 transition-all ${
-              activeTab === 'dataBackup' 
-                ? 'border-primary text-primary-dark dark:text-primary font-bold' 
-                : 'border-transparent text-customText-muted dark:text-customText-mutedDark hover:text-customText'
-            }`}
-          >
-            <Database size={16} />
-            <span>Data Export & Import</span>
-          </button>
-        </div>
-      )}
+
 
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm font-semibold rounded-xl">
@@ -1138,6 +1063,26 @@ const Dashboard = ({ initialTab }) => {
       {/* VIEW 1: FACULTY MONITOR (Original Dashboard content) */}
       {activeTab === 'faculty' && (
         <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-customText dark:text-customText-dark tracking-tight flex items-center gap-2">
+                <span>
+                  {user?.role === 'SUPER_ADMIN'
+                    ? (selectedDepartment && selectedDepartment !== 'ALL' ? selectedDepartment : 'Campus-Wide Overview')
+                    : (user?.department || 'Department Overview')}
+                </span>
+              </h2>
+              <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                Live classroom counts, timetable tracking, and faculty activity feed
+              </p>
+            </div>
+            {user?.department && user?.role !== 'SUPER_ADMIN' && (
+              <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                🏛️ {user.department}
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
             {stats && (
               <div className="lg:col-span-1 flex">

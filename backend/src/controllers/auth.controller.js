@@ -146,6 +146,11 @@ const register = async (req, res) => {
     return res.status(400).json({ message: 'All fields except class_name (for HOD/Sub Admin/Watchman) are required' });
   }
 
+  // Non-super-admins cannot register SUPER_ADMIN or WATCHMAN
+  if (req.user.role !== 'SUPER_ADMIN' && (role === 'SUPER_ADMIN' || role === 'WATCHMAN')) {
+    return res.status(403).json({ message: 'You do not have permission to register this role' });
+  }
+
   // Determine user department based on creator authority
   let userDepartment = null;
   if (role === 'WATCHMAN') {
@@ -280,6 +285,11 @@ const deleteUser = async (req, res) => {
       return res.status(403).json({ message: 'Only a Super Admin can delete HOD or Super Admin accounts' });
     }
 
+    // Protection: HOD can only delete users in their own department
+    if (req.user.role !== 'SUPER_ADMIN' && user.department !== req.user.department) {
+      return res.status(403).json({ message: 'You can only manage users within your own department' });
+    }
+
     await prisma.user.delete({
       where: { id: numId },
     });
@@ -301,6 +311,9 @@ const updateUser = async (req, res) => {
     const watchmen = await getWatchmanAccounts();
     const watchmanIndex = watchmen.findIndex(w => w.id === numId);
     if (watchmanIndex >= 0) {
+      if (req.user.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ message: 'Only a Super Admin can modify watchman accounts' });
+      }
       if (name) watchmen[watchmanIndex].name = name;
       if (password) {
         const salt = await bcrypt.genSalt(10);
@@ -321,6 +334,11 @@ const updateUser = async (req, res) => {
     // Protection: only Super Admin can modify HOD or Super Admin accounts
     if ((existingUser.role === 'SUPER_ADMIN' || existingUser.role === 'HOD') && req.user.role !== 'SUPER_ADMIN') {
       return res.status(403).json({ message: 'Only a Super Admin can modify HOD or Super Admin accounts' });
+    }
+
+    // Protection: HOD can only modify users in their own department
+    if (req.user.role !== 'SUPER_ADMIN' && existingUser.department !== req.user.department) {
+      return res.status(403).json({ message: 'You can only manage users within your own department' });
     }
 
     const updateData = {};
@@ -389,22 +407,23 @@ const getUsers = async (req, res) => {
       },
     });
 
-    const watchmen = await getWatchmanAccounts();
-    const formattedWatchmen = watchmen.map(w => ({
-      id: w.id,
-      name: w.name,
-      userId: w.userId,
-      role: 'WATCHMAN',
-      className: null,
-      department: null,
-      createdAt: w.createdAt || new Date().toISOString(),
-    }));
-
-    // If filtering by a department, exclude watchman unless viewing all
+    // Watchmen are campus-wide and only visible to Super Admin viewing all departments
     let combined = [...users];
-    if (!req.query.department || req.query.department === 'ALL' || req.user.role !== 'SUPER_ADMIN') {
+    if (req.user.role === 'SUPER_ADMIN' && (!req.query.department || req.query.department === 'ALL')) {
+      const watchmen = await getWatchmanAccounts();
+      const formattedWatchmen = watchmen.map(w => ({
+        id: w.id,
+        name: w.name,
+        userId: w.userId,
+        role: 'WATCHMAN',
+        className: null,
+        department: null,
+        createdAt: w.createdAt || new Date().toISOString(),
+      }));
       combined = [...users, ...formattedWatchmen];
     }
+
+    res.json(combined);
 
     res.json(combined);
   } catch (error) {

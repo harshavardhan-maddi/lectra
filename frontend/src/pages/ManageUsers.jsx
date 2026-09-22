@@ -478,13 +478,15 @@ const ManageUsers = () => {
                   className="glass-input text-sm"
                 >
                   <option value="CR">Class Representative (CR)</option>
-                  <option value="WATCHMAN">Campus Gate Watchman (Security)</option>
-                  <option value="ABSENT_CONTROLLER">Absent Controller</option>
                   <option value="FACULTY">Faculty</option>
+                  <option value="ABSENT_CONTROLLER">Absent Controller</option>
                   <option value="SUB_ADMIN">Sub Admin</option>
-                  <option value="HOD">HOD (Head of Department)</option>
                   {isSuperAdmin && (
-                    <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
+                    <>
+                      <option value="HOD">HOD (Head of Department)</option>
+                      <option value="WATCHMAN">Campus Gate Watchman (Security)</option>
+                      <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
+                    </>
                   )}
                 </select>
               </div>
@@ -643,13 +645,15 @@ const ManageUsers = () => {
                   disabled={editSubmitting || (!isSuperAdmin && (selectedUser.role === 'SUPER_ADMIN' || selectedUser.role === 'HOD'))}
                 >
                   <option value="CR">Class Representative (CR)</option>
-                  <option value="WATCHMAN">Campus Gate Watchman (Security)</option>
-                  <option value="ABSENT_CONTROLLER">Absent Controller</option>
                   <option value="FACULTY">Faculty</option>
+                  <option value="ABSENT_CONTROLLER">Absent Controller</option>
                   <option value="SUB_ADMIN">Sub Admin</option>
-                  <option value="HOD">HOD (Head of Department)</option>
                   {isSuperAdmin && (
-                    <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
+                    <>
+                      <option value="HOD">HOD (Head of Department)</option>
+                      <option value="WATCHMAN">Campus Gate Watchman (Security)</option>
+                      <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
+                    </>
                   )}
                 </select>
               </div>

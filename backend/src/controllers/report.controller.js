@@ -95,18 +95,38 @@ const getDashboardStats = async (req, res) => {
   try {
     const { start: startOfToday, end: endOfToday } = getLocalDayBounds();
 
-    // Basic counts
-    const classroomCount = await prisma.classroom.count();
-    const crCount = await prisma.user.count({ where: { role: 'CR' } });
+    let deptFilter = null;
+    if (req.user && req.user.role === 'SUPER_ADMIN') {
+      if (req.query.department && req.query.department !== 'ALL') {
+        deptFilter = req.query.department;
+      }
+    } else if (req.user && req.user.role !== 'WATCHMAN') {
+      deptFilter = req.user.department || 'Department of CSE(emerging Technologies)';
+    }
 
-    // Today's logs counts
-    const logsToday = await prisma.facultyLog.findMany({
-      where: {
-        createdAt: {
-          gte: startOfToday,
-          lte: endOfToday,
-        },
+    const classroomWhere = deptFilter ? { department: deptFilter } : {};
+    const crWhere = { role: 'CR' };
+    if (deptFilter) {
+      crWhere.department = deptFilter;
+    }
+
+    // Basic counts scoped to department
+    const classroomCount = await prisma.classroom.count({ where: classroomWhere });
+    const crCount = await prisma.user.count({ where: crWhere });
+
+    // Today's logs counts scoped to department
+    const logsWhere = {
+      createdAt: {
+        gte: startOfToday,
+        lte: endOfToday,
       },
+    };
+    if (deptFilter) {
+      logsWhere.classroom = { department: deptFilter };
+    }
+
+    const logsToday = await prisma.facultyLog.findMany({
+      where: logsWhere,
     });
 
     const presentCount = logsToday.filter((l) => l.status === 'Present').length;
@@ -118,8 +138,9 @@ const getDashboardStats = async (req, res) => {
       presencePercentage = Math.round((presentCount / totalLogsToday) * 100);
     }
 
-    // Classroom analytics: detailed presence per class today
+    // Classroom analytics: detailed presence per class today in this department
     const classrooms = await prisma.classroom.findMany({
+      where: classroomWhere,
       include: {
         logs: {
           where: {
@@ -138,14 +159,21 @@ const getDashboardStats = async (req, res) => {
       return {
         className: c.className,
         roomNumber: c.roomNumber,
+        department: c.department,
         totalPeriods: total,
         presentPeriods: present,
         percentage: total > 0 ? Math.round((present / total) * 100) : 100,
       };
     });
 
-    // Recent activity feed: last 15 logs across all classrooms
+    // Recent activity feed: last 15 logs scoped to department
+    const recentWhere = {};
+    if (deptFilter) {
+      recentWhere.classroom = { department: deptFilter };
+    }
+
     const recentLogs = await prisma.facultyLog.findMany({
+      where: recentWhere,
       take: 15,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -168,8 +196,8 @@ const getDashboardStats = async (req, res) => {
       enrichedRecent.push({
         id: log.id,
         createdAt: log.createdAt,
-        roomNumber: log.classroom.roomNumber,
-        className: log.classroom.className,
+        roomNumber: log.classroom ? log.classroom.roomNumber : 'N/A',
+        className: log.classroom ? log.classroom.className : 'N/A',
         facultyName: log.facultyName,
         subjectName: tt ? tt.subjectName : 'N/A',
         periodNo: log.periodNo,
