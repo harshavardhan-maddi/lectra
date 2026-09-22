@@ -41,9 +41,22 @@ app.use('/api/faculty', facultyRoutes);
 app.use('/api/student-attendance', studentAttendanceRoutes);
 app.use('/api/backup', backupRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date() });
+// Health check with DB status
+app.get('/health', async (req, res) => {
+  let dbStatus = 'connected';
+  let dbError = null;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err) {
+    dbStatus = 'disconnected';
+    dbError = err.message;
+  }
+  res.json({
+    status: dbStatus === 'connected' ? 'healthy' : 'database_error',
+    database: dbStatus,
+    error: dbError,
+    timestamp: new Date()
+  });
 });
 
 // Serve frontend build in production / Hostinger deployment
@@ -63,11 +76,17 @@ if (fs.existsSync(frontendDistPath)) {
   });
 }
 
-// Global Error Handler
+// Ensure any unmatched /api route returns JSON, never HTML
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ message: `API route not found: ${req.method} ${req.originalUrl}` });
+});
+
+// Global Error Handler (always returns JSON)
 app.use((err, req, res, next) => {
   console.error('[Global Error Logger]', err);
   res.status(err.status || 500).json({
     message: err.message || 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? String(err) : undefined
   });
 });
 
@@ -75,19 +94,23 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    // Test database connection
-    await prisma.$connect();
-    console.log('[Database] Connected to MySQL via Prisma ORM.');
-
-    // Start background auto-expiry cron
-    startCron();
-
+    // Start listening immediately so Hostinger and Passenger detect the live server
     server.listen(PORT, () => {
       console.log(`[Server] Live on http://localhost:${PORT}`);
     });
+
+    // Test database connection in background
+    prisma.$connect()
+      .then(() => {
+        console.log('[Database] Connected to MySQL via Prisma ORM.');
+        startCron();
+      })
+      .catch((error) => {
+        console.error('[Database Warning] Failed to connect to MySQL on startup:', error.message);
+        console.error('[Database Warning] Please check DB_HOST, DB_USER, DB_PASSWORD, DB_NAME.');
+      });
   } catch (error) {
-    console.error('[Startup Error] Failed to initialize server:', error);
-    process.exit(1);
+    console.error('[Startup Error] Failed to initialize HTTP server:', error);
   }
 };
 

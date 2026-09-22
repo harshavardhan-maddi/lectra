@@ -8,15 +8,8 @@
     # Redirect HTTP to HTTPS
     RewriteCond %{HTTPS} off
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-    # Handle WebSocket connections for Socket.IO
-    RewriteCond %{HTTP:Upgrade} websocket [NC]
-    RewriteCond %{HTTP:Connection} upgrade [NC]
-    RewriteRule ^/?(.*) "ws://127.0.0.1:5000/$1" [P,L]
-
-    # Route all requests to Node.js backend if running via local port
-    # Note: If Hostinger Node.js Manager is active, Passenger automatically manages execution.
 </IfModule>
 
 # Prevent directory listings
 Options -Indexes
+
