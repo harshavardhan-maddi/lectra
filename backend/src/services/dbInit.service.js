@@ -35,25 +35,45 @@ function getMySQLConnectionOptions() {
 async function ensureSuperAdminAccount() {
   try {
     const salt = await bcrypt.genSalt(10);
-    const superPassword = await bcrypt.hash('SUPER_ADMIN', salt);
+    const superPassword = await bcrypt.hash('nrtec@nec', salt);
+
+    // If legacy 'SUPER_ADMIN' account exists, migrate it to 'SANEC' with the new password
+    try {
+      const legacyAdmin = await prisma.user.findUnique({ where: { userId: 'SUPER_ADMIN' } });
+      if (legacyAdmin) {
+        await prisma.user.update({
+          where: { id: legacyAdmin.id },
+          data: {
+            userId: 'SANEC',
+            password: superPassword,
+            name: 'Super Administrator',
+            role: 'SUPER_ADMIN',
+          },
+        });
+        console.log('[Auto-Init] Migrated legacy SUPER_ADMIN user ID to SANEC with new password.');
+      }
+    } catch (migErr) {
+      // Ignore if update fails or already handled
+    }
 
     await prisma.user.upsert({
-      where: { userId: 'SUPER_ADMIN' },
+      where: { userId: 'SANEC' },
       update: {
         role: 'SUPER_ADMIN',
+        password: superPassword,
         name: 'Super Administrator',
       },
       create: {
         name: 'Super Administrator',
-        userId: 'SUPER_ADMIN',
+        userId: 'SANEC',
         password: superPassword,
         role: 'SUPER_ADMIN',
         className: null,
       },
     });
-    console.log('[Auto-Init] Verified SUPER_ADMIN account (Username: SUPER_ADMIN, Password: SUPER_ADMIN).');
+    console.log('[Auto-Init] Verified Super Admin account (Username: SANEC, Password: nrtec@nec).');
   } catch (err) {
-    console.warn('[Auto-Init] Could not verify SUPER_ADMIN account:', err.message);
+    console.warn('[Auto-Init] Could not verify Super Admin account:', err.message);
   }
 }
 
