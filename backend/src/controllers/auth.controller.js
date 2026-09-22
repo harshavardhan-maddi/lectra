@@ -435,26 +435,14 @@ const getUsers = async (req, res) => {
 
 const getDepartments = async (req, res) => {
   try {
-    const userDepts = await prisma.user.findMany({
-      where: { department: { not: null } },
-      select: { department: true },
-      distinct: ['department'],
-    });
-
-    const classroomDepts = await prisma.classroom.findMany({
-      where: { department: { not: null } },
-      select: { department: true },
-      distinct: ['department'],
-    });
-
     const deptsSet = new Set(['Department of CSE(emerging Technologies)']);
     
     // Find distinct departments from users, faculty, students, classrooms
     const [userDepts, facultyDepts, studentDepts, classroomDepts] = await Promise.all([
-      prisma.user.findMany({ select: { department: true }, distinct: ['department'] }),
-      prisma.faculty.findMany({ select: { department: true }, distinct: ['department'] }),
-      prisma.student.findMany({ select: { department: true }, distinct: ['department'] }),
-      prisma.classroom.findMany({ select: { department: true }, distinct: ['department'] }),
+      prisma.user.findMany({ where: { department: { not: null } }, select: { department: true }, distinct: ['department'] }),
+      prisma.faculty.findMany({ where: { department: { not: null } }, select: { department: true }, distinct: ['department'] }),
+      prisma.student.findMany({ where: { department: { not: null } }, select: { department: true }, distinct: ['department'] }),
+      prisma.classroom.findMany({ where: { department: { not: null } }, select: { department: true }, distinct: ['department'] }),
     ]);
 
     [...userDepts, ...facultyDepts, ...studentDepts, ...classroomDepts].forEach(d => {
