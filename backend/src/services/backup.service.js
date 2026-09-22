@@ -720,6 +720,12 @@ function escapeSql(val) {
  * Connects to the target MySQL database, creates tables, and imports records
  * with ID preservation and transactional safety.
  */
+/**
+ * Execute Import into MySQL
+ * Connects directly to the active MySQL database via Prisma ORM,
+ * preserves all original primary keys and relationships, and handles
+ * upserts smoothly.
+ */
 async function executeImportToMySQL(zipBuffer, adminUser, mysqlConfig = null) {
   // 1. Validate the backup ZIP first
   const validation = validateBackupZip(zipBuffer);
@@ -729,88 +735,263 @@ async function executeImportToMySQL(zipBuffer, adminUser, mysqlConfig = null) {
 
   const { parsedData, metadata, totalRecords, entityCounts } = validation;
 
-  // Determine MySQL Connection details
-  let connectionUrl = process.env.MYSQL_URL || process.env.MYSQL_DATABASE_URL;
-  let connectionOptions = null;
-
-  if (mysqlConfig && mysqlConfig.host && mysqlConfig.user) {
-    connectionOptions = {
-      host: mysqlConfig.host,
-      port: Number(mysqlConfig.port) || 3306,
-      user: mysqlConfig.user,
-      password: mysqlConfig.password || '',
-      database: mysqlConfig.database || 'lectra_faculty_tracker',
-      multipleStatements: true,
-      connectTimeout: 10000
-    };
-  } else if (process.env.DB_HOST && process.env.DB_USER) {
-    connectionOptions = {
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT) || 3306,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'lectra',
-      multipleStatements: true,
-      connectTimeout: 10000
-    };
-  } else if (connectionUrl) {
-    connectionOptions = connectionUrl;
-  }
-
-  let connection = null;
-  let isDirectDatabaseConnected = false;
+  let isDirectDatabaseConnected = true;
   let recordsImportedCount = 0;
-  let errorsList = [];
+  const errorsList = [];
 
-  // Generate the complete SQL migration script
-  const sqlDump = generateMySQLDump(parsedData, metadata);
+  console.log(`[MySQL Import] Starting direct database import of ${totalRecords} records using active Prisma ORM...`);
 
-  if (connectionOptions) {
-    try {
-      console.log('[MySQL Import] Attempting connection to target MySQL database...');
-      connection = await mysql.createConnection(connectionOptions);
-      isDirectDatabaseConnected = true;
+  try {
+    // Disable foreign key checks during import to allow inserting related records in any order
+    await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0;');
 
-      // Start transaction
-      await connection.beginTransaction();
-      await connection.query('SET FOREIGN_KEY_CHECKS = 0;');
-
-      // Execute schema and batch data statements
-      const sqlStatements = sqlDump
-        .split(/;\s*$/m)
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
-
-      for (const stmt of sqlStatements) {
-        try {
-          await connection.query(stmt);
-          if (stmt.toUpperCase().startsWith('INSERT INTO')) {
-            recordsImportedCount++;
+    // 1. Import Classrooms
+    const classrooms = parsedData['classrooms.json'] || [];
+    for (const c of classrooms) {
+      try {
+        await prisma.classroom.upsert({
+          where: { id: Number(c.id) },
+          update: {
+            roomNumber: String(c.roomNumber),
+            className: String(c.className)
+          },
+          create: {
+            id: Number(c.id),
+            roomNumber: String(c.roomNumber),
+            className: String(c.className),
+            createdAt: c.createdAt ? new Date(c.createdAt) : new Date()
           }
-        } catch (stmtErr) {
-          console.error('[MySQL Statement Error]:', stmtErr.message);
-          errorsList.push(stmtErr.message);
-        }
-      }
-
-      await connection.query('SET FOREIGN_KEY_CHECKS = 1;');
-      await connection.commit();
-      console.log(`[MySQL Import] Direct import to MySQL committed successfully (${recordsImportedCount} insert ops).`);
-    } catch (dbErr) {
-      if (connection) {
-        try { await connection.rollback(); } catch (rbErr) { /* ignore */ }
-      }
-      console.error('[MySQL Import Failure]:', dbErr);
-      errorsList.push(`MySQL Database Error: ${dbErr.message}`);
-    } finally {
-      if (connection) {
-        try { await connection.end(); } catch (e) { /* ignore */ }
+        });
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`Classroom ${c.roomNumber} (${c.className}): ${err.message}`);
       }
     }
-  } else {
-    // If no live MySQL URL is configured in current environment,
-    // the system generates and prepares the full verified migration payload and SQL dump
-    recordsImportedCount = totalRecords;
+
+    // 2. Import Faculty
+    const facultyList = parsedData['faculty.json'] || [];
+    for (const f of facultyList) {
+      try {
+        await prisma.faculty.upsert({
+          where: { facultyName: String(f.facultyName) },
+          update: {
+            phoneNumber: f.phoneNumber ? String(f.phoneNumber) : null
+          },
+          create: {
+            id: Number(f.id),
+            facultyName: String(f.facultyName),
+            phoneNumber: f.phoneNumber ? String(f.phoneNumber) : null
+          }
+        });
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`Faculty ${f.facultyName}: ${err.message}`);
+      }
+    }
+
+    // 3. Import Users
+    const users = parsedData['users.json'] || [];
+    for (const u of users) {
+      try {
+        await prisma.user.upsert({
+          where: { userId: String(u.userId) },
+          update: {
+            name: String(u.name),
+            password: String(u.password),
+            role: u.role,
+            className: u.className ? String(u.className) : null,
+            fingerprintEnabled: Boolean(u.fingerprintEnabled)
+          },
+          create: {
+            id: Number(u.id),
+            name: String(u.name),
+            userId: String(u.userId),
+            password: String(u.password),
+            role: u.role,
+            className: u.className ? String(u.className) : null,
+            fingerprintEnabled: Boolean(u.fingerprintEnabled),
+            createdAt: u.createdAt ? new Date(u.createdAt) : new Date()
+          }
+        });
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`User ${u.userId}: ${err.message}`);
+      }
+    }
+
+    // 4. Import Students
+    const students = parsedData['students.json'] || [];
+    for (const s of students) {
+      try {
+        await prisma.student.upsert({
+          where: { rollNumber: String(s.rollNumber) },
+          update: {
+            name: String(s.name),
+            section: String(s.section),
+            studentMobile: String(s.studentMobile || ''),
+            parentMobile: String(s.parentMobile || ''),
+            preExcusedStart: s.preExcusedStart ? String(s.preExcusedStart) : null,
+            preExcusedEnd: s.preExcusedEnd ? String(s.preExcusedEnd) : null,
+            preExcusedReason: s.preExcusedReason ? String(s.preExcusedReason) : null
+          },
+          create: {
+            id: Number(s.id),
+            rollNumber: String(s.rollNumber),
+            name: String(s.name),
+            section: String(s.section),
+            studentMobile: String(s.studentMobile || ''),
+            parentMobile: String(s.parentMobile || ''),
+            preExcusedStart: s.preExcusedStart ? String(s.preExcusedStart) : null,
+            preExcusedEnd: s.preExcusedEnd ? String(s.preExcusedEnd) : null,
+            preExcusedReason: s.preExcusedReason ? String(s.preExcusedReason) : null,
+            createdAt: s.createdAt ? new Date(s.createdAt) : new Date()
+          }
+        });
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`Student ${s.rollNumber}: ${err.message}`);
+      }
+    }
+
+    // 5. Import Timetables
+    const timetables = parsedData['timetable.json'] || [];
+    for (const t of timetables) {
+      try {
+        await prisma.timetable.upsert({
+          where: { id: Number(t.id) },
+          update: {
+            classroomId: Number(t.classroomId),
+            day: String(t.day),
+            periodNo: Number(t.periodNo),
+            startTime: String(t.startTime),
+            endTime: String(t.endTime),
+            facultyName: String(t.facultyName),
+            subjectName: String(t.subjectName)
+          },
+          create: {
+            id: Number(t.id),
+            classroomId: Number(t.classroomId),
+            day: String(t.day),
+            periodNo: Number(t.periodNo),
+            startTime: String(t.startTime),
+            endTime: String(t.endTime),
+            facultyName: String(t.facultyName),
+            subjectName: String(t.subjectName)
+          }
+        });
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`Timetable entry #${t.id}: ${err.message}`);
+      }
+    }
+
+    // 6. Import Attendance
+    const attendanceList = parsedData['attendance.json'] || [];
+    for (const a of attendanceList) {
+      try {
+        await prisma.attendance.upsert({
+          where: {
+            studentId_date: {
+              studentId: Number(a.studentId),
+              date: String(a.date)
+            }
+          },
+          update: {
+            status: String(a.status),
+            markedBy: Number(a.markedBy),
+            isLateComer: Boolean(a.isLateComer),
+            updatedAt: a.updatedAt ? new Date(a.updatedAt) : new Date()
+          },
+          create: {
+            id: Number(a.id),
+            studentId: Number(a.studentId),
+            date: String(a.date),
+            status: String(a.status),
+            markedBy: Number(a.markedBy),
+            isLateComer: Boolean(a.isLateComer),
+            updatedAt: a.updatedAt ? new Date(a.updatedAt) : new Date()
+          }
+        });
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`Attendance #${a.id}: ${err.message}`);
+      }
+    }
+
+    // 7. Import History (FacultyLogs & AbsenteeCallLogs)
+    const history = parsedData['ticket_history.json'] || {};
+    const facultyLogs = Array.isArray(history.facultyLogs) ? history.facultyLogs : [];
+    for (const fl of facultyLogs) {
+      try {
+        const existing = await prisma.facultyLog.findUnique({ where: { id: Number(fl.id) } });
+        if (!existing) {
+          await prisma.facultyLog.create({
+            data: {
+              id: Number(fl.id),
+              classroomId: Number(fl.classroomId),
+              facultyName: String(fl.facultyName),
+              periodNo: Number(fl.periodNo),
+              entryTime: fl.entryTime ? new Date(fl.entryTime) : null,
+              status: String(fl.status),
+              createdAt: fl.createdAt ? new Date(fl.createdAt) : new Date()
+            }
+          });
+        }
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`Faculty Log #${fl.id}: ${err.message}`);
+      }
+    }
+
+    const absenteeLogs = Array.isArray(history.absenteeCallLogs) ? history.absenteeCallLogs : [];
+    for (const al of absenteeLogs) {
+      try {
+        const existing = await prisma.absenteeCallLog.findUnique({ where: { id: Number(al.id) } });
+        if (!existing) {
+          await prisma.absenteeCallLog.create({
+            data: {
+              id: Number(al.id),
+              studentId: Number(al.studentId),
+              date: String(al.date),
+              answered: Boolean(al.answered),
+              reason: al.reason ? String(al.reason) : null,
+              calledById: Number(al.calledById),
+              createdAt: al.createdAt ? new Date(al.createdAt) : new Date(),
+              callType: al.callType ? String(al.callType) : 'ABSENT',
+              recipient: al.recipient ? String(al.recipient) : 'PARENT'
+            }
+          });
+        }
+        recordsImportedCount++;
+      } catch (err) {
+        errorsList.push(`Absentee Log #${al.id}: ${err.message}`);
+      }
+    }
+
+    // 8. Import Outpass Tickets into SystemSetting
+    const tickets = parsedData['tickets.json'] || [];
+    if (tickets.length > 0) {
+      try {
+        await prisma.systemSetting.upsert({
+          where: { key: 'lectra_outpass_tickets_db' },
+          update: { value: JSON.stringify(tickets) },
+          create: { key: 'lectra_outpass_tickets_db', value: JSON.stringify(tickets) }
+        });
+        recordsImportedCount += tickets.length;
+      } catch (err) {
+        errorsList.push(`Outpass Tickets: ${err.message}`);
+      }
+    }
+
+    console.log(`[MySQL Import] Import finished. Successfully imported ${recordsImportedCount} rows (${errorsList.length} errors).`);
+  } catch (fatalErr) {
+    console.error('[MySQL Import Fatal Error]:', fatalErr);
+    errorsList.push(`Fatal error: ${fatalErr.message}`);
+    isDirectDatabaseConnected = false;
+  } finally {
+    try {
+      await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 1;');
+    } catch (e) { /* ignore */ }
   }
 
   const importStatus = errorsList.length === 0 ? 'SUCCESS' : (recordsImportedCount > 0 ? 'PARTIAL_SUCCESS' : 'FAILED');
@@ -820,13 +1001,11 @@ async function executeImportToMySQL(zipBuffer, adminUser, mysqlConfig = null) {
     action: 'IMPORT_MYSQL',
     admin: adminUser?.name || adminUser?.userId || 'HOD',
     filename: metadata.sourceApplication ? `attendance-system-backup (${metadata.databaseType})` : 'uploaded-backup.zip',
-    recordsCount: isDirectDatabaseConnected ? recordsImportedCount : totalRecords,
+    recordsCount: recordsImportedCount,
     status: importStatus,
     errors: errorsList.length > 0 ? errorsList.slice(0, 5) : null,
     targetEngine: 'MySQL',
-    details: isDirectDatabaseConnected 
-      ? `Imported into MySQL database (${recordsImportedCount} rows inserted)`
-      : `Validated and compiled ${totalRecords} records into production-ready MySQL migration dump`
+    details: `Imported ${recordsImportedCount} rows into active MySQL database`
   });
 
   return {
@@ -834,12 +1013,12 @@ async function executeImportToMySQL(zipBuffer, adminUser, mysqlConfig = null) {
     targetEngine: 'MySQL',
     isDirectDatabaseConnected,
     totalRecordsInBackup: totalRecords,
-    recordsImported: isDirectDatabaseConnected ? recordsImportedCount : totalRecords,
+    recordsImported: recordsImportedCount,
     entityCounts,
     duplicatesHandled: validation.duplicateSummary.totalDuplicates,
     brokenRelationshipsHandled: validation.relationshipSummary.brokenCount,
     errors: errorsList,
-    sqlDump
+    sqlDump: generateMySQLDump(parsedData, metadata)
   };
 }
 
