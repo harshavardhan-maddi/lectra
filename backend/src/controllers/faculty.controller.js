@@ -3,7 +3,17 @@ const prisma = require('../db');
 // Get all faculty
 const getAllFaculty = async (req, res) => {
   try {
+    const where = {};
+    if (req.user && req.user.role === 'SUPER_ADMIN') {
+      if (req.query.department && req.query.department !== 'ALL') {
+        where.department = req.query.department;
+      }
+    } else if (req.user && req.user.role !== 'WATCHMAN') {
+      where.department = req.user.department || 'Department of CSE(emerging Technologies)';
+    }
+
     const faculty = await prisma.faculty.findMany({
+      where,
       orderBy: { facultyName: 'asc' },
     });
     res.json(faculty);
@@ -15,17 +25,21 @@ const getAllFaculty = async (req, res) => {
 
 // Update or create single faculty
 const upsertFaculty = async (req, res) => {
-  const { facultyName, phoneNumber } = req.body;
+  const { facultyName, phoneNumber, department } = req.body;
 
   if (!facultyName) {
     return res.status(400).json({ message: 'Faculty name is required' });
   }
 
+  const assignedDept = (req.user && req.user.role === 'SUPER_ADMIN' && department)
+    ? department.trim()
+    : ((req.user && req.user.department) || 'Department of CSE(emerging Technologies)');
+
   try {
     const faculty = await prisma.faculty.upsert({
       where: { facultyName },
-      update: { phoneNumber },
-      create: { facultyName, phoneNumber },
+      update: { phoneNumber, department: assignedDept },
+      create: { facultyName, phoneNumber, department: assignedDept },
     });
 
     res.json(faculty);
@@ -37,23 +51,30 @@ const upsertFaculty = async (req, res) => {
 
 // Bulk update/create faculty
 const bulkUpsertFaculty = async (req, res) => {
-  const { facultyList } = req.body; // Array of { facultyName, phoneNumber }
+  const { facultyList, department } = req.body; // Array of { facultyName, phoneNumber }
 
   if (!facultyList || !Array.isArray(facultyList)) {
     return res.status(400).json({ message: 'Invalid faculty list provided' });
   }
 
+  const assignedDept = (req.user && req.user.role === 'SUPER_ADMIN' && department)
+    ? department.trim()
+    : ((req.user && req.user.department) || 'Department of CSE(emerging Technologies)');
+
   try {
-    // Upsert each faculty sequentially (or use transactions, but sequential is fine for this scale)
     const results = [];
     for (const item of facultyList) {
       if (item.facultyName) {
         const faculty = await prisma.faculty.upsert({
           where: { facultyName: item.facultyName.trim() },
-          update: { phoneNumber: item.phoneNumber ? item.phoneNumber.trim() : null },
+          update: { 
+            phoneNumber: item.phoneNumber ? item.phoneNumber.trim() : null,
+            department: assignedDept,
+          },
           create: { 
             facultyName: item.facultyName.trim(), 
-            phoneNumber: item.phoneNumber ? item.phoneNumber.trim() : null 
+            phoneNumber: item.phoneNumber ? item.phoneNumber.trim() : null,
+            department: assignedDept,
           },
         });
         results.push(faculty);

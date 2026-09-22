@@ -68,6 +68,7 @@ async function ensureHODAccount() {
         password: hodPassword,
         role: 'HOD',
         name: 'Dr. Rajesh Sharma (HOD)',
+        department: 'Department of CSE(emerging Technologies)',
       },
       create: {
         name: 'Dr. Rajesh Sharma (HOD)',
@@ -75,9 +76,10 @@ async function ensureHODAccount() {
         password: hodPassword,
         role: 'HOD',
         className: null,
+        department: 'Department of CSE(emerging Technologies)',
       },
     });
-    console.log('[Auto-Init] Verified TE_HOD user account (Username: TE_HOD, Password: HOD_TE).');
+    console.log('[Auto-Init] Verified TE_HOD user account (Username: TE_HOD, Password: HOD_TE, Dept: Department of CSE(emerging Technologies)).');
   } catch (err) {
     console.warn('[Auto-Init] Could not verify HOD account via Prisma:', err.message);
   }
@@ -124,9 +126,51 @@ async function initDatabaseSchema() {
       await prisma.$executeRawUnsafe(
         "ALTER TABLE `users` MODIFY COLUMN `role` ENUM('SUPER_ADMIN', 'HOD', 'SUB_ADMIN', 'CR', 'ABSENT_CONTROLLER', 'FACULTY') NOT NULL"
       );
-    } catch (e) {
-      // Column might already be updated or using varchar
-    }
+    } catch (e) {}
+
+    // Ensure department column exists on users, classrooms, faculty, students
+    try {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE `users` ADD COLUMN `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)'"
+      );
+    } catch (e) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE `classrooms` ADD COLUMN `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)'"
+      );
+    } catch (e) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE `faculty` ADD COLUMN `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)'"
+      );
+    } catch (e) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE `students` ADD COLUMN `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)'"
+      );
+    } catch (e) {}
+
+    // Backfill any existing rows with null department to 'Department of CSE(emerging Technologies)'
+    try {
+      await prisma.$executeRawUnsafe(
+        "UPDATE `users` SET `department` = 'Department of CSE(emerging Technologies)' WHERE `department` IS NULL AND `role` != 'SUPER_ADMIN'"
+      );
+    } catch (e) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        "UPDATE `classrooms` SET `department` = 'Department of CSE(emerging Technologies)' WHERE `department` IS NULL"
+      );
+    } catch (e) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        "UPDATE `faculty` SET `department` = 'Department of CSE(emerging Technologies)' WHERE `department` IS NULL"
+      );
+    } catch (e) {}
+    try {
+      await prisma.$executeRawUnsafe(
+        "UPDATE `students` SET `department` = 'Department of CSE(emerging Technologies)' WHERE `department` IS NULL"
+      );
+    } catch (e) {}
   }
 
   // Always ensure SUPER_ADMIN and TE_HOD credentials are active
@@ -136,7 +180,7 @@ async function initDatabaseSchema() {
   return {
     success: true,
     message: tablesExist
-      ? 'Tables were already present; SUPER_ADMIN and TE_HOD accounts verified.'
+      ? 'Tables were already present; SUPER_ADMIN, TE_HOD, and department schema verified.'
       : 'All database tables, SUPER_ADMIN, and TE_HOD accounts were created successfully!',
   };
 }

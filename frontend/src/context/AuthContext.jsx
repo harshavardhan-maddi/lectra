@@ -176,7 +176,20 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const registerUser = async (name, userId, password, role, className) => {
+  const [selectedDepartment, setSelectedDepartmentState] = useState(
+    localStorage.getItem('lectra_selected_department') || 'ALL'
+  );
+
+  const setSelectedDepartment = (dept) => {
+    setSelectedDepartmentState(dept);
+    if (dept) {
+      localStorage.setItem('lectra_selected_department', dept);
+    } else {
+      localStorage.removeItem('lectra_selected_department');
+    }
+  };
+
+  const registerUser = async (name, userId, password, role, className, department) => {
     // If registering a Watchman, cache in local custom watchmen registry
     if (role === 'WATCHMAN') {
       const customWatchmen = JSON.parse(localStorage.getItem('lectra_custom_watchmen') || '[]');
@@ -190,6 +203,7 @@ export const AuthProvider = ({ children }) => {
         password,
         role: 'WATCHMAN',
         className: null,
+        department: null,
         createdAt: new Date().toISOString()
       };
       customWatchmen.unshift(newWatchman);
@@ -203,7 +217,7 @@ export const AuthProvider = ({ children }) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify({ name, userId, password, role, className }),
+          body: JSON.stringify({ name, userId, password, role, className, department: null }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -221,7 +235,7 @@ export const AuthProvider = ({ children }) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ name, userId, password, role, className }),
+      body: JSON.stringify({ name, userId, password, role, className, department }),
     });
 
     const data = await res.json();
@@ -274,10 +288,14 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
-  const getUsersList = async () => {
+  const getUsersList = async (departmentFilter) => {
     let users = [];
     try {
-      const res = await fetch('/api/auth/users', {
+      let url = '/api/auth/users';
+      if (departmentFilter && departmentFilter !== 'ALL') {
+        url += `?department=${encodeURIComponent(departmentFilter)}`;
+      }
+      const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -302,6 +320,7 @@ export const AuthProvider = ({ children }) => {
             userId: w.userId,
             role: 'WATCHMAN',
             className: null,
+            department: null,
             createdAt: w.createdAt || new Date().toISOString()
           });
         }
@@ -311,6 +330,22 @@ export const AuthProvider = ({ children }) => {
     }
 
     return users;
+  };
+
+  const getDepartmentsList = async () => {
+    try {
+      const res = await fetch('/api/auth/departments', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to fetch departments:', e);
+    }
+    return ['Department of CSE(emerging Technologies)'];
   };
 
   const updateProfile = async (name, userId, password) => {
@@ -383,12 +418,15 @@ export const AuthProvider = ({ children }) => {
     user,
     token,
     loading,
+    selectedDepartment,
+    setSelectedDepartment,
     login,
     logout,
     registerUser,
     updateUserAdmin,
     deleteUser,
     getUsersList,
+    getDepartmentsList,
     updateProfile,
     authenticateWithBiometrics,
     attemptSilentReAuth,

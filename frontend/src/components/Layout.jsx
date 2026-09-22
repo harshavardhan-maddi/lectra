@@ -22,10 +22,20 @@ import {
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
-  const { user, logout, updateProfile } = useAuth();
+  const { user, logout, updateProfile, selectedDepartment, setSelectedDepartment, getDepartmentsList } = useAuth();
   const { onlineCount, onlineUsers, notifications, clearNotifications } = useSocket();
   const location = useLocation();
   const navigate = useNavigate();
+
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    if (user?.role === 'SUPER_ADMIN' && getDepartmentsList) {
+      getDepartmentsList().then((d) => {
+        if (Array.isArray(d)) setDepartments(d);
+      });
+    }
+  }, [user]);
 
   // Per-user theme key so toggling dark mode doesn't affect other logins
   const themeKey = `theme_${user?.id || user?.userId || 'default'}`;
@@ -204,9 +214,16 @@ const Layout = ({ children }) => {
                   ⚡ Super Admin
                 </span>
               ) : (
-                <p className="text-xs text-customText-muted dark:text-customText-mutedDark truncate">
-                  {user?.role} {user?.className ? `(${user.className})` : ''}
-                </p>
+                <>
+                  <p className="text-xs text-customText-muted dark:text-customText-mutedDark truncate">
+                    {user?.role} {user?.className ? `(${user.className})` : ''}
+                  </p>
+                  {user?.department && user?.role !== 'WATCHMAN' && (
+                    <p className="text-[10px] text-primary-dark dark:text-primary font-bold truncate mt-0.5" title={user.department}>
+                      🏛️ {user.department.replace(/^Department of\s+/i, '')}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -278,7 +295,14 @@ const Layout = ({ children }) => {
                       ⚡ Super Admin
                     </span>
                   ) : (
-                    <p className="text-xs text-customText-muted dark:text-customText-mutedDark">{user?.role}</p>
+                    <>
+                      <p className="text-xs text-customText-muted dark:text-customText-mutedDark">{user?.role}</p>
+                      {user?.department && user?.role !== 'WATCHMAN' && (
+                        <p className="text-[10px] text-primary-dark font-bold truncate mt-0.5">
+                          🏛️ {user.department.replace(/^Department of\s+/i, '')}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -328,6 +352,25 @@ const Layout = ({ children }) => {
                 {formatDate(currentTime)}
               </span>
             </div>
+
+            {/* Super Admin Department Switcher in Header */}
+            {user?.role === 'SUPER_ADMIN' && (
+              <div className="hidden lg:flex items-center gap-2 bg-slate-100/70 dark:bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-200/40 dark:border-slate-700/40">
+                <span className="text-[11px] font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                  Dept:
+                </span>
+                <select
+                  value={selectedDepartment || 'ALL'}
+                  onChange={(e) => setSelectedDepartment(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-primary-dark dark:text-primary focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">🏛️ All Departments (Campus-Wide)</option>
+                  {departments.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

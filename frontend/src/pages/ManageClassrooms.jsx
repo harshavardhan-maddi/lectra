@@ -31,8 +31,8 @@ const SCHEDULE_ROWS = [
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const ManageClassrooms = () => {
-  const { token, user } = useAuth();
+  const { token, user, selectedDepartment, departments } = useAuth();
+  const [newClassDepartment, setNewClassDepartment] = useState('');
 
   // Classrooms list state
   const [classrooms, setClassrooms] = useState([]);
@@ -365,7 +365,11 @@ const ManageClassrooms = () => {
 
   const fetchClassrooms = async () => {
     try {
-      const res = await fetch('/api/classrooms', {
+      let url = '/api/classrooms';
+      if (user?.role === 'SUPER_ADMIN' && selectedDepartment && selectedDepartment !== 'ALL') {
+        url += `?department=${encodeURIComponent(selectedDepartment)}`;
+      }
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await res.json();
@@ -396,7 +400,7 @@ const ManageClassrooms = () => {
 
   useEffect(() => {
     fetchClassrooms();
-  }, [token]);
+  }, [token, selectedDepartment]);
 
   const handleClassroomSelect = (classroom) => {
     setSelectedClassroom(classroom);
@@ -410,13 +414,18 @@ const ManageClassrooms = () => {
     setSuccess('');
 
     try {
+      const payload = { roomNumber: newRoomNumber, className: newClassName };
+      if (user?.role === 'SUPER_ADMIN') {
+        payload.department = newClassDepartment || (selectedDepartment !== 'ALL' ? selectedDepartment : 'Department of CSE(emerging Technologies)');
+      }
+
       const res = await fetch('/api/classrooms', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ roomNumber: newRoomNumber, className: newClassName }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to create classroom');
@@ -425,6 +434,7 @@ const ManageClassrooms = () => {
       setShowAddClassModal(false);
       setNewRoomNumber('');
       setNewClassName('');
+      setNewClassDepartment('');
       fetchClassrooms();
     } catch (err) {
       setError(err.message);
@@ -641,7 +651,14 @@ const ManageClassrooms = () => {
                     </div>
                     <div>
                       <h4 className="font-bold text-sm text-customText dark:text-customText-dark">{c.className}</h4>
-                      <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Room: {c.roomNumber}</p>
+                      <p className="text-xs text-customText-muted dark:text-customText-mutedDark flex items-center gap-1.5 flex-wrap">
+                        <span>Room: {c.roomNumber}</span>
+                        {c.department && user?.role === 'SUPER_ADMIN' && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded">
+                            {c.department}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
 
@@ -989,6 +1006,25 @@ const ManageClassrooms = () => {
                   className="glass-input"
                 />
               </div>
+
+              {user?.role === 'SUPER_ADMIN' && (
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
+                    Department
+                  </label>
+                  <select
+                    value={newClassDepartment || (selectedDepartment !== 'ALL' ? selectedDepartment : 'Department of CSE(emerging Technologies)')}
+                    onChange={(e) => setNewClassDepartment(e.target.value)}
+                    className="glass-input"
+                  >
+                    {departments?.map((d) => (
+                      <option key={d} value={d} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-3 border-t">

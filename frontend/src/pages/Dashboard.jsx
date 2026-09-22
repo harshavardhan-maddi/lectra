@@ -62,7 +62,7 @@ import {
 } from '../services/backupService';
 
 const Dashboard = () => {
-  const { token, user } = useAuth();
+  const { token, user, selectedDepartment } = useAuth();
   const { socket } = useSocket();
 
   // Active Tab: 'faculty', 'students', 'absentees', 'settings', 'outpassApprovals'
@@ -490,7 +490,15 @@ const Dashboard = () => {
     try {
       if (!isSilent) setLoading(true);
       
-      const classRes = await fetch('/api/classrooms', {
+      let classUrl = '/api/classrooms';
+      let statsUrl = '/api/reports/dashboard-stats';
+      if (user?.role === 'SUPER_ADMIN' && selectedDepartment && selectedDepartment !== 'ALL') {
+        const query = `?department=${encodeURIComponent(selectedDepartment)}`;
+        classUrl += query;
+        statsUrl += query;
+      }
+
+      const classRes = await fetch(classUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const classData = await classRes.json();
@@ -504,7 +512,7 @@ const Dashboard = () => {
         setFilterStudentSection('');
       }
 
-      const statsRes = await fetch('/api/reports/dashboard-stats', {
+      const statsRes = await fetch(statsUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const statsData = await statsRes.json();
@@ -525,7 +533,10 @@ const Dashboard = () => {
     try {
       setError('');
       // Always fetch all students so we can display section/overall counts and filter locally in React memory.
-      const url = '/api/student-attendance/students';
+      let url = '/api/student-attendance/students';
+      if (user?.role === 'SUPER_ADMIN' && selectedDepartment && selectedDepartment !== 'ALL') {
+        url += `?department=${encodeURIComponent(selectedDepartment)}`;
+      }
       
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -573,13 +584,16 @@ const Dashboard = () => {
   useEffect(() => {
     fetchTrackingStatus();
     fetchDashboardData();
-  }, [token]);
+    if (activeTab === 'students') {
+      fetchStudents();
+    }
+  }, [token, selectedDepartment]);
 
   useEffect(() => {
     if (activeTab === 'students') {
       fetchStudents();
     }
-  }, [activeTab]);
+  }, [activeTab, selectedDepartment]);
 
   useEffect(() => {
     if (activeTab === 'absentees') {

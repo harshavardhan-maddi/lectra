@@ -16,10 +16,12 @@ import {
 } from 'lucide-react';
 
 const ManageUsers = () => {
-  const { token, user: currentUser, registerUser, updateUserAdmin, deleteUser, getUsersList } = useAuth();
+  const { token, user: currentUser, registerUser, updateUserAdmin, deleteUser, getUsersList, getDepartmentsList } = useAuth();
 
   const [users, setUsers] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
+  const [departments, setDepartments] = useState(['Department of CSE(emerging Technologies)']);
+  const [deptFilter, setDeptFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -34,21 +36,31 @@ const ManageUsers = () => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('CR');
   const [className, setClassName] = useState('');
+  const [department, setDepartment] = useState('Department of CSE(emerging Technologies)');
+  const [isCustomDept, setIsCustomDept] = useState(false);
+  const [customDeptName, setCustomDeptName] = useState('');
 
   // Form fields for Edit
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('CR');
   const [editClassName, setEditClassName] = useState('');
+  const [editDepartment, setEditDepartment] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
 
-  const loadData = async () => {
+  const loadData = async (filterToUse = deptFilter) => {
     try {
-      // Fetch users
-      const usersData = await getUsersList();
+      // Fetch users with optional department filter
+      const usersData = await getUsersList(filterToUse);
       setUsers(usersData);
+
+      // Fetch departments list
+      const depts = await getDepartmentsList();
+      if (Array.isArray(depts) && depts.length > 0) {
+        setDepartments(depts);
+      }
 
       // Fetch classrooms to populate CR assigned class options
       const classRes = await fetch('/api/classrooms', {
@@ -71,6 +83,11 @@ const ManageUsers = () => {
     loadData();
   }, [token]);
 
+  const handleDeptFilterChange = (newDept) => {
+    setDeptFilter(newDept);
+    loadData(newDept);
+  };
+
   const handleAddUser = async (e) => {
     e.preventDefault();
     setError('');
@@ -81,9 +98,25 @@ const ManageUsers = () => {
       return;
     }
 
+    const assignedDept = isSuperAdmin
+      ? (isCustomDept ? customDeptName.trim() : department)
+      : (currentUser?.department || 'Department of CSE(emerging Technologies)');
+
+    if (isSuperAdmin && isCustomDept && !customDeptName.trim()) {
+      setError('Please specify the new department name');
+      return;
+    }
+
     try {
-      await registerUser(name, userId, password, role, role === 'CR' ? className : null);
-      setSuccess(`User "${name}" successfully registered as ${role}.`);
+      await registerUser(
+        name, 
+        userId, 
+        password, 
+        role, 
+        role === 'CR' ? className : null, 
+        role === 'WATCHMAN' ? null : assignedDept
+      );
+      setSuccess(`User "${name}" successfully registered as ${role} in ${role === 'WATCHMAN' ? 'Campus Gate' : assignedDept}.`);
       setShowAddUserModal(false);
       
       // Clear forms
@@ -91,6 +124,8 @@ const ManageUsers = () => {
       setUserId('');
       setPassword('');
       setRole('CR');
+      setIsCustomDept(false);
+      setCustomDeptName('');
       if (classrooms.length > 0) {
         setClassName(classrooms[0].className);
       }
@@ -106,6 +141,7 @@ const ManageUsers = () => {
     setEditName(targetUser.name || '');
     setEditRole(targetUser.role || 'CR');
     setEditClassName(targetUser.className || '');
+    setEditDepartment(targetUser.department || 'Department of CSE(emerging Technologies)');
     setEditPassword('');
     setShowEditUserModal(true);
   };
@@ -123,6 +159,9 @@ const ManageUsers = () => {
         role: editRole,
         className: editRole === 'CR' ? editClassName : null,
       };
+      if (isSuperAdmin && editRole !== 'WATCHMAN') {
+        updatePayload.department = editDepartment;
+      }
       if (editPassword && editPassword.trim()) {
         updatePayload.password = editPassword.trim();
       }
@@ -218,6 +257,32 @@ const ManageUsers = () => {
         </div>
       )}
 
+      {/* Super Admin Department Filter Toolbar */}
+      {isSuperAdmin && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-100/70 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-800/40">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+              Department Scope:
+            </span>
+            <select
+              value={deptFilter}
+              onChange={(e) => handleDeptFilterChange(e.target.value)}
+              className="glass-input text-xs py-1.5 px-3 rounded-xl font-semibold text-primary-dark dark:text-primary"
+            >
+              <option value="ALL">🏛️ All Departments (Campus-Wide)</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+          <span className="text-xs text-customText-muted dark:text-customText-mutedDark font-medium">
+            Showing {users.length} accounts
+          </span>
+        </div>
+      )}
+
       {/* Users Database Table */}
       <div className="glass-card p-6 border border-slate-200/50 dark:border-slate-800/40">
         <div className="overflow-x-auto">
@@ -227,6 +292,7 @@ const ManageUsers = () => {
                 <th className="pb-3">Name</th>
                 <th className="pb-3">User ID</th>
                 <th className="pb-3">Role</th>
+                <th className="pb-3">Department</th>
                 <th className="pb-3">Assigned Class</th>
                 <th className="pb-3">Created Date</th>
                 <th className="pb-3 text-right">Actions</th>
@@ -263,6 +329,15 @@ const ManageUsers = () => {
                         {u.role === 'SUPER_ADMIN' && '⚡ '}
                         {u.role === 'SUPER_ADMIN' ? 'SUPER ADMIN' : u.role}
                       </span>
+                    </td>
+                    <td className="py-3.5 text-xs text-customText dark:text-customText-dark font-medium max-w-[200px] truncate" title={u.department || 'Campus Gate / Global'}>
+                      {u.role === 'WATCHMAN' || u.role === 'SUPER_ADMIN' ? (
+                        <span className="text-slate-400 dark:text-slate-500 italic text-[11px]">Campus-Wide</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 text-[11px] font-semibold">
+                          {u.department || 'CSE (Emerging Technologies)'}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 text-customText-muted dark:text-customText-mutedDark font-medium">
                       {u.className ? u.className : <span className="text-slate-400 dark:text-slate-600">—</span>}
@@ -414,6 +489,51 @@ const ManageUsers = () => {
                 </select>
               </div>
 
+              {/* Department Selection */}
+              {role !== 'WATCHMAN' && (
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                    Department
+                  </label>
+                  {isSuperAdmin ? (
+                    <div className="space-y-2">
+                      <select
+                        value={isCustomDept ? '__NEW__' : department}
+                        onChange={(e) => {
+                          if (e.target.value === '__NEW__') {
+                            setIsCustomDept(true);
+                          } else {
+                            setIsCustomDept(false);
+                            setDepartment(e.target.value);
+                          }
+                        }}
+                        className="glass-input text-sm"
+                      >
+                        {departments.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                        <option value="__NEW__">➕ Create New Department...</option>
+                      </select>
+
+                      {isCustomDept && (
+                        <input
+                          type="text"
+                          required
+                          value={customDeptName}
+                          onChange={(e) => setCustomDeptName(e.target.value)}
+                          placeholder="Type new department name (e.g. Department of ECE)"
+                          className="glass-input text-sm border-primary"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="glass-input text-sm bg-slate-100/50 dark:bg-slate-800/50 cursor-not-allowed text-customText-muted dark:text-customText-mutedDark font-medium">
+                      {currentUser?.department || 'Department of CSE(emerging Technologies)'}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Class Selection (Only for CR) */}
               {role === 'CR' && (
                 <div>
@@ -533,6 +653,25 @@ const ManageUsers = () => {
                   )}
                 </select>
               </div>
+
+              {/* Department Selection (Super Admin only) */}
+              {isSuperAdmin && editRole !== 'WATCHMAN' && (
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                    Department
+                  </label>
+                  <select
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    className="glass-input text-sm"
+                    disabled={editSubmitting}
+                  >
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Class Selection (Only for CR) */}
               {editRole === 'CR' && (

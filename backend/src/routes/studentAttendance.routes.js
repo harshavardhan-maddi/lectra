@@ -229,13 +229,18 @@ router.post('/students', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), a
       return res.status(400).json({ message: 'Student with this roll number already exists' });
     }
 
+    const assignedDept = (req.user.role === 'SUPER_ADMIN' && req.body.department)
+      ? req.body.department.trim()
+      : (req.user.department || 'Department of CSE(emerging Technologies)');
+
     const student = await prisma.student.create({
       data: {
         rollNumber,
         name,
         section,
         studentMobile,
-        parentMobile
+        parentMobile,
+        department: assignedDept
       }
     });
 
@@ -475,6 +480,14 @@ router.get('/students', authMiddleware, async (req, res) => {
     const where = {};
     if (section && section !== 'All') {
       where.section = section;
+    }
+
+    if (user.role === 'SUPER_ADMIN') {
+      if (req.query.department && req.query.department !== 'ALL') {
+        where.department = req.query.department;
+      }
+    } else {
+      where.department = user.department || 'Department of CSE(emerging Technologies)';
     }
 
     const students = await prisma.student.findMany({
@@ -916,10 +929,14 @@ router.post('/students/bulk-delete', authMiddleware, roleMiddleware(['HOD']), as
 
 // 9. POST /students/bulk - HOD/Sub-Admin bulk registers students from CSV/JSON parsed array
 router.post('/students/bulk', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), async (req, res) => {
-  const { section, students } = req.body;
+  const { section, students, department } = req.body;
   if (!section || !Array.isArray(students)) {
     return res.status(400).json({ message: 'Missing section or students array' });
   }
+
+  const assignedDept = (req.user.role === 'SUPER_ADMIN' && department)
+    ? department.trim()
+    : (req.user.department || 'Department of CSE(emerging Technologies)');
 
   try {
     const results = [];
@@ -934,14 +951,16 @@ router.post('/students/bulk', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN'
           name: s.name,
           section: section,
           studentMobile: s.studentMobile,
-          parentMobile: s.parentMobile
+          parentMobile: s.parentMobile,
+          department: assignedDept
         },
         create: {
           rollNumber: s.rollNumber,
           name: s.name,
           section: section,
           studentMobile: s.studentMobile,
-          parentMobile: s.parentMobile
+          parentMobile: s.parentMobile,
+          department: assignedDept
         }
       });
       results.push(student);

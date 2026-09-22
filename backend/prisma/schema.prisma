@@ -24,6 +24,7 @@ model User {
   password           String
   role               Role
   className          String?   @map("class_name")
+  department         String?   @map("department") @default("Department of CSE(emerging Technologies)")
   createdAt          DateTime  @default(now()) @map("created_at")
   fingerprintEnabled Boolean   @default(false) @map("fingerprint_enabled")
 
@@ -34,6 +35,7 @@ model Classroom {
   id         Int          @id @default(autoincrement())
   roomNumber String       @map("room_number")
   className  String       @map("class_name")
+  department String?      @map("department") @default("Department of CSE(emerging Technologies)")
   createdAt  DateTime     @default(now()) @map("created_at")
   timetables Timetable[]
   logs       FacultyLog[]
@@ -46,6 +48,7 @@ model Faculty {
   id          Int     @id @default(autoincrement())
   facultyName String  @unique @map("faculty_name")
   phoneNumber String? @map("phone_number")
+  department  String? @map("department") @default("Department of CSE(emerging Technologies)")
 
   @@map("faculty")
 }
@@ -117,6 +120,7 @@ model Student {
   section          String            // Represents the classroom/section name, e.g. "CSE 3rd Year"
   studentMobile    String            @map("student_mobile")
   parentMobile     String            @map("parent_mobile")
+  department       String?           @map("department") @default("Department of CSE(emerging Technologies)")
   preExcusedStart  String?           @map("pre_excused_start")
   preExcusedEnd    String?           @map("pre_excused_end")
   preExcusedReason String?           @db.Text @map("pre_excused_reason")

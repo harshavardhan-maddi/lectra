@@ -3,11 +3,21 @@ const { getTodayDay, getCurrentTimeInHHMM, getLocalDayBounds, STANDARD_PERIODS }
 
 const getClassrooms = async (req, res) => {
   try {
+    const where = {};
+    if (req.user && req.user.role === 'SUPER_ADMIN') {
+      if (req.query.department && req.query.department !== 'ALL') {
+        where.department = req.query.department;
+      }
+    } else if (req.user && req.user.role !== 'WATCHMAN') {
+      where.department = req.user.department || 'Department of CSE(emerging Technologies)';
+    }
+
     const classrooms = await prisma.classroom.findMany({
+      where,
       orderBy: { className: 'asc' },
     });
 
-    // Fetch all student counts grouped by section
+    // Fetch student counts grouped by section
     const studentCounts = await prisma.student.groupBy({
       by: ['section'],
       _count: {
@@ -33,6 +43,7 @@ const getClassrooms = async (req, res) => {
         id: c.id,
         roomNumber: c.roomNumber,
         className: c.className,
+        department: c.department,
         status: 'College is on Holiday',
         currentPeriod: null,
         studentCount: studentCountMap[c.className] || 0,
@@ -131,6 +142,7 @@ const getClassrooms = async (req, res) => {
         id: classroom.id,
         roomNumber: classroom.roomNumber,
         className: classroom.className,
+        department: classroom.department,
         status,
         currentPeriod: currentPeriodInfo,
         studentCount: studentCountMap[classroom.className] || 0,
@@ -145,11 +157,15 @@ const getClassrooms = async (req, res) => {
 };
 
 const createClassroom = async (req, res) => {
-  const { roomNumber, className } = req.body;
+  const { roomNumber, className, department } = req.body;
 
   if (!roomNumber || !className) {
     return res.status(400).json({ message: 'Room number and class name are required' });
   }
+
+  const assignedDept = (req.user && req.user.role === 'SUPER_ADMIN' && department)
+    ? department.trim()
+    : ((req.user && req.user.department) || 'Department of CSE(emerging Technologies)');
 
   try {
     const existing = await prisma.classroom.findUnique({
@@ -163,7 +179,7 @@ const createClassroom = async (req, res) => {
     }
 
     const classroom = await prisma.classroom.create({
-      data: { roomNumber, className },
+      data: { roomNumber, className, department: assignedDept },
     });
 
     res.status(201).json(classroom);

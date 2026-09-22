@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { login, register, deleteUser, updateUser, getUsers, me, updateProfile } = require('../controllers/auth.controller');
+const { login, register, deleteUser, updateUser, getUsers, getDepartments, me, updateProfile } = require('../controllers/auth.controller');
 const {
   checkFingerprintStatus,
   generateRegisterOptions,
@@ -17,6 +17,7 @@ const roleMiddleware = require('../middleware/role.middleware');
 router.post('/login', login);
 router.get('/me', authMiddleware, me);
 router.put('/profile', authMiddleware, updateProfile);
+router.get('/departments', authMiddleware, getDepartments);
 
 // Fingerprint Auth operations
 router.post('/fingerprint/check', checkFingerprintStatus);

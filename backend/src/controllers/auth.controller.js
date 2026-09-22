@@ -116,6 +116,7 @@ const login = async (req, res) => {
         role: user.role,
         name: user.name,
         className: user.className,
+        department: user.department || (user.role === 'SUPER_ADMIN' || user.role === 'WATCHMAN' ? null : 'Department of CSE(emerging Technologies)'),
       },
       process.env.JWT_SECRET || 'supersecret_facultytrackerkey_2026',
       { expiresIn: '24h' }
@@ -129,6 +130,7 @@ const login = async (req, res) => {
         name: user.name,
         role: user.role,
         className: user.className,
+        department: user.department || (user.role === 'SUPER_ADMIN' || user.role === 'WATCHMAN' ? null : 'Department of CSE(emerging Technologies)'),
       },
     });
   } catch (error) {
@@ -138,10 +140,38 @@ const login = async (req, res) => {
 };
 
 const register = async (req, res) => {
-  const { name, userId, password, className, role } = req.body;
+  const { name, userId, password, className, role, department } = req.body;
 
   if (!name || !userId || !password || !role) {
     return res.status(400).json({ message: 'All fields except class_name (for HOD/Sub Admin/Watchman) are required' });
+  }
+
+  // Determine user department based on creator authority
+  let userDepartment = null;
+  if (role === 'WATCHMAN') {
+    userDepartment = null;
+  } else if (req.user.role === 'SUPER_ADMIN') {
+    // Super Admin can assign or create any department
+    userDepartment = department && department.trim() ? department.trim() : (role === 'SUPER_ADMIN' ? null : 'Department of CSE(emerging Technologies)');
+    
+    // If a new department was entered, track it in system settings
+    if (userDepartment) {
+      try {
+        const setting = await prisma.systemSetting.findUnique({ where: { key: 'known_departments' } });
+        const list = setting ? JSON.parse(setting.value || '[]') : ['Department of CSE(emerging Technologies)'];
+        if (!list.includes(userDepartment)) {
+          list.push(userDepartment);
+          await prisma.systemSetting.upsert({
+            where: { key: 'known_departments' },
+            update: { value: JSON.stringify(list) },
+            create: { key: 'known_departments', value: JSON.stringify(list) },
+          });
+        }
+      } catch (e) {}
+    }
+  } else {
+    // HOD or Sub-Admin can ONLY create users bound to their own department
+    userDepartment = req.user.department || 'Department of CSE(emerging Technologies)';
   }
 
   try {
@@ -162,7 +192,7 @@ const register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Support WATCHMAN role registered by HOD
+    // Support WATCHMAN role registered by HOD/Super Admin
     if (role === 'WATCHMAN') {
       const newWatchman = {
         id: 90000 + Math.floor(Math.random() * 9000),
@@ -171,6 +201,7 @@ const register = async (req, res) => {
         password: hashedPassword,
         role: 'WATCHMAN',
         className: null,
+        department: null,
         createdAt: new Date().toISOString(),
       };
 
@@ -185,6 +216,7 @@ const register = async (req, res) => {
           name: newWatchman.name,
           role: 'WATCHMAN',
           className: null,
+          department: null,
         },
       });
     }
@@ -196,6 +228,7 @@ const register = async (req, res) => {
         password: hashedPassword,
         role,
         className: role === 'CR' ? className : null, // Class Name is relevant only for CRs
+        department: userDepartment,
       },
     });
 
@@ -207,6 +240,7 @@ const register = async (req, res) => {
         name: newUser.name,
         role: newUser.role,
         className: newUser.className,
+        department: newUser.department,
       },
     });
   } catch (error) {
@@ -298,6 +332,9 @@ const updateUser = async (req, res) => {
       updateData.role = role;
     }
     if (className !== undefined) updateData.className = className;
+    if (req.body.department !== undefined && req.user.role === 'SUPER_ADMIN') {
+      updateData.department = req.body.department ? req.body.department.trim() : null;
+    }
     if (password && password.trim()) {
       const salt = await bcrypt.genSalt(10);
       updateData.password = await bcrypt.hash(password.trim(), salt);
@@ -312,6 +349,7 @@ const updateUser = async (req, res) => {
         userId: true,
         role: true,
         className: true,
+        department: true,
         createdAt: true,
       },
     });
@@ -325,13 +363,25 @@ const updateUser = async (req, res) => {
 
 const getUsers = async (req, res) => {
   try {
+    const where = {};
+    if (req.user.role === 'SUPER_ADMIN') {
+      if (req.query.department && req.query.department !== 'ALL') {
+        where.department = req.query.department;
+      }
+    } else {
+      // HOD and Sub-Admins only see users in their own department
+      where.department = req.user.department || 'Department of CSE(emerging Technologies)';
+    }
+
     const users = await prisma.user.findMany({
+      where,
       select: {
         id: true,
         name: true,
         userId: true,
         role: true,
         className: true,
+        department: true,
         createdAt: true,
       },
       orderBy: {
@@ -346,12 +396,52 @@ const getUsers = async (req, res) => {
       userId: w.userId,
       role: 'WATCHMAN',
       className: null,
+      department: null,
       createdAt: w.createdAt || new Date().toISOString(),
     }));
 
-    res.json([...users, ...formattedWatchmen]);
+    // If filtering by a department, exclude watchman unless viewing all
+    let combined = [...users];
+    if (!req.query.department || req.query.department === 'ALL' || req.user.role !== 'SUPER_ADMIN') {
+      combined = [...users, ...formattedWatchmen];
+    }
+
+    res.json(combined);
   } catch (error) {
     console.error('Get users error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+const getDepartments = async (req, res) => {
+  try {
+    const userDepts = await prisma.user.findMany({
+      where: { department: { not: null } },
+      select: { department: true },
+      distinct: ['department'],
+    });
+
+    const classroomDepts = await prisma.classroom.findMany({
+      where: { department: { not: null } },
+      select: { department: true },
+      distinct: ['department'],
+    });
+
+    const customSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'known_departments' },
+    });
+    const customList = customSetting ? JSON.parse(customSetting.value || '[]') : [];
+
+    const deptsSet = new Set([
+      'Department of CSE(emerging Technologies)',
+      ...userDepts.map(u => u.department).filter(Boolean),
+      ...classroomDepts.map(c => c.department).filter(Boolean),
+      ...customList,
+    ]);
+
+    res.json(Array.from(deptsSet).filter(Boolean).sort());
+  } catch (error) {
+    console.error('Get departments error:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
@@ -365,6 +455,7 @@ const me = async (req, res) => {
         userId: req.user.userId,
         role: 'WATCHMAN',
         className: null,
+        department: null,
         createdAt: new Date().toISOString(),
       });
     }
@@ -377,6 +468,7 @@ const me = async (req, res) => {
         userId: true,
         role: true,
         className: true,
+        department: true,
         createdAt: true,
       },
     });
@@ -438,6 +530,7 @@ const updateProfile = async (req, res) => {
         role: updatedUser.role,
         name: updatedUser.name,
         className: updatedUser.className,
+        department: updatedUser.department,
       },
       process.env.JWT_SECRET || 'supersecret_facultytrackerkey_2026',
       { expiresIn: '24h' }
@@ -452,6 +545,7 @@ const updateProfile = async (req, res) => {
         name: updatedUser.name,
         role: updatedUser.role,
         className: updatedUser.className,
+        department: updatedUser.department,
       },
     });
   } catch (error) {
@@ -466,6 +560,7 @@ module.exports = {
   deleteUser,
   updateUser,
   getUsers,
+  getDepartments,
   me,
   updateProfile,
 };

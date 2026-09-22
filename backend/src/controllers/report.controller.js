@@ -28,6 +28,14 @@ const getLogsReport = async (req, res) => {
     };
   }
 
+  if (req.user && req.user.role === 'SUPER_ADMIN') {
+    if (req.query.department && req.query.department !== 'ALL') {
+      where.classroom = { department: req.query.department };
+    }
+  } else if (req.user && req.user.role !== 'WATCHMAN') {
+    where.classroom = { department: req.user.department || 'Department of CSE(emerging Technologies)' };
+  }
+
   try {
     const logs = await prisma.facultyLog.findMany({
       where,
@@ -356,6 +364,13 @@ const getMonthlySectionAttendanceReport = async (req, res) => {
   const studentWhere = {};
   if (section && section !== 'All') {
     studentWhere.section = section;
+  }
+  if (req.user && req.user.role === 'SUPER_ADMIN') {
+    if (req.query.department && req.query.department !== 'ALL') {
+      studentWhere.department = req.query.department;
+    }
+  } else if (req.user && req.user.role !== 'WATCHMAN') {
+    studentWhere.department = req.user.department || 'Department of CSE(emerging Technologies)';
   }
 
   try {

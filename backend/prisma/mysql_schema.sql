@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `password` VARCHAR(191) NOT NULL,
   `role` ENUM('SUPER_ADMIN', 'HOD', 'SUB_ADMIN', 'CR', 'ABSENT_CONTROLLER', 'FACULTY') NOT NULL,
   `class_name` VARCHAR(191) NULL,
+  `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `fingerprint_enabled` BOOLEAN NOT NULL DEFAULT FALSE,
   PRIMARY KEY (`id`),
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS `classrooms` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `room_number` VARCHAR(191) NOT NULL,
   `class_name` VARCHAR(191) NOT NULL,
+  `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `classrooms_room_number_class_name_key` (`room_number`, `class_name`)
@@ -43,6 +45,7 @@ CREATE TABLE IF NOT EXISTS `faculty` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `faculty_name` VARCHAR(191) NOT NULL,
   `phone_number` VARCHAR(191) NULL,
+  `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)',
   PRIMARY KEY (`id`),
   UNIQUE KEY `faculty_faculty_name_key` (`faculty_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -131,6 +134,7 @@ CREATE TABLE IF NOT EXISTS `students` (
   `section` VARCHAR(191) NOT NULL,
   `student_mobile` VARCHAR(191) NOT NULL,
   `parent_mobile` VARCHAR(191) NOT NULL,
+  `department` VARCHAR(191) NULL DEFAULT 'Department of CSE(emerging Technologies)',
   `pre_excused_start` VARCHAR(191) NULL,
   `pre_excused_end` VARCHAR(191) NULL,
   `pre_excused_reason` TEXT NULL,
