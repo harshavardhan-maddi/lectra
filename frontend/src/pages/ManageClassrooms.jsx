@@ -31,6 +31,7 @@ const SCHEDULE_ROWS = [
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+const ManageClassrooms = () => {
   const { token, user, selectedDepartment, departments } = useAuth();
   const [newClassDepartment, setNewClassDepartment] = useState('');
 

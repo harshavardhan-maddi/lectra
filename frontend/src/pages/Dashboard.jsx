@@ -2220,8 +2220,9 @@ const Dashboard = ({ initialTab }) => {
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    );
+                  })
+                )}
                 </tbody>
               </table>
             </div>
