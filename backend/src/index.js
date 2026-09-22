@@ -41,6 +41,8 @@ app.use('/api/faculty', facultyRoutes);
 app.use('/api/student-attendance', studentAttendanceRoutes);
 app.use('/api/backup', backupRoutes);
 
+const { initDatabaseSchema } = require('./services/dbInit.service');
+
 // Health check with DB status
 app.get('/health', async (req, res) => {
   let dbStatus = 'connected';
@@ -57,6 +59,17 @@ app.get('/health', async (req, res) => {
     error: dbError,
     timestamp: new Date()
   });
+});
+
+// Manual / diagnostic database initialization endpoint
+app.get('/api/init-db', async (req, res) => {
+  try {
+    const result = await initDatabaseSchema();
+    res.json(result);
+  } catch (error) {
+    console.error('[API Init DB Error]:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Serve frontend build in production / Hostinger deployment
@@ -99,10 +112,15 @@ const startServer = async () => {
       console.log(`[Server] Live on http://localhost:${PORT}`);
     });
 
-    // Test database connection in background
+    // Test database connection in background and auto-create tables if missing
     prisma.$connect()
-      .then(() => {
+      .then(async () => {
         console.log('[Database] Connected to MySQL via Prisma ORM.');
+        try {
+          await initDatabaseSchema();
+        } catch (initErr) {
+          console.error('[Database Init Warning]:', initErr.message);
+        }
         startCron();
       })
       .catch((error) => {
