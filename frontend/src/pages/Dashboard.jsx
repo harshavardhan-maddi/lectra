@@ -1001,8 +1001,8 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       
-      {/* Tab Navigation header (Only for HOD roles) */}
-      {user?.role === 'HOD' && (
+      {/* Tab Navigation header (For HOD & Super Admin) */}
+      {(user?.role === 'HOD' || user?.role === 'SUPER_ADMIN') && (
         <div className="flex border-b border-slate-200 dark:border-slate-800">
           <button
             onClick={() => setActiveTab('faculty')}
@@ -1105,7 +1105,7 @@ const Dashboard = () => {
               </div>
             )}
 
-            {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN') && (
+            {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') && (
               <div className="lg:col-span-2 glass-card p-5 border border-slate-200/50 dark:border-slate-800/40 flex flex-col justify-between space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
@@ -3314,7 +3314,7 @@ const Dashboard = () => {
                     {selectedClassroom.className}
                   </h2>
                 </div>
-                {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN') && (
+                {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') && (
                   <button
                     onClick={() => {
                       setIsEditing(true);

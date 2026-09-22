@@ -32,6 +32,31 @@ function getMySQLConnectionOptions() {
   return null;
 }
 
+async function ensureSuperAdminAccount() {
+  try {
+    const salt = await bcrypt.genSalt(10);
+    const superPassword = await bcrypt.hash('SUPER_ADMIN', salt);
+
+    await prisma.user.upsert({
+      where: { userId: 'SUPER_ADMIN' },
+      update: {
+        role: 'SUPER_ADMIN',
+        name: 'Super Administrator',
+      },
+      create: {
+        name: 'Super Administrator',
+        userId: 'SUPER_ADMIN',
+        password: superPassword,
+        role: 'SUPER_ADMIN',
+        className: null,
+      },
+    });
+    console.log('[Auto-Init] Verified SUPER_ADMIN account (Username: SUPER_ADMIN, Password: SUPER_ADMIN).');
+  } catch (err) {
+    console.warn('[Auto-Init] Could not verify SUPER_ADMIN account:', err.message);
+  }
+}
+
 async function ensureHODAccount() {
   try {
     const salt = await bcrypt.genSalt(10);
@@ -93,16 +118,26 @@ async function initDatabaseSchema() {
     } finally {
       await connection.end();
     }
+  } else {
+    // If tables already exist, ensure the role enum column includes SUPER_ADMIN
+    try {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE `users` MODIFY COLUMN `role` ENUM('SUPER_ADMIN', 'HOD', 'SUB_ADMIN', 'CR', 'ABSENT_CONTROLLER', 'FACULTY') NOT NULL"
+      );
+    } catch (e) {
+      // Column might already be updated or using varchar
+    }
   }
 
-  // Always ensure TE_HOD credentials are active
+  // Always ensure SUPER_ADMIN and TE_HOD credentials are active
+  await ensureSuperAdminAccount();
   await ensureHODAccount();
 
   return {
     success: true,
     message: tablesExist
-      ? 'Tables were already present; TE_HOD account verified.'
-      : 'All database tables and TE_HOD account were created successfully!',
+      ? 'Tables were already present; SUPER_ADMIN and TE_HOD accounts verified.'
+      : 'All database tables, SUPER_ADMIN, and TE_HOD accounts were created successfully!',
   };
 }
 

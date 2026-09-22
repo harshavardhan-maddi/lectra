@@ -31,7 +31,7 @@ export const SocketProvider = ({ children }) => {
       // CR joins their specific room, Admins join dashboard
       if (user?.role === 'CR' && user.className) {
         socketConn.emit('join_room', `class:${user.className}`);
-      } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN') {
+      } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') {
         socketConn.emit('join_room', 'dashboard');
       }
     });

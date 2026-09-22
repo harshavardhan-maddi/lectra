@@ -100,7 +100,19 @@ const Layout = ({ children }) => {
   };
 
   const navLinks = [];
-  if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN') {
+  if (user?.role === 'SUPER_ADMIN') {
+    navLinks.push(
+      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'Manage All Users', path: '/users', icon: Users },
+      { name: 'Classrooms', path: '/classrooms', icon: CalendarDays },
+      { name: 'Faculty Contacts', path: '/faculty', icon: UserCheck },
+      { name: 'Reports', path: '/reports', icon: FileSpreadsheet },
+      { name: 'Gate & Outpasses', path: '/watchman-dashboard', icon: ShieldCheck },
+      { name: 'Absent Control', path: '/absent-controller', icon: Users },
+      { name: 'Faculty Portal', path: '/faculty-dashboard', icon: LayoutDashboard },
+      { name: 'System Settings', path: '/settings', icon: Settings }
+    );
+  } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN') {
     navLinks.push(
       { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
       { name: 'Classrooms', path: '/classrooms', icon: CalendarDays },
@@ -187,9 +199,15 @@ const Layout = ({ children }) => {
               <p className="text-sm font-semibold truncate text-customText dark:text-customText-dark">
                 {user?.name}
               </p>
-              <p className="text-xs text-customText-muted dark:text-customText-mutedDark truncate">
-                {user?.role} {user?.className ? `(${user.className})` : ''}
-              </p>
+              {user?.role === 'SUPER_ADMIN' ? (
+                <span className="inline-block mt-0.5 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                  ⚡ Super Admin
+                </span>
+              ) : (
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark truncate">
+                  {user?.role} {user?.className ? `(${user.className})` : ''}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
@@ -255,7 +273,13 @@ const Layout = ({ children }) => {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">{user?.name}</p>
-                  <p className="text-xs text-customText-muted dark:text-customText-mutedDark">{user?.role}</p>
+                  {user?.role === 'SUPER_ADMIN' ? (
+                    <span className="inline-block mt-0.5 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                      ⚡ Super Admin
+                    </span>
+                  ) : (
+                    <p className="text-xs text-customText-muted dark:text-customText-mutedDark">{user?.role}</p>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -308,8 +332,8 @@ const Layout = ({ children }) => {
 
           <div className="flex items-center gap-2">
             
-            {/* Online Indicator Toggle — only visible to HOD / SUB_ADMIN */}
-            {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN') && (
+            {/* Online Indicator Toggle — visible to HOD / SUB_ADMIN / SUPER_ADMIN */}
+            {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') && (
             <div className="relative">
               <button
                 onClick={() => setOnlineListOpen(!onlineListOpen)}
@@ -360,7 +384,7 @@ const Layout = ({ children }) => {
             </button>
 
             {/* Notification Bell Component */}
-            {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN') && (
+            {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') && (
               <div className="relative">
                 <button
                   onClick={() => setNotifOpen(!notifOpen)}

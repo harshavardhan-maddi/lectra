@@ -646,7 +646,7 @@ const ManageClassrooms = () => {
                   </div>
 
                   <div className="flex items-center gap-1">
-                    {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN') && (
+                    {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') && (
                       <button
                         onClick={(e) => handleEditClassroomClick(c, e)}
                         className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
@@ -655,7 +655,7 @@ const ManageClassrooms = () => {
                         <Edit size={16} />
                       </button>
                     )}
-                    {user?.role === 'HOD' && (
+                    {(user?.role === 'HOD' || user?.role === 'SUPER_ADMIN') && (
                       <button
                         onClick={(e) => handleDeleteClassroom(c.id, e)}
                         className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors"

@@ -257,6 +257,23 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  const updateUserAdmin = async (id, userData) => {
+    const res = await fetch(`/api/auth/users/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(userData),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to update user');
+    }
+    return data.user;
+  };
+
   const getUsersList = async () => {
     let users = [];
     try {
@@ -369,6 +386,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     registerUser,
+    updateUserAdmin,
     deleteUser,
     getUsersList,
     updateProfile,

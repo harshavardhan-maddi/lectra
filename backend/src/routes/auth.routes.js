@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { login, register, deleteUser, getUsers, me, updateProfile } = require('../controllers/auth.controller');
+const { login, register, deleteUser, updateUser, getUsers, me, updateProfile } = require('../controllers/auth.controller');
 const {
   checkFingerprintStatus,
   generateRegisterOptions,
@@ -22,15 +22,16 @@ router.put('/profile', authMiddleware, updateProfile);
 router.post('/fingerprint/check', checkFingerprintStatus);
 router.post('/fingerprint/login-options', generateLoginOptions);
 router.post('/fingerprint/login-verify', verifyLogin);
-router.get('/fingerprint/settings', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), getFingerprintSettings);
-router.post('/fingerprint/register-options', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), generateRegisterOptions);
-router.post('/fingerprint/register-verify', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), verifyRegister);
-router.post('/fingerprint/remove', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), removeFingerprint);
-router.put('/fingerprint/toggle', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), toggleFingerprint);
+router.get('/fingerprint/settings', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN']), getFingerprintSettings);
+router.post('/fingerprint/register-options', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN']), generateRegisterOptions);
+router.post('/fingerprint/register-verify', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN']), verifyRegister);
+router.post('/fingerprint/remove', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN']), removeFingerprint);
+router.put('/fingerprint/toggle', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN']), toggleFingerprint);
 
-// HOD exclusive operations
-router.post('/register', authMiddleware, roleMiddleware(['HOD']), register);
-router.delete('/users/:id', authMiddleware, roleMiddleware(['HOD']), deleteUser);
-router.get('/users', authMiddleware, roleMiddleware(['HOD']), getUsers);
+// Management operations (HOD & Super Admin)
+router.post('/register', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), register);
+router.put('/users/:id', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), updateUser);
+router.delete('/users/:id', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), deleteUser);
+router.get('/users', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), getUsers);
 
 module.exports = router;

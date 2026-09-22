@@ -35,7 +35,7 @@ const HomeRedirect = () => {
   if (user.role === 'WATCHMAN') {
     return <Navigate to="/watchman-dashboard" replace />;
   }
-  if (user.role === 'HOD' || user.role === 'SUB_ADMIN') {
+  if (user.role === 'HOD' || user.role === 'SUB_ADMIN' || user.role === 'SUPER_ADMIN') {
     return <Navigate to="/dashboard" replace />;
   }
   return <Navigate to="/login" replace />;
@@ -160,11 +160,11 @@ const AppRoutes = () => {
         }
       />
 
-      {/* Protected HOD-Only Routes */}
+      {/* Protected User Management Routes */}
       <Route
         path="/users"
         element={
-          <PrivateRoute allowedRoles={['HOD']}>
+          <PrivateRoute allowedRoles={['HOD', 'SUPER_ADMIN']}>
             <Layout>
               <ManageUsers />
             </Layout>

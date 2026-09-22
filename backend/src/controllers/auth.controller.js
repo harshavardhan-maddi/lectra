@@ -238,7 +238,12 @@ const deleteUser = async (req, res) => {
     }
 
     if (user.userId === req.user.userId) {
-      return res.status(400).json({ message: 'You cannot delete yourself' });
+      return res.status(400).json({ message: 'You cannot delete your own logged-in account' });
+    }
+
+    // Protection: only Super Admin can delete Super Admin or HOD accounts
+    if ((user.role === 'SUPER_ADMIN' || user.role === 'HOD') && req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ message: 'Only a Super Admin can delete HOD or Super Admin accounts' });
     }
 
     await prisma.user.delete({
@@ -249,6 +254,72 @@ const deleteUser = async (req, res) => {
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+const updateUser = async (req, res) => {
+  const { id } = req.params;
+  const numId = parseInt(id);
+  const { name, role, className, password } = req.body;
+
+  try {
+    // Check if watchman account
+    const watchmen = await getWatchmanAccounts();
+    const watchmanIndex = watchmen.findIndex(w => w.id === numId);
+    if (watchmanIndex >= 0) {
+      if (name) watchmen[watchmanIndex].name = name;
+      if (password) {
+        const salt = await bcrypt.genSalt(10);
+        watchmen[watchmanIndex].password = await bcrypt.hash(password, salt);
+      }
+      await saveWatchmanAccounts(watchmen);
+      return res.json({ message: 'Watchman account updated successfully', user: watchmen[watchmanIndex] });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id: numId },
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Protection: only Super Admin can modify HOD or Super Admin accounts
+    if ((existingUser.role === 'SUPER_ADMIN' || existingUser.role === 'HOD') && req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ message: 'Only a Super Admin can modify HOD or Super Admin accounts' });
+    }
+
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (role) {
+      if (role === 'SUPER_ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ message: 'Only a Super Admin can assign the Super Admin role' });
+      }
+      updateData.role = role;
+    }
+    if (className !== undefined) updateData.className = className;
+    if (password && password.trim()) {
+      const salt = await bcrypt.genSalt(10);
+      updateData.password = await bcrypt.hash(password.trim(), salt);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: numId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        userId: true,
+        role: true,
+        className: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({ message: 'User updated successfully', user: updatedUser });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 };
 
@@ -393,6 +464,7 @@ module.exports = {
   login,
   register,
   deleteUser,
+  updateUser,
   getUsers,
   me,
   updateProfile,
