@@ -478,7 +478,7 @@ export const rejectByAbsentController = (ticketId, { controllerName = 'Absent Co
 };
 
 // HOD grants permission
-export const hodGrantOutpass = (ticketId, { hodName = 'Dr. Rajesh Sharma (HOD CSE)', remarks = 'Permission Approved.' } = {}) => {
+export const hodGrantOutpass = (ticketId, { hodName = 'Head of Department (HOD)', remarks = 'Permission Approved.' } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Outpass application not found');
@@ -499,7 +499,7 @@ export const hodGrantOutpass = (ticketId, { hodName = 'Dr. Rajesh Sharma (HOD CS
 };
 
 // HOD rejects outpass
-export const hodRejectOutpass = (ticketId, { hodName = 'Dr. Rajesh Sharma (HOD)', reason = 'Permission Denied by HOD.' } = {}) => {
+export const hodRejectOutpass = (ticketId, { hodName = 'Head of Department (HOD)', reason = 'Permission Denied by HOD.' } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Outpass application not found');
@@ -737,7 +737,7 @@ export const applyFacultyLeave = async ({
 };
 
 // HOD accepts Faculty Leave / Early Out & forwards to Watchman role login
-export const hodApproveFacultyLeave = (ticketId, { hodName = 'Dr. Rajesh Sharma (HOD)', remarks = 'Accepted and forwarded to watchman login.', timeToLeave = null } = {}) => {
+export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department (HOD)', remarks = 'Accepted and forwarded to watchman login.', timeToLeave = null } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Leave application not found');

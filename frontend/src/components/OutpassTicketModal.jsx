@@ -38,6 +38,9 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
         ? ticket.section
         : 'Department of CSE(emerging Technologies)');
 
+  const isApproved = ticket.hodAction?.granted === true || ticket.status === 'PERMISSION_GRANTED' || ticket.status === 'SENT_OUT';
+  const isRejected = ticket.status === 'REJECTED' || ticket.hodAction?.granted === false;
+
   // Status visual mapping
   const getStatusBadge = (status) => {
     if (isFaculty) {
@@ -135,8 +138,10 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             <div>
               <h3 className="font-extrabold text-sm text-customText dark:text-customText-dark">
                 {isFaculty 
-                  ? (ticket.type === 'FACULTY_EARLY_OUT' ? 'Faculty Early Out Final Slip' : 'Faculty Official Leave Slip')
-                  : 'Official Leave Granted Slip'}
+                  ? (ticket.type === 'FACULTY_EARLY_OUT' 
+                      ? (isApproved ? 'Faculty Early Out Departure Slip (Approved)' : 'Faculty Early Out Request (Pending HOD Approval)')
+                      : (isApproved ? 'Faculty Official Leave Slip (Approved)' : 'Faculty Leave Application (Pending HOD Approval)'))
+                  : (isApproved ? 'Official Leave Granted Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
               </h3>
               <p className="text-[11px] text-customText-muted dark:text-customText-mutedDark">
                 Ref ID: <span className="font-mono font-bold text-primary">{ticket.id}</span>
@@ -167,14 +172,38 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
         <div className="p-4 sm:p-6 overflow-y-auto print:overflow-visible print:p-0">
           
           {/* Prominent Alert (hidden on print) */}
-          <div className="mb-4 p-3 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-900 dark:text-amber-200 flex items-center gap-3 font-black text-xs shadow-sm print:hidden">
-            <AlertCircle size={20} className="text-amber-600 dark:text-amber-400 shrink-0" />
+          <div className={`mb-4 p-3 rounded-2xl border-2 flex items-center gap-3 font-black text-xs shadow-sm print:hidden ${
+            isApproved 
+              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-900 dark:text-emerald-200' 
+              : isRejected 
+                ? 'bg-rose-500/15 border-rose-500/40 text-rose-900 dark:text-rose-200'
+                : 'bg-amber-500/15 border-amber-500/40 text-amber-900 dark:text-amber-200'
+          }`}>
+            {isApproved ? (
+              <CheckCircle2 size={20} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            ) : isRejected ? (
+              <X size={20} className="text-rose-600 dark:text-rose-400 shrink-0" />
+            ) : (
+              <AlertCircle size={20} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            )}
             <div>
-              <span className="uppercase tracking-wider block text-[10px] font-black text-amber-700 dark:text-amber-400">Important Instruction</span>
+              <span className="uppercase tracking-wider block text-[10px] font-black">
+                {isApproved 
+                  ? 'Status: Approved by HOD • Forwarded to Watchman' 
+                  : isRejected 
+                    ? 'Status: Rejected by HOD' 
+                    : 'Status: Pending HOD Approval'}
+              </span>
               <span>
-                {isFaculty 
-                  ? 'Official Final Departure Slip. Watchman directly authorizes gate exit without student ID verification.'
-                  : 'Note: do not close app till goes out. Show this slip at the Main Security Gate.'}
+                {isApproved ? (
+                  isFaculty 
+                    ? 'Official Departure Slip. Approved by HOD and forwarded to Watchman login. No student ID verification required.'
+                    : 'Official Gate Pass. Approved by HOD. Show this slip at the Main Security Gate for departure clearance.'
+                ) : isRejected ? (
+                  'This leave application has been rejected by the Head of Department.'
+                ) : (
+                  'Application submitted and awaiting HOD approval. Gate exit clearance is NOT authorized until approved by HOD.'
+                )}
               </span>
             </div>
           </div>
@@ -208,27 +237,47 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                   </p>
                 </div>
                 <div className="w-16 sm:w-20 shrink-0 flex flex-col items-center justify-center">
-                  <span className="p-1.5 rounded-lg border border-slate-300 bg-slate-50 text-[9px] font-mono font-black uppercase text-center block leading-tight">
-                    {isFaculty ? <>Faculty<br />Pass</> : <>Official<br />Gate Pass</>}
+                  <span className={`p-1.5 rounded-lg border text-[9px] font-mono font-black uppercase text-center block leading-tight ${
+                    isApproved ? 'border-emerald-500 bg-emerald-50 text-emerald-950' : 'border-slate-300 bg-slate-50 text-slate-700'
+                  }`}>
+                    {isFaculty ? (isApproved ? <>Faculty<br />Approved</> : <>Faculty<br />Pass</>) : (isApproved ? <>Official<br />Gate Pass</> : <>Leave<br />Request</>)}
                   </span>
                 </div>
               </div>
 
               <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between px-2 text-[11px] font-mono">
                 <span><strong>PASS NO:</strong> <span className="font-black text-slate-900">{ticket.id}</span></span>
-                <span className="px-3 py-0.5 rounded-full bg-slate-100 border border-slate-400 font-extrabold uppercase text-[10px] tracking-wider text-slate-900">
-                  {ticket.status.replace(/_/g, ' ')}
+                <span className={`px-3 py-0.5 rounded-full font-extrabold uppercase text-[10px] tracking-wider border ${
+                  isApproved 
+                    ? 'bg-emerald-100 border-emerald-500 text-emerald-900 font-black' 
+                    : isRejected 
+                      ? 'bg-rose-100 border-rose-500 text-rose-900 font-bold' 
+                      : 'bg-amber-100 border-amber-500 text-amber-900 font-bold'
+                }`}>
+                  {isApproved 
+                    ? 'APPROVED BY HOD • FORWARDED TO WATCHMAN' 
+                    : isRejected 
+                      ? 'REJECTED BY HOD' 
+                      : 'PENDING HOD APPROVAL'}
                 </span>
                 <span><strong>DATE:</strong> {ticket.appliedDate} {ticket.appliedTime}</span>
               </div>
             </div>
 
             {/* Document Subtitle */}
-            <div className="text-center py-1 bg-slate-100 border border-slate-300 rounded-lg">
+            <div className={`text-center py-1.5 border rounded-lg ${
+              isApproved 
+                ? 'bg-emerald-50 border-emerald-300' 
+                : isRejected 
+                  ? 'bg-rose-50 border-rose-300' 
+                  : 'bg-amber-50/70 border-amber-300'
+            }`}>
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-900">
                 {isFaculty 
-                  ? (ticket.type === 'FACULTY_EARLY_OUT' ? 'Official Faculty Early Out Departure Slip' : 'Official Faculty Leave & Gate Clearance Slip')
-                  : 'Official Student Leave & Campus Gate Pass Slip'}
+                  ? (ticket.type === 'FACULTY_EARLY_OUT' 
+                      ? (isApproved ? 'Official Faculty Early Out Departure Slip (Approved)' : 'Faculty Early Out Application (Pending HOD Approval)')
+                      : (isApproved ? 'Official Faculty Leave & Gate Clearance Slip (Approved)' : 'Faculty Leave Application (Pending HOD Approval)'))
+                  : (isApproved ? 'Official Student Leave & Campus Gate Pass Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
               </h2>
             </div>
 
@@ -371,15 +420,23 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                     <tr>
                       <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">2. Department Head (HOD)</td>
                       <td className="p-2 border-r border-slate-300 font-bold">
-                        {ticket.hodAction?.hodName || 'Dr. Rajesh Sharma (HOD)'}
+                        {isApproved 
+                          ? (ticket.hodAction?.hodName || 'Head of Department (HOD)') 
+                          : isRejected 
+                            ? (ticket.hodAction?.hodName || 'Head of Department (HOD)') 
+                            : '— (Awaiting HOD Decision)'}
                       </td>
                       <td className="p-2 font-mono border-r border-slate-300">
-                        {ticket.hodAction?.displayDate || ticket.appliedDate} {ticket.hodAction?.displayTime || '—'}
+                        {isApproved ? `${ticket.hodAction?.displayDate || ticket.appliedDate} ${ticket.hodAction?.displayTime || ''}` : '—'}
                       </td>
-                      <td className="p-2 font-black text-emerald-700">
-                        {ticket.hodAction?.granted 
-                          ? '✓ ACCEPTED & FORWARDED TO WATCHMAN' 
-                          : (ticket.status === 'REJECTED' ? '✕ REJECTED BY HOD' : 'Pending HOD Approval')}
+                      <td className="p-2 font-black">
+                        {isApproved ? (
+                          <span className="text-emerald-700">✓ ACCEPTED & FORWARDED TO WATCHMAN</span>
+                        ) : isRejected ? (
+                          <span className="text-rose-700">✕ REJECTED BY HOD</span>
+                        ) : (
+                          <span className="text-amber-700">⏳ Pending HOD Review & Decision</span>
+                        )}
                       </td>
                     </tr>
                     <tr>
@@ -390,8 +447,14 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       <td className="p-2 font-mono border-r border-slate-300">
                         {ticket.watchmanAction?.displayTime || '—'}
                       </td>
-                      <td className="p-2 font-semibold text-purple-700">
-                        {ticket.watchmanAction?.sentOut ? '✓ Final Slip Generated & Departed' : (ticket.status === 'PERMISSION_GRANTED' ? 'Gate Pass Approved • Final Slip Issued' : 'Awaiting Gate Clearance')}
+                      <td className="p-2 font-semibold">
+                        {ticket.watchmanAction?.sentOut ? (
+                          <span className="text-purple-700 font-bold">✓ Final Slip Generated & Departed</span>
+                        ) : isApproved ? (
+                          <span className="text-emerald-700 font-bold">Gate Pass Approved • Forwarded to Watchman</span>
+                        ) : (
+                          <span className="text-slate-400">Awaiting HOD Approval First</span>
+                        )}
                       </td>
                     </tr>
                   </tbody>
@@ -428,19 +491,27 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Department Head</td>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Department Head (HOD)</td>
                       <td className="p-2 border-r border-slate-300 font-bold">
-                        {ticket.hodAction?.hodName || 'Dr. Rajesh Sharma (HOD CSE)'}
+                        {isApproved 
+                          ? (ticket.hodAction?.hodName || 'Head of Department (HOD)') 
+                          : isRejected 
+                            ? (ticket.hodAction?.hodName || 'Head of Department (HOD)') 
+                            : '— (Awaiting HOD Decision)'}
                       </td>
                       <td className="p-2 font-mono border-r border-slate-300">
-                        {ticket.hodAction?.approvedAt 
+                        {isApproved ? (ticket.hodAction?.approvedAt 
                           ? new Date(ticket.hodAction.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                          : (ticket.hodAction?.displayTime || '—')}
+                          : (ticket.hodAction?.displayTime || '—')) : '—'}
                       </td>
-                      <td className="p-2 font-black text-emerald-700">
-                        {ticket.hodAction?.granted 
-                          ? '✓ PERMISSION GRANTED' 
-                          : (ticket.status === 'REJECTED' ? '✕ DENIED BY HOD' : 'Pending HOD Approval')}
+                      <td className="p-2 font-black">
+                        {isApproved ? (
+                          <span className="text-emerald-700">✓ PERMISSION GRANTED BY HOD</span>
+                        ) : isRejected ? (
+                          <span className="text-rose-700">✕ DENIED BY HOD</span>
+                        ) : (
+                          <span className="text-amber-700">⏳ Pending HOD Review & Decision</span>
+                        )}
                       </td>
                     </tr>
                     <tr>
@@ -451,8 +522,14 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       <td className="p-2 font-mono border-r border-slate-300">
                         {ticket.watchmanAction?.displayTime || '—'}
                       </td>
-                      <td className="p-2 font-semibold text-purple-700">
-                        {ticket.watchmanAction?.sentOut ? '✓ Student Exited Campus' : 'Ready at Gate (Physical ID req.)'}
+                      <td className="p-2 font-semibold">
+                        {ticket.watchmanAction?.sentOut ? (
+                          <span className="text-purple-700 font-bold">✓ Student Exited Campus</span>
+                        ) : isApproved ? (
+                          <span className="text-emerald-700 font-bold">Approved by HOD • Ready at Gate (Physical ID req.)</span>
+                        ) : (
+                          <span className="text-slate-400">Awaiting HOD Approval First</span>
+                        )}
                       </td>
                     </tr>
                   </tbody>
@@ -468,7 +545,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                 <div className="text-[9px] font-bold text-slate-500 uppercase">
                   {isFaculty ? 'Applicant' : 'Parent Verification'}
                 </div>
-                <div className="font-serif italic font-bold text-slate-800 text-xs">
+                <div className="font-serif italic font-bold text-slate-800 text-xs truncate">
                   {isFaculty 
                     ? (ticket.facultyName || ticket.studentName)
                     : (ticket.absentControllerAction?.controllerName || 'Absent Controller')}
@@ -480,38 +557,90 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
 
               {/* Signature 2: Official College Stamp */}
               <div className="flex flex-col items-center justify-center h-20 border border-slate-300 rounded-xl p-1.5 bg-slate-50/60">
-                <div className="w-14 h-14 rounded-full border-2 border-primary-dark/60 flex flex-col items-center justify-center text-[6px] font-black text-primary-dark uppercase text-center p-0.5 leading-none shadow-inner">
+                <div className={`w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center text-[6px] font-black uppercase text-center p-0.5 leading-none shadow-inner ${
+                  isApproved 
+                    ? 'border-emerald-600 text-emerald-800' 
+                    : isRejected 
+                      ? 'border-rose-500 text-rose-700' 
+                      : 'border-dashed border-amber-500 text-amber-700'
+                }`}>
                   <span>NARASARAOPETA</span>
                   <span className="font-extrabold text-[7px] my-0.5">AUTONOMOUS</span>
-                  <span>OFFICIAL SEAL</span>
+                  <span>{isApproved ? 'APPROVED SEAL' : isRejected ? 'REJECTED' : 'PENDING'}</span>
                 </div>
               </div>
 
               {/* Signature 3: Head of Department */}
-              <div className="flex flex-col justify-between h-20 border border-slate-300 rounded-xl p-2 bg-slate-50/60">
-                <div className="text-[9px] font-bold text-slate-500 uppercase">
-                  Approved By
+              <div className={`flex flex-col justify-between h-20 border rounded-xl p-2 ${
+                isApproved 
+                  ? 'border-emerald-300 bg-emerald-50/50' 
+                  : isRejected 
+                    ? 'border-rose-300 bg-rose-50/50' 
+                    : 'border-dashed border-amber-300 bg-amber-50/30'
+              }`}>
+                <div className="text-[9px] font-bold uppercase">
+                  {isApproved ? (
+                    <span className="text-emerald-700 font-black">Approved By</span>
+                  ) : isRejected ? (
+                    <span className="text-rose-700 font-black">Review Status</span>
+                  ) : (
+                    <span className="text-amber-700 font-bold">Approval Status</span>
+                  )}
                 </div>
-                <div className="font-serif italic font-bold text-slate-800 text-xs">
-                  {ticket.hodAction?.hodName || 'Dr. Rajesh Sharma (HOD)'}
+                <div className="text-xs truncate">
+                  {isApproved ? (
+                    <div className="font-serif italic font-bold text-slate-900 leading-tight">
+                      {ticket.hodAction?.hodName || 'Head of Department (HOD)'}
+                    </div>
+                  ) : isRejected ? (
+                    <div className="text-rose-600 font-sans font-black text-[11px]">
+                      Application Rejected
+                    </div>
+                  ) : (
+                    <div className="text-amber-600 font-sans font-extrabold text-[11px]">
+                      Pending HOD Approval
+                    </div>
+                  )}
                 </div>
                 <div className="border-t border-slate-400 pt-0.5 text-[8px] font-black uppercase text-slate-700">
-                  Head of Department (HOD)
+                  {isApproved ? (
+                    <span className="text-emerald-800">✓ Head of Department (HOD)</span>
+                  ) : (
+                    <span>Head of Department (HOD)</span>
+                  )}
                 </div>
               </div>
 
             </div>
 
             {/* Security Clearance Footer */}
-            <div className="p-2 border border-slate-400 bg-slate-50 rounded-xl text-center text-[9px] text-slate-600 font-medium leading-tight">
+            <div className={`p-2 border rounded-xl text-center text-[9px] font-medium leading-tight ${
+              isApproved 
+                ? 'border-emerald-300 bg-emerald-50/40 text-emerald-950' 
+                : isRejected 
+                  ? 'border-rose-300 bg-rose-50/40 text-rose-950' 
+                  : 'border-amber-300 bg-amber-50/40 text-amber-950'
+            }`}>
               {isFaculty ? (
-                <>
-                  <span className="font-bold text-slate-900">MAIN GATE SECURITY INSTRUCTION:</span> Faculty Gate Pass & Departure Clearance. No ID card verification required per college administration policy. Slip verified and departure authorized.
-                </>
+                isApproved ? (
+                  <>
+                    <span className="font-black text-emerald-800">MAIN GATE SECURITY INSTRUCTION:</span> Faculty Leave / Early Out has been APPROVED by HOD and forwarded to Watchman login. No student ID verification required. Gate departure authorized.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-black text-amber-800">MAIN GATE SECURITY NOTICE:</span> Leave application is PENDING HOD APPROVAL. Gate exit clearance is NOT authorized until approved by the Head of Department.
+                  </>
+                )
               ) : (
-                <>
-                  <span className="font-bold text-slate-900">MAIN GATE SECURITY INSTRUCTION:</span> Verify student's Physical College ID Card with Roll Number <strong>{ticket.rollNumber}</strong> before gate release. Authenticated under Lectra Campus Management System.
-                </>
+                isApproved ? (
+                  <>
+                    <span className="font-black text-emerald-800">MAIN GATE SECURITY INSTRUCTION:</span> Approved by HOD. Verify student's Physical College ID Card with Roll Number <strong>{ticket.rollNumber}</strong> before gate release.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-black text-amber-800">MAIN GATE SECURITY NOTICE:</span> Leave application is PENDING HOD APPROVAL. Gate exit clearance is NOT authorized until approved by the Head of Department.
+                  </>
+                )
               )}
             </div>
 

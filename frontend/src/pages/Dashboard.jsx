@@ -235,7 +235,7 @@ const Dashboard = ({ initialTab }) => {
     try {
       setOutpassActionError('');
       hodGrantOutpass(ticket.id, {
-        hodName: user?.name || 'Dr. Rajesh Sharma (HOD CSE)',
+        hodName: user?.name || 'Head of Department (HOD)',
         remarks: 'Permission Granted by HOD.'
       });
       setOutpassActionSuccess(`Permission granted! Outpass for ${ticket.studentName} (${ticket.rollNumber}) has been sent to the Gate Watchman login.`);
@@ -249,7 +249,7 @@ const Dashboard = ({ initialTab }) => {
     try {
       setOutpassActionError('');
       hodApproveFacultyLeave(ticket.id, {
-        hodName: user?.name || 'Dr. Rajesh Sharma (HOD)',
+        hodName: user?.name || 'Head of Department (HOD)',
         remarks: 'Accepted and forwarded to watchman login.',
         timeToLeave: customTimeToLeave || ticket.leaveTime
       });
@@ -264,7 +264,7 @@ const Dashboard = ({ initialTab }) => {
     try {
       setOutpassActionError('');
       hodRejectOutpass(ticket.id, {
-        hodName: user?.name || 'Dr. Rajesh Sharma (HOD CSE)',
+        hodName: user?.name || 'Head of Department (HOD)',
         reason: customReason || 'Permission Denied by HOD.'
       });
       setOutpassActionSuccess(`Outpass for ${ticket.studentName} was rejected.`);
