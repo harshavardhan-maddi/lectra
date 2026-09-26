@@ -112,7 +112,7 @@ const Login = () => {
       navigate('/absent-controller');
     } else if (userProfile.role === 'FACULTY') {
       navigate('/faculty-dashboard');
-    } else if (userProfile.role === 'WATCHMAN') {
+    } else if (userProfile.role === 'WATCHMAN' || userProfile.role === 'SECURITY_HEAD') {
       navigate('/watchman-dashboard');
     } else {
       navigate('/dashboard');

@@ -82,7 +82,7 @@ const WatchmanDashboard = () => {
     try {
       setActionError('');
       watchmanReleaseStudent(ticket.id, {
-        watchmanName: user?.name || 'Main Gate Security Officer',
+        watchmanName: user?.name || 'Campus Security Head',
         remarks: 'Physical Student ID card verified at main gate. Sent out.'
       });
       setActionSuccess(`Gate exit approved! Student ${ticket.studentName} (${ticket.rollNumber}) has been marked as SENT OUT.`);
@@ -97,7 +97,7 @@ const WatchmanDashboard = () => {
     try {
       setActionError('');
       watchmanReleaseFaculty(ticket.id, {
-        watchmanName: user?.name || 'Main Gate Security Officer',
+        watchmanName: user?.name || 'Campus Security Head',
         remarks: 'Final slip generated. Faculty departure permitted.'
       });
       setActionSuccess(`Gate departure cleared! Faculty ${ticket.facultyName || ticket.studentName} has been marked as DEPARTED.`);
@@ -119,10 +119,10 @@ const WatchmanDashboard = () => {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-black text-customText dark:text-customText-dark tracking-tight">
-                Gate Security Outpass Control
+                Security Head Outpass Control
               </h2>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30">
-                Main Campus Gate
+                Security Head
               </span>
             </div>
             <p className="text-xs text-customText-muted dark:text-customText-mutedDark mt-0.5">
@@ -452,7 +452,7 @@ const WatchmanDashboard = () => {
                       <span>{isFaculty ? 'Faculty Departed' : 'Student Sent Out'} ({ticket.watchmanAction?.displayTime})</span>
                     </div>
                     <span className="text-[10px] text-customText-muted">
-                      Gate Officer: {ticket.watchmanAction?.watchmanName || 'Security'}
+                      Gate Officer: {ticket.watchmanAction?.watchmanName || 'Security Head'}
                     </span>
                   </div>
                 )}

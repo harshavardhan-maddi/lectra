@@ -76,14 +76,14 @@ const login = async (req, res) => {
       }
     }
 
-    // 2. Check default watchman credentials fallback
-    if (userId.toLowerCase() === 'watchman' || userId.toLowerCase() === 'security' || userId.toLowerCase() === 'gate') {
-      if (password === 'watchman' || password === 'watchman123' || password === 'security123' || password === 'password123' || password === 'gate123') {
+    // 2. Check default watchman / security head credentials fallback
+    if (userId.toLowerCase() === 'watchman' || userId.toLowerCase() === 'security' || userId.toLowerCase() === 'gate' || userId.toLowerCase() === 'securityhead' || userId.toLowerCase() === 'security_head') {
+      if (password === 'watchman' || password === 'watchman123' || password === 'security123' || password === 'password123' || password === 'gate123' || password === 'securityhead') {
         const defaultWatchman = {
           id: 9999,
-          userId: 'watchman',
-          name: 'Main Gate Security (Watchman)',
-          role: 'WATCHMAN',
+          userId: 'securityhead',
+          name: 'Main Campus Security Head',
+          role: 'SECURITY_HEAD',
           className: null,
         };
         const token = jwt.sign(
@@ -143,17 +143,17 @@ const register = async (req, res) => {
   const { name, userId, password, className, role, department } = req.body;
 
   if (!name || !userId || !password || !role) {
-    return res.status(400).json({ message: 'All fields except class_name (for HOD/Sub Admin/Watchman) are required' });
+    return res.status(400).json({ message: 'All fields except class_name (for HOD/Sub Admin/Security Head) are required' });
   }
 
-  // Non-super-admins cannot register SUPER_ADMIN or WATCHMAN
-  if (req.user.role !== 'SUPER_ADMIN' && (role === 'SUPER_ADMIN' || role === 'WATCHMAN')) {
+  // Non-super-admins cannot register SUPER_ADMIN, WATCHMAN, or SECURITY_HEAD
+  if (req.user.role !== 'SUPER_ADMIN' && (role === 'SUPER_ADMIN' || role === 'WATCHMAN' || role === 'SECURITY_HEAD')) {
     return res.status(403).json({ message: 'You do not have permission to register this role' });
   }
 
   // Determine user department based on creator authority
   let userDepartment = null;
-  if (role === 'WATCHMAN') {
+  if (role === 'WATCHMAN' || role === 'SECURITY_HEAD') {
     userDepartment = null;
   } else if (req.user.role === 'SUPER_ADMIN') {
     // Super Admin can assign or create any department
@@ -197,14 +197,14 @@ const register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Support WATCHMAN role registered by HOD/Super Admin
-    if (role === 'WATCHMAN') {
+    // Support SECURITY_HEAD / WATCHMAN role registered by HOD/Super Admin
+    if (role === 'WATCHMAN' || role === 'SECURITY_HEAD') {
       const newWatchman = {
         id: 90000 + Math.floor(Math.random() * 9000),
         name,
         userId,
         password: hashedPassword,
-        role: 'WATCHMAN',
+        role: 'SECURITY_HEAD',
         className: null,
         department: null,
         createdAt: new Date().toISOString(),
@@ -214,7 +214,7 @@ const register = async (req, res) => {
       await saveWatchmanAccounts(watchmen);
 
       return res.status(201).json({
-        message: 'Gate Watchman user created successfully',
+        message: 'Campus Security Head user created successfully',
         user: {
           id: newWatchman.id,
           userId: newWatchman.userId,
@@ -418,7 +418,7 @@ const getUsers = async (req, res) => {
         id: w.id,
         name: w.name,
         userId: w.userId,
-        role: 'WATCHMAN',
+        role: 'SECURITY_HEAD',
         className: null,
         department: null,
         createdAt: w.createdAt || new Date().toISOString(),

@@ -2054,7 +2054,7 @@ const Dashboard = ({ initialTab }) => {
                         className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
                       >
                         <BadgeCheck size={16} />
-                        <span>Grant Permission (Send to Watchman)</span>
+                        <span>Grant Permission (Send to Security Head)</span>
                       </button>
 
                       <button

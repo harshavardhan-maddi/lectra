@@ -178,7 +178,7 @@ const Layout = ({ children }) => {
       { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
       { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
     );
-  } else if (user?.role === 'WATCHMAN') {
+  } else if (user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') {
     navLinks.push(
       { name: 'Gate Exit Clearance', path: '/watchman-dashboard', icon: DoorOpen },
       { name: 'Gate Exit History', path: '/watchman-dashboard?tab=exitHistory', icon: CheckCircle2 }
@@ -270,9 +270,9 @@ const Layout = ({ children }) => {
               ) : (
                 <>
                   <p className="text-xs text-customText-muted dark:text-customText-mutedDark truncate">
-                    {user?.role} {user?.className ? `(${user.className})` : ''}
+                    {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') ? 'Security Head' : user?.role} {user?.className ? `(${user.className})` : ''}
                   </p>
-                  {user?.department && user?.role !== 'WATCHMAN' && (
+                  {user?.department && user?.role !== 'WATCHMAN' && user?.role !== 'SECURITY_HEAD' && (
                     <p className="text-[10px] text-primary-dark dark:text-primary font-bold truncate mt-0.5" title={user.department}>
                       🏛️ {user.department.replace(/^Department of\s+/i, '')}
                     </p>
@@ -350,8 +350,10 @@ const Layout = ({ children }) => {
                     </span>
                   ) : (
                     <>
-                      <p className="text-xs text-customText-muted dark:text-customText-mutedDark">{user?.role}</p>
-                      {user?.department && user?.role !== 'WATCHMAN' && (
+                      <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                        {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') ? 'Security Head' : user?.role}
+                      </p>
+                      {user?.department && user?.role !== 'WATCHMAN' && user?.role !== 'SECURITY_HEAD' && (
                         <p className="text-[10px] text-primary-dark font-bold truncate mt-0.5">
                           🏛️ {user.department.replace(/^Department of\s+/i, '')}
                         </p>

@@ -32,7 +32,7 @@ const HomeRedirect = () => {
   if (user.role === 'FACULTY') {
     return <Navigate to="/faculty-dashboard" replace />;
   }
-  if (user.role === 'WATCHMAN') {
+  if (user.role === 'WATCHMAN' || user.role === 'SECURITY_HEAD') {
     return <Navigate to="/watchman-dashboard" replace />;
   }
   if (user.role === 'HOD' || user.role === 'SUB_ADMIN' || user.role === 'SUPER_ADMIN') {
@@ -47,11 +47,11 @@ const AppRoutes = () => {
       {/* Public Routes */}
       <Route path="/login" element={<Login />} />
 
-      {/* Protected Watchman Routes */}
+      {/* Protected Security Head / Watchman Routes */}
       <Route
         path="/watchman-dashboard"
         element={
-          <PrivateRoute allowedRoles={['WATCHMAN', 'HOD', 'SUB_ADMIN']}>
+          <PrivateRoute allowedRoles={['WATCHMAN', 'SECURITY_HEAD', 'HOD', 'SUB_ADMIN', 'SUPER_ADMIN']}>
             <Layout>
               <WatchmanDashboard />
             </Layout>

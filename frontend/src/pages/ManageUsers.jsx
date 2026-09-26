@@ -114,9 +114,9 @@ const ManageUsers = () => {
         password, 
         role, 
         role === 'CR' ? className : null, 
-        role === 'WATCHMAN' ? null : assignedDept
+        (role === 'WATCHMAN' || role === 'SECURITY_HEAD') ? null : assignedDept
       );
-      setSuccess(`User "${name}" successfully registered as ${role} in ${role === 'WATCHMAN' ? 'Campus Gate' : assignedDept}.`);
+      setSuccess(`User "${name}" successfully registered as ${role === 'WATCHMAN' || role === 'SECURITY_HEAD' ? 'Security Head' : role} in ${(role === 'WATCHMAN' || role === 'SECURITY_HEAD') ? 'Campus Gate' : assignedDept}.`);
       setShowAddUserModal(false);
       
       // Clear forms
@@ -159,7 +159,7 @@ const ManageUsers = () => {
         role: editRole,
         className: editRole === 'CR' ? editClassName : null,
       };
-      if (isSuperAdmin && editRole !== 'WATCHMAN') {
+      if (isSuperAdmin && editRole !== 'WATCHMAN' && editRole !== 'SECURITY_HEAD') {
         updatePayload.department = editDepartment;
       }
       if (editPassword && editPassword.trim()) {
@@ -310,7 +310,7 @@ const ManageUsers = () => {
                 if (u.role === 'CR') roleBadge = 'bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/10';
                 if (u.role === 'FACULTY') roleBadge = 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/10';
                 if (u.role === 'ABSENT_CONTROLLER') roleBadge = 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/10';
-                if (u.role === 'WATCHMAN') roleBadge = 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30';
+                if (u.role === 'WATCHMAN' || u.role === 'SECURITY_HEAD') roleBadge = 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30';
 
                 return (
                   <tr key={u.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/10">
@@ -327,11 +327,11 @@ const ManageUsers = () => {
                     <td className="py-3.5">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase ${roleBadge}`}>
                         {u.role === 'SUPER_ADMIN' && '⚡ '}
-                        {u.role === 'SUPER_ADMIN' ? 'SUPER ADMIN' : u.role}
+                        {u.role === 'SUPER_ADMIN' ? 'SUPER ADMIN' : ((u.role === 'WATCHMAN' || u.role === 'SECURITY_HEAD') ? 'SECURITY HEAD' : u.role)}
                       </span>
                     </td>
                     <td className="py-3.5 text-xs text-customText dark:text-customText-dark font-medium max-w-[200px] truncate" title={u.department || 'Campus Gate / Global'}>
-                      {u.role === 'WATCHMAN' || u.role === 'SUPER_ADMIN' ? (
+                      {u.role === 'WATCHMAN' || u.role === 'SECURITY_HEAD' || u.role === 'SUPER_ADMIN' ? (
                         <span className="text-slate-400 dark:text-slate-500 italic text-[11px]">Campus-Wide</span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 text-[11px] font-semibold">
@@ -484,7 +484,7 @@ const ManageUsers = () => {
                   {isSuperAdmin && (
                     <>
                       <option value="HOD">HOD (Head of Department)</option>
-                      <option value="WATCHMAN">Campus Gate Watchman (Security)</option>
+                      <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
                       <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
                     </>
                   )}
@@ -492,7 +492,7 @@ const ManageUsers = () => {
               </div>
 
               {/* Department Selection */}
-              {role !== 'WATCHMAN' && (
+              {role !== 'WATCHMAN' && role !== 'SECURITY_HEAD' && (
                 <div>
                   <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
                     Department
@@ -651,7 +651,7 @@ const ManageUsers = () => {
                   {isSuperAdmin && (
                     <>
                       <option value="HOD">HOD (Head of Department)</option>
-                      <option value="WATCHMAN">Campus Gate Watchman (Security)</option>
+                      <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
                       <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
                     </>
                   )}
@@ -659,7 +659,7 @@ const ManageUsers = () => {
               </div>
 
               {/* Department Selection (Super Admin only) */}
-              {isSuperAdmin && editRole !== 'WATCHMAN' && (
+              {isSuperAdmin && editRole !== 'WATCHMAN' && editRole !== 'SECURITY_HEAD' && (
                 <div>
                   <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
                     Department

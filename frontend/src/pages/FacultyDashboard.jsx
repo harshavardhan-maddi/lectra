@@ -1322,7 +1322,7 @@ const FacultyDashboard = () => {
                   My Faculty Permissions & Applications
                 </h3>
                 <p className="text-xs text-customText-muted">
-                  Live status of your requested permissions, HOD approvals, and Watchman gate departure slips
+                  Live status of your requested permissions, HOD approvals, and Security Head gate departure slips
                 </p>
               </div>
 
@@ -1384,7 +1384,7 @@ const FacultyDashboard = () => {
 
                           {ticket.status === 'PERMISSION_GRANTED' && (
                             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/30">
-                              Accepted by HOD • Forwarded to Watchman
+                              Accepted by HOD • Forwarded to Security Head
                             </span>
                           )}
 

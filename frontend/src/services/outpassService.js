@@ -595,8 +595,8 @@ export const hodRejectOutpass = (ticketId, { hodName = 'Head of Department (HOD)
   return ticket;
 };
 
-// Watchman verifies physical student ID and marks student Sent Out
-export const watchmanReleaseStudent = (ticketId, { watchmanName = 'Main Gate Security Officer', remarks = 'Physical College ID card verified. Student exited campus.' } = {}) => {
+// Security Head verifies physical student ID and marks student Sent Out
+export const watchmanReleaseStudent = (ticketId, { watchmanName = 'Campus Security Head', remarks = 'Physical College ID card verified. Student exited campus.' } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Outpass application not found');
@@ -837,8 +837,8 @@ export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department
   return ticket;
 };
 
-// Watchman generates final slip and marks faculty departed (NO ID check needed for faculty)
-export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Main Gate Security Officer', remarks = 'Final slip generated. Faculty departure permitted.' } = {}) => {
+// Security Head generates final slip and marks faculty departed (NO ID check needed for faculty)
+export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Campus Security Head', remarks = 'Final slip generated. Faculty departure permitted.' } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Faculty gate pass not found');

@@ -244,7 +244,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             <div>
               <span className="uppercase tracking-wider block text-[10px] font-black">
                 {isApproved 
-                  ? 'Status: Approved by HOD • Forwarded to Watchman' 
+                  ? 'Status: Approved by HOD • Forwarded to Security Head' 
                   : isRejected 
                     ? 'Status: Rejected by HOD' 
                     : 'Status: Pending HOD Approval'}
@@ -252,7 +252,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
               <span>
                 {isApproved ? (
                   isFaculty 
-                    ? 'Official Departure Slip. Approved by HOD and forwarded to Watchman login. No student ID verification required.'
+                    ? 'Official Departure Slip. Approved by HOD and forwarded to Security Head login. No student ID verification required.'
                     : 'Official Gate Pass. Approved by HOD. Show this slip at the Main Security Gate for departure clearance.'
                 ) : isRejected ? (
                   'This leave application has been rejected by the Head of Department.'
@@ -310,7 +310,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       : 'bg-amber-100 border-amber-500 text-amber-900 font-bold'
                 }`}>
                   {isApproved 
-                    ? 'APPROVED BY HOD • FORWARDED TO WATCHMAN' 
+                    ? 'APPROVED BY HOD • FORWARDED TO SECURITY HEAD' 
                     : isRejected 
                       ? 'REJECTED BY HOD' 
                       : 'PENDING HOD APPROVAL'}
@@ -486,7 +486,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       </td>
                       <td className="p-2 font-black">
                         {isApproved ? (
-                          <span className="text-emerald-700">✓ ACCEPTED & FORWARDED TO WATCHMAN</span>
+                          <span className="text-emerald-700">✓ ACCEPTED & FORWARDED TO SECURITY HEAD</span>
                         ) : isRejected ? (
                           <span className="text-rose-700">✕ REJECTED BY HOD</span>
                         ) : (
@@ -495,9 +495,9 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Main Gate Security</td>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Main Gate Security Head</td>
                       <td className="p-2 border-r border-slate-300 font-bold">
-                        {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security'}
+                        {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security Head'}
                       </td>
                       <td className="p-2 font-mono border-r border-slate-300">
                         {ticket.watchmanAction?.displayTime || '—'}
@@ -506,7 +506,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                         {ticket.watchmanAction?.sentOut ? (
                           <span className="text-purple-700 font-bold">✓ Final Slip Generated & Departed</span>
                         ) : isApproved ? (
-                          <span className="text-emerald-700 font-bold">Gate Pass Approved • Forwarded to Watchman</span>
+                          <span className="text-emerald-700 font-bold">Gate Pass Approved • Forwarded to Security Head</span>
                         ) : (
                           <span className="text-slate-400">Awaiting HOD Approval First</span>
                         )}
@@ -572,7 +572,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                     <tr>
                       <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">4. Main Gate Exit</td>
                       <td className="p-2 border-r border-slate-300 font-bold">
-                        {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security'}
+                        {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security Head'}
                       </td>
                       <td className="p-2 font-mono border-r border-slate-300">
                         {ticket.watchmanAction?.displayTime || '—'}
@@ -679,7 +679,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
               {isFaculty ? (
                 isApproved ? (
                   <>
-                    <span className="font-black text-emerald-800">MAIN GATE SECURITY INSTRUCTION:</span> Faculty Permission / Early Out has been APPROVED by HOD and forwarded to Watchman login. No student ID verification required. Gate departure authorized.
+                    <span className="font-black text-emerald-800">MAIN GATE SECURITY INSTRUCTION:</span> Faculty Permission / Early Out has been APPROVED by HOD and forwarded to Security Head login. No student ID verification required. Gate departure authorized.
                   </>
                 ) : (
                   <>
