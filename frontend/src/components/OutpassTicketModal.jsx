@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import logo from '../neclogo.png';
+import { maskPhoneNumber } from '../services/outpassService';
 import { 
   CheckCircle2, 
   Clock, 
@@ -20,15 +21,69 @@ import {
 const OutpassTicketModal = ({ ticket, onClose }) => {
   const printAreaRef = useRef(null);
 
+  useEffect(() => {
+    const setupPrintContainer = () => {
+      let printContainer = document.getElementById('slip-print-container');
+      if (!printContainer) {
+        printContainer = document.createElement('div');
+        printContainer.id = 'slip-print-container';
+        document.body.appendChild(printContainer);
+      }
+      const slipEl = document.getElementById('printable-slip');
+      if (slipEl) {
+        printContainer.innerHTML = slipEl.outerHTML;
+      }
+      document.body.classList.add('is-printing-slip');
+    };
+
+    const cleanupPrintContainer = () => {
+      document.body.classList.remove('is-printing-slip');
+      const printContainer = document.getElementById('slip-print-container');
+      if (printContainer) {
+        printContainer.innerHTML = '';
+      }
+    };
+
+    window.addEventListener('beforeprint', setupPrintContainer);
+    window.addEventListener('afterprint', cleanupPrintContainer);
+
+    return () => {
+      window.removeEventListener('beforeprint', setupPrintContainer);
+      window.removeEventListener('afterprint', cleanupPrintContainer);
+      document.body.classList.remove('is-printing-slip');
+      const printContainer = document.getElementById('slip-print-container');
+      if (printContainer) printContainer.remove();
+    };
+  }, [ticket]);
+
   if (!ticket) return null;
 
   const handlePrint = () => {
     const originalTitle = document.title;
-    document.title = `Official_Leave_Slip_${ticket.rollNumber}_${ticket.id}`;
+    document.title = `Official_Slip_${ticket.rollNumber || 'TICKET'}_${ticket.id}`;
+    
+    // Ensure printable slip content is copied to top-level print container
+    let printContainer = document.getElementById('slip-print-container');
+    if (!printContainer) {
+      printContainer = document.createElement('div');
+      printContainer.id = 'slip-print-container';
+      document.body.appendChild(printContainer);
+    }
+    const slipEl = document.getElementById('printable-slip');
+    if (slipEl) {
+      printContainer.innerHTML = slipEl.outerHTML;
+    }
+    document.body.classList.add('is-printing-slip');
+
     window.print();
+
     setTimeout(() => {
       document.title = originalTitle;
-    }, 1000);
+      document.body.classList.remove('is-printing-slip');
+      if (printContainer) {
+        printContainer.innerHTML = '';
+      }
+    }, 1200);
   };
 
   const isFaculty = ticket.applicantType === 'FACULTY';
@@ -65,7 +120,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
           };
         case 'REJECTED':
           return {
-            label: 'LEAVE REQUEST REJECTED BY HOD',
+            label: 'PERMISSION REQUEST REJECTED BY HOD',
             color: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold',
             step: -1
           };
@@ -140,7 +195,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                 {isFaculty 
                   ? (ticket.type === 'FACULTY_EARLY_OUT' 
                       ? (isApproved ? 'Faculty Early Out Departure Slip (Approved)' : 'Faculty Early Out Request (Pending HOD Approval)')
-                      : (isApproved ? 'Faculty Official Leave Slip (Approved)' : 'Faculty Leave Application (Pending HOD Approval)'))
+                      : (isApproved ? 'Faculty Official Permission Slip (Approved)' : 'Faculty Permission Application (Pending HOD Approval)'))
                   : (isApproved ? 'Official Leave Granted Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
               </h3>
               <p className="text-[11px] text-customText-muted dark:text-customText-mutedDark">
@@ -276,7 +331,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                 {isFaculty 
                   ? (ticket.type === 'FACULTY_EARLY_OUT' 
                       ? (isApproved ? 'Official Faculty Early Out Departure Slip (Approved)' : 'Faculty Early Out Application (Pending HOD Approval)')
-                      : (isApproved ? 'Official Faculty Leave & Gate Clearance Slip (Approved)' : 'Faculty Leave Application (Pending HOD Approval)'))
+                      : (isApproved ? 'Official Faculty Permission & Gate Clearance Slip (Approved)' : 'Faculty Permission Application (Pending HOD Approval)'))
                   : (isApproved ? 'Official Student Leave & Campus Gate Pass Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
               </h2>
             </div>
@@ -370,7 +425,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                         Parent Contact No.
                       </td>
                       <td className="p-2 font-mono font-black text-slate-950">
-                        +91 {ticket.parentMobile}
+                        +91 {maskPhoneNumber(ticket.parentMobile || ticket.maskedParentMobile)}
                       </td>
                     </tr>
                     <tr className="border-b border-slate-300">
@@ -624,11 +679,11 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
               {isFaculty ? (
                 isApproved ? (
                   <>
-                    <span className="font-black text-emerald-800">MAIN GATE SECURITY INSTRUCTION:</span> Faculty Leave / Early Out has been APPROVED by HOD and forwarded to Watchman login. No student ID verification required. Gate departure authorized.
+                    <span className="font-black text-emerald-800">MAIN GATE SECURITY INSTRUCTION:</span> Faculty Permission / Early Out has been APPROVED by HOD and forwarded to Watchman login. No student ID verification required. Gate departure authorized.
                   </>
                 ) : (
                   <>
-                    <span className="font-black text-amber-800">MAIN GATE SECURITY NOTICE:</span> Leave application is PENDING HOD APPROVAL. Gate exit clearance is NOT authorized until approved by the Head of Department.
+                    <span className="font-black text-amber-800">MAIN GATE SECURITY NOTICE:</span> Permission application is PENDING HOD APPROVAL. Gate exit clearance is NOT authorized until approved by the Head of Department.
                   </>
                 )
               ) : (

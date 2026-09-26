@@ -136,7 +136,7 @@ const Layout = ({ children }) => {
       { name: 'Student Outpasses', path: '/absent-controller?tab=outpassRequests', icon: FileText },
       { name: 'Attendance Registry', path: '/faculty-dashboard', icon: UserCheck },
       { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
-      { name: 'Faculty Leave Slip', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
+      { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
       { name: 'Data Backup', path: '/backup', icon: Database },
       { name: 'Fingerprint Settings', path: '/settings', icon: Settings },
       { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
@@ -176,7 +176,7 @@ const Layout = ({ children }) => {
     navLinks.push(
       { name: 'Attendance Registry', path: '/faculty-dashboard', icon: UserCheck },
       { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
-      { name: 'Leave & Gate Pass', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
+      { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
     );
   } else if (user?.role === 'WATCHMAN') {
     navLinks.push(
@@ -217,7 +217,7 @@ const Layout = ({ children }) => {
     <div className="min-h-screen flex bg-customBg dark:bg-customBg-dark transition-colors duration-300">
       
       {/* SIDEBAR FOR DESKTOP */}
-      <aside className="hidden md:flex flex-col w-64 fixed inset-y-0 left-0 z-30 glass-sidebar">
+      <aside className="hidden md:flex flex-col w-64 fixed inset-y-0 left-0 z-30 glass-sidebar print:hidden">
         <div className="h-16 flex items-center px-6 border-b border-slate-200/50 dark:border-slate-800/30 gap-2.5">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-md overflow-hidden bg-white">
             <img src={logo} alt="NEC Logo" className="w-9 h-9 object-contain rounded-xl" />
@@ -384,10 +384,10 @@ const Layout = ({ children }) => {
       )}
 
       {/* MAIN CONTENT WRAPPER */}
-      <div className="flex-1 flex flex-col md:pl-64 min-w-0">
+      <div className="flex-1 flex flex-col md:pl-64 min-w-0 print:pl-0">
         
         {/* HEADER BAR */}
-        <header className="glass-navbar h-16 flex items-center justify-between px-4 md:px-8 border-b border-slate-200/50 dark:border-slate-800/30">
+        <header className="glass-navbar h-16 flex items-center justify-between px-4 md:px-8 border-b border-slate-200/50 dark:border-slate-800/30 print:hidden">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setMobileMenuOpen(true)}
@@ -543,7 +543,7 @@ const Layout = ({ children }) => {
         </header>
 
         {/* CONTAINER FOR CHILDREN */}
-        <main className="flex-1 p-4 md:p-8 max-w-[1600px] w-full mx-auto animate-fade-in flex flex-col justify-between">
+        <main className="flex-1 p-4 md:p-8 max-w-[1600px] w-full mx-auto animate-fade-in flex flex-col justify-between print:p-0 print:m-0 print:max-w-full">
           <div className="flex-1">
             {children}
           </div>

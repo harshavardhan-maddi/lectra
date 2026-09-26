@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const prisma = require('../db');
 const authMiddleware = require('../middleware/auth.middleware');
 const roleMiddleware = require('../middleware/role.middleware');
@@ -395,16 +396,98 @@ router.post('/outpass/tickets', async (req, res) => {
   }
 });
 
-// 1e. DELETE /outpass/tickets/:id - Delete an individual outpass ticket (HOD capability)
+function hasPermissionTimePassedBackend(ticket) {
+  if (!ticket) return false;
+  if (ticket.status === 'SENT_OUT' || ticket.watchmanAction?.sentOut) {
+    return true;
+  }
+  const now = new Date();
+  const dateStr = ticket.date || ticket.appliedDate;
+  if (!dateStr) return false;
+
+  let year, month, day;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    year = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+    day = parseInt(parts[2], 10);
+  } else if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    day = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+    year = parseInt(parts[2], 10);
+  } else {
+    return false;
+  }
+
+  let hours = 23;
+  let minutes = 59;
+  const leaveTime = (ticket.leaveTime || '').trim();
+  if (leaveTime && leaveTime.toLowerCase() !== 'full day') {
+    const timeMatch = leaveTime.match(/(\d{1,2}):(\d{2})(?:\s*([AP]M))?/i);
+    if (timeMatch) {
+      hours = parseInt(timeMatch[1], 10);
+      minutes = parseInt(timeMatch[2], 10);
+      const meridiem = timeMatch[3] ? timeMatch[3].toUpperCase() : null;
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+    }
+  }
+
+  const permissionDateTime = new Date(year, month, day, hours, minutes, 0);
+  return now >= permissionDateTime;
+}
+
+function isTicketDeleteLockedForHodBackend(ticket) {
+  if (!ticket) return false;
+  const isFaculty = ticket.applicantType === 'FACULTY';
+  const isHodAccepted = ticket.hodAction?.granted === true || 
+                        ticket.status === 'PERMISSION_GRANTED' || 
+                        ticket.status === 'SENT_OUT';
+
+  if (isFaculty) {
+    if (isHodAccepted && hasPermissionTimePassedBackend(ticket)) {
+      return true;
+    }
+  } else {
+    const isSentOut = ticket.status === 'SENT_OUT' || ticket.watchmanAction?.sentOut === true;
+    if (isHodAccepted && isSentOut) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// 1e. DELETE /outpass/tickets/:id - Delete an individual outpass ticket (Role restricted)
 router.delete('/outpass/tickets/:id', async (req, res) => {
   const { id } = req.params;
   try {
+    let userRole = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecret_facultytrackerkey_2026');
+        userRole = decoded.role;
+      } catch (tokenErr) {}
+    }
+
     const setting = await prisma.systemSetting.findUnique({
       where: { key: 'lectra_outpass_tickets_db' }
     });
     let existing = [];
     if (setting && setting.value) {
       try { existing = JSON.parse(setting.value); } catch(e) {}
+    }
+
+    const targetTicket = existing.find(t => t.id === id);
+    if (targetTicket && userRole !== 'SUPER_ADMIN' && isTicketDeleteLockedForHodBackend(targetTicket)) {
+      return res.status(403).json({
+        success: false,
+        message: targetTicket.applicantType === 'FACULTY'
+          ? 'Cannot delete accepted faculty permission after the scheduled permission time has passed. Only Super Admin can delete.'
+          : 'Cannot delete student outpass after permission was granted and student departed. Only Super Admin can delete.'
+      });
     }
 
     const filtered = existing.filter(t => t.id !== id);
@@ -421,9 +504,26 @@ router.delete('/outpass/tickets/:id', async (req, res) => {
   }
 });
 
-// 1f. POST /outpass/tickets/clear-old - Clear completed (SENT_OUT) and rejected tickets (HOD capability)
+// 1f. POST /outpass/tickets/clear-old - Clear completed (SENT_OUT) and rejected tickets (Super Admin restricted)
 router.post('/outpass/tickets/clear-old', async (req, res) => {
   try {
+    let userRole = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecret_facultytrackerkey_2026');
+        userRole = decoded.role;
+      } catch (tokenErr) {}
+    }
+
+    if (userRole !== 'SUPER_ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Super Admin can bulk clear completed or departed tickets.'
+      });
+    }
+
     const setting = await prisma.systemSetting.findUnique({
       where: { key: 'lectra_outpass_tickets_db' }
     });

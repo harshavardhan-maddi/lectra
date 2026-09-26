@@ -129,8 +129,10 @@ export const syncHODStudents = (studentList) => {
 // Mask phone number showing only last 4 digits (e.g. ••••••7890)
 export const maskPhoneNumber = (phone) => {
   if (!phone) return '••••••0000';
-  const clean = String(phone).replace(/\D/g, '');
-  if (clean.length <= 4) return clean;
+  const str = String(phone).trim();
+  if (str.includes('•') || str.includes('*')) return str;
+  const clean = str.replace(/\D/g, '');
+  if (!clean) return '••••••0000';
   const last4 = clean.slice(-4);
   return `••••••${last4}`;
 };
@@ -303,52 +305,144 @@ export const syncOutpassesFromBackend = async () => {
   return getAllOutpasses();
 };
 
-// Delete an individual outpass ticket (HOD feature)
-export const deleteOutpassTicket = async (ticketId) => {
-  const current = getAllOutpasses().filter(t => t.id !== ticketId);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: current }));
-
-  try {
-    const res = await fetch(`/api/student-attendance/outpass/tickets/${encodeURIComponent(ticketId)}`, {
-      method: 'DELETE'
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.tickets)) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
-        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
-        return data.tickets;
-      }
-    }
-  } catch (err) {
-    console.warn('Delete outpass network note:', err);
+// Check if the scheduled permission/leave time has passed
+export const hasPermissionTimePassed = (ticket) => {
+  if (!ticket) return false;
+  // If already departed / sent out at gate, time has passed
+  if (ticket.status === 'SENT_OUT' || ticket.watchmanAction?.sentOut) {
+    return true;
   }
-  return current;
+  
+  const now = new Date();
+  const dateStr = ticket.date || ticket.appliedDate;
+  if (!dateStr) return false;
+
+  let year, month, day;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    year = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+    day = parseInt(parts[2], 10);
+  } else if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    day = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+    year = parseInt(parts[2], 10);
+  } else {
+    return false;
+  }
+
+  let hours = 23;
+  let minutes = 59;
+  const leaveTime = (ticket.leaveTime || '').trim();
+  if (leaveTime && leaveTime.toLowerCase() !== 'full day') {
+    const timeMatch = leaveTime.match(/(\d{1,2}):(\d{2})(?:\s*([AP]M))?/i);
+    if (timeMatch) {
+      hours = parseInt(timeMatch[1], 10);
+      minutes = parseInt(timeMatch[2], 10);
+      const meridiem = timeMatch[3] ? timeMatch[3].toUpperCase() : null;
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+    }
+  }
+
+  const permissionDateTime = new Date(year, month, day, hours, minutes, 0);
+  return now >= permissionDateTime;
 };
 
-// Clear completed (SENT_OUT) and rejected tickets (HOD feature)
-export const clearOldOutpasses = async () => {
-  const activeOnly = getAllOutpasses().filter(t => t.status !== 'SENT_OUT' && t.status !== 'REJECTED');
+// Check if a ticket is delete-locked for HOD / Sub Admin (Only Super Admin can delete)
+export const isTicketDeleteLockedForHod = (ticket) => {
+  if (!ticket) return false;
+
+  const isFaculty = ticket.applicantType === 'FACULTY';
+  const isHodAccepted = ticket.hodAction?.granted === true || 
+                        ticket.status === 'PERMISSION_GRANTED' || 
+                        ticket.status === 'SENT_OUT';
+
+  if (isFaculty) {
+    // Faculty: HOD accepted and current time crosses faculty taken permission time
+    if (isHodAccepted && hasPermissionTimePassed(ticket)) {
+      return true;
+    }
+  } else {
+    // Student: HOD gave permission and student is sent out
+    const isSentOut = ticket.status === 'SENT_OUT' || ticket.watchmanAction?.sentOut === true;
+    if (isHodAccepted && isSentOut) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// Delete an individual outpass ticket (Role restricted: Only Super Admin can delete time-passed faculty permission or sent-out student)
+export const deleteOutpassTicket = async (ticketId, userRole = null) => {
+  const allTickets = getAllOutpasses();
+  const ticket = allTickets.find(t => t.id === ticketId);
+  
+  if (userRole && userRole !== 'SUPER_ADMIN' && isTicketDeleteLockedForHod(ticket)) {
+    throw new Error(
+      ticket?.applicantType === 'FACULTY'
+        ? 'Cannot delete accepted faculty permission after the scheduled permission time has passed. Only Super Admin can delete.'
+        : 'Cannot delete student outpass after permission granted and student departed. Only Super Admin can delete.'
+    );
+  }
+
+  const token = localStorage.getItem('token');
+  const headers = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`/api/student-attendance/outpass/tickets/${encodeURIComponent(ticketId)}`, {
+    method: 'DELETE',
+    headers
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to delete permission ticket');
+  }
+
+  const data = await res.json();
+  const updated = (data.success && Array.isArray(data.tickets)) 
+    ? data.tickets 
+    : allTickets.filter(t => t.id !== ticketId);
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: updated }));
+  return updated;
+};
+
+// Clear completed (SENT_OUT) and rejected tickets (Super Admin restricted)
+export const clearOldOutpasses = async (userRole = null) => {
+  if (userRole && userRole !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can bulk clear completed or departed tickets.');
+  }
+
+  const token = localStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch('/api/student-attendance/outpass/tickets/clear-old', {
+    method: 'POST',
+    headers
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to clear old tickets');
+  }
+
+  const data = await res.json();
+  const activeOnly = (data.success && Array.isArray(data.tickets))
+    ? data.tickets
+    : getAllOutpasses().filter(t => t.status !== 'SENT_OUT' && t.status !== 'REJECTED');
+
   localStorage.setItem(STORAGE_KEY, JSON.stringify(activeOnly));
   window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: activeOnly }));
-
-  try {
-    const res = await fetch('/api/student-attendance/outpass/tickets/clear-old', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.tickets)) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
-        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
-        return data.tickets;
-      }
-    }
-  } catch (err) {
-    console.warn('Clear old outpasses network note:', err);
-  }
   return activeOnly;
 };
 

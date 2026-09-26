@@ -510,7 +510,7 @@ const FacultyDashboard = () => {
                 <Calendar size={20} />
               </div>
               <div>
-                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Leave & Early Out Gate Pass</h3>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Faculty Permissions & Gate Pass</h3>
                 <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Apply for leaves, same-day early out permissions, and download official departure slips</p>
               </div>
             </>
@@ -523,7 +523,7 @@ const FacultyDashboard = () => {
             className="btn-primary py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-primary/20 shrink-0"
           >
             <Plus size={16} />
-            <span>Apply Leave / Early Out</span>
+            <span>Apply Faculty Permission</span>
           </button>
         )}
       </div>
@@ -1208,10 +1208,10 @@ const FacultyDashboard = () => {
                 </div>
                 <div>
                   <h4 className="text-base font-black tracking-tight uppercase text-rose-700 dark:text-rose-400">
-                    your limit for leaves has been completed , consult principal.
+                    your limit for permissions has been completed , consult principal.
                   </h4>
                   <p className="text-xs text-rose-800 dark:text-rose-300 font-medium mt-0.5">
-                    You have utilized your maximum allowance of 2 leaves for {facultyMonthlyQuota.monthName}. Monthly quotas reset every calendar month and do not accumulate.
+                    You have utilized your maximum allowance of 2 permissions for {facultyMonthlyQuota.monthName}. Monthly quotas reset every calendar month and do not accumulate.
                   </p>
                 </div>
               </div>
@@ -1225,7 +1225,7 @@ const FacultyDashboard = () => {
             <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
-                  Monthly Leaves Used
+                  Monthly Permissions Used
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
                   facultyMonthlyQuota.count >= 2 
@@ -1239,7 +1239,7 @@ const FacultyDashboard = () => {
                 <span className="text-3xl font-black text-customText dark:text-customText-dark">
                   {facultyMonthlyQuota.count}
                 </span>
-                <span className="text-sm font-bold text-customText-muted">/ 2 Leaves</span>
+                <span className="text-sm font-bold text-customText-muted">/ 2 Permissions</span>
               </div>
               <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                 <div 
@@ -1248,14 +1248,14 @@ const FacultyDashboard = () => {
                 />
               </div>
               <p className="text-[10px] text-customText-muted">
-                Strict limit: 2 leaves per month. Unused leaves do not roll over.
+                Strict limit: 2 permissions per month. Unused permissions do not roll over.
               </p>
             </div>
 
             {/* Metric 2: Remaining Leaves */}
             <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
-                Remaining Leaves
+                Remaining Permissions
               </span>
               <div className="flex items-baseline gap-2">
                 <span className={`text-3xl font-black ${
@@ -1319,10 +1319,10 @@ const FacultyDashboard = () => {
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
                 <h3 className="text-lg font-black text-customText dark:text-customText-dark">
-                  My Leave & Early Out Applications
+                  My Faculty Permissions & Applications
                 </h3>
                 <p className="text-xs text-customText-muted">
-                  Live status of your requested leaves, HOD approvals, and Watchman gate departure slips
+                  Live status of your requested permissions, HOD approvals, and Watchman gate departure slips
                 </p>
               </div>
 
@@ -1449,7 +1449,7 @@ const FacultyDashboard = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-customText dark:text-customText-dark">
-                    Apply Leave / Early Out
+                    Apply Faculty Permission / Early Out
                   </h3>
                   <p className="text-xs text-customText-muted">
                     Narasaraopeta Engineering College • Faculty Portal
@@ -1473,17 +1473,17 @@ const FacultyDashboard = () => {
                 <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-black space-y-1">
                   <div className="flex items-center gap-2">
                     <AlertTriangle size={16} className="text-rose-600 shrink-0" />
-                    <span>your limit for leaves has been completed , consult principal.</span>
+                    <span>your limit for permissions has been completed , consult principal.</span>
                   </div>
                   <p className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
-                    You have already used {facultyMonthlyQuota.count} / 2 leaves for this calendar month. Unused leaves do not carry forward.
+                    You have already used {facultyMonthlyQuota.count} / 2 permissions for this calendar month. Unused permissions do not carry forward.
                   </p>
                 </div>
               ) : (
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 text-xs flex items-center justify-between">
                   <span className="text-customText-muted font-bold">Monthly Quota Status:</span>
                   <span className="font-black text-emerald-600 dark:text-emerald-400">
-                    {facultyMonthlyQuota.count} / 2 leaves used ({facultyMonthlyQuota.remaining} left)
+                    {facultyMonthlyQuota.count} / 2 permissions used ({facultyMonthlyQuota.remaining} left)
                   </span>
                 </div>
               )}
@@ -1504,7 +1504,7 @@ const FacultyDashboard = () => {
                     }`}
                   >
                     <Calendar size={14} />
-                    <span>Full-Day Leave</span>
+                    <span>Full-Day Permission</span>
                   </button>
 
                   <button
@@ -1529,7 +1529,7 @@ const FacultyDashboard = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
-                    {leaveType === 'FACULTY_EARLY_OUT' ? 'Date (Same Day)' : 'Leave Date'}
+                    {leaveType === 'FACULTY_EARLY_OUT' ? 'Date (Same Day)' : 'Permission Date'}
                   </label>
                   <input
                     type="date"

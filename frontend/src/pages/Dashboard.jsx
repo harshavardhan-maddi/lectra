@@ -27,6 +27,7 @@ import {
   Save,
   CheckCircle2,
   Trash2,
+  Lock,
   Settings,
   FileText,
   BadgeCheck,
@@ -52,7 +53,8 @@ import {
   deleteOutpassTicket,
   clearOldOutpasses,
   syncOutpassesFromBackend,
-  getStudentOutpassHistory
+  getStudentOutpassHistory,
+  isTicketDeleteLockedForHod
 } from '../services/outpassService';
 import {
   exportOverallData,
@@ -274,28 +276,47 @@ const Dashboard = ({ initialTab }) => {
     }
   };
 
-  const handleDeleteOutpass = async (ticketId, studentName) => {
-    if (!window.confirm(`Permanently delete outpass ticket ${ticketId}${studentName ? ` for ${studentName}` : ''}?`)) {
+  const canUserDeleteTicket = (ticket) => {
+    if (user?.role === 'SUPER_ADMIN') return true;
+    return !isTicketDeleteLockedForHod(ticket);
+  };
+
+  const handleDeleteOutpass = async (ticketId, applicantName) => {
+    const ticket = outpassTickets.find(t => t.id === ticketId);
+    if (!canUserDeleteTicket(ticket)) {
+      setOutpassActionError(
+        ticket?.applicantType === 'FACULTY'
+          ? 'Cannot delete accepted faculty permission after the scheduled permission time has passed. Only Super Admin can delete.'
+          : 'Cannot delete student outpass after permission granted and student departed campus. Only Super Admin can delete.'
+      );
+      return;
+    }
+
+    if (!window.confirm(`Permanently delete permission ticket ${ticketId}${applicantName ? ` for ${applicantName}` : ''}?`)) {
       return;
     }
     try {
       setOutpassActionError('');
-      await deleteOutpassTicket(ticketId);
-      setOutpassActionSuccess(`Outpass ticket ${ticketId} deleted successfully.`);
+      await deleteOutpassTicket(ticketId, user?.role);
+      setOutpassActionSuccess(`Permission ticket ${ticketId} deleted successfully.`);
       setTimeout(() => setOutpassActionSuccess(''), 3500);
     } catch (err) {
-      setOutpassActionError(err.message || 'Failed to delete outpass ticket');
+      setOutpassActionError(err.message || 'Failed to delete permission ticket');
     }
   };
 
   const handleClearOldOutpasses = async () => {
-    if (!window.confirm('Delete all old completed (Sent Out) and rejected outpass tickets from the database?')) {
+    if (user?.role !== 'SUPER_ADMIN') {
+      setOutpassActionError('Only Super Admin can bulk clear completed or departed tickets.');
+      return;
+    }
+    if (!window.confirm('Delete all old completed (Sent Out) and rejected tickets from the database?')) {
       return;
     }
     try {
       setOutpassActionError('');
-      await clearOldOutpasses();
-      setOutpassActionSuccess('All completed and rejected outpass tickets were cleared.');
+      await clearOldOutpasses(user?.role);
+      setOutpassActionSuccess('All completed and rejected tickets were cleared.');
       setTimeout(() => setOutpassActionSuccess(''), 3500);
     } catch (err) {
       setOutpassActionError(err.message || 'Failed to clear old tickets');
@@ -1772,7 +1793,7 @@ const Dashboard = ({ initialTab }) => {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-black text-customText dark:text-customText-dark tracking-tight flex items-center gap-2">
-                      <span>Faculty Leave & Early Out Applications</span>
+                      <span>Faculty Permissions & Early Out Applications</span>
                       {pendingFacultyTickets.length > 0 && (
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-700 dark:text-amber-400">
                           {pendingFacultyTickets.length} Pending
@@ -1789,10 +1810,10 @@ const Dashboard = ({ initialTab }) => {
                   <div className="p-8 text-center rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 space-y-2">
                     <CheckCircle2 size={28} className="mx-auto text-emerald-500" />
                     <h4 className="font-bold text-sm text-customText dark:text-customText-dark">
-                      No Pending Faculty Leave Requests
+                      No Pending Faculty Permission Requests
                     </h4>
                     <p className="text-xs text-customText-muted max-w-sm mx-auto">
-                      All faculty leave and early out permission applications have been processed.
+                      All faculty permission and early out applications have been processed.
                     </p>
                   </div>
                 ) : (
@@ -1824,7 +1845,7 @@ const Dashboard = ({ initialTab }) => {
                                 </span>
                               ) : (
                                 <span className="px-2.5 py-0.5 rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-400 text-xs font-black border border-blue-500/30">
-                                  Full-Day Leave
+                                  Full-Day Permission
                                 </span>
                               )}
                             </div>
@@ -1840,14 +1861,25 @@ const Dashboard = ({ initialTab }) => {
                               <FileText size={15} />
                               <span>Slip</span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteOutpass(ticket.id, ticket.facultyName)}
-                              className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                              title="Delete Request"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            {canUserDeleteTicket(ticket) ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOutpass(ticket.id, ticket.facultyName)}
+                                className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                                title="Delete Request"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60"
+                                title="Locked: Scheduled permission time has passed. Only Super Admin can delete."
+                              >
+                                <Lock size={15} />
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -1960,14 +1992,25 @@ const Dashboard = ({ initialTab }) => {
                           <FileText size={15} />
                           <span>Ticket</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteOutpass(ticket.id, ticket.studentName)}
-                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                          title="Delete Ticket"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {canUserDeleteTicket(ticket) ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOutpass(ticket.id, ticket.studentName)}
+                            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                            title="Delete Ticket"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60"
+                            title="Locked: Permission granted and student sent out. Only Super Admin can delete."
+                          >
+                            <Lock size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -2154,14 +2197,29 @@ const Dashboard = ({ initialTab }) => {
                             >
                               Slip
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteOutpass(t.id, t.studentName)}
-                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                              title="Delete this ticket permanently"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {canUserDeleteTicket(t) ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOutpass(t.id, t.studentName)}
+                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                                title="Delete this ticket permanently"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60"
+                                title={
+                                  t.applicantType === 'FACULTY'
+                                    ? "Locked: Scheduled permission time has passed. Only Super Admin can delete."
+                                    : "Locked: Permission granted and student sent out. Only Super Admin can delete."
+                                }
+                              >
+                                <Lock size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
