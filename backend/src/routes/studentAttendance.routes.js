@@ -252,11 +252,11 @@ router.post('/students', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), a
   }
 });
 
-// 1b. POST /verify-outpass-student - Match student details against HOD student registry
+// 1b. POST /verify-outpass-student - Fetch student details by roll number from HOD student registry
 router.post('/verify-outpass-student', async (req, res) => {
-  const { rollNumber, name } = req.body;
-  if (!rollNumber || !name) {
-    return res.status(400).json({ success: false, message: 'Please enter both your Roll Number and Full Name.' });
+  const { rollNumber } = req.body;
+  if (!rollNumber) {
+    return res.status(400).json({ success: false, message: 'Please enter your Roll Number.' });
   }
 
   try {
@@ -276,26 +276,6 @@ router.post('/verify-outpass-student', async (req, res) => {
       return res.status(404).json({
         success: false,
         message: `Roll Number "${cleanRoll.toUpperCase()}" not found in the student registry added by HOD. Please verify your roll number.`
-      });
-    }
-
-    // Name comparison (normalized + flexible word match)
-    const registeredCleanName = (student.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const inputCleanName = String(name).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-
-    const inputWords = String(name).trim().toLowerCase().split(/[\s,.-]+/).filter(w => w.length > 1);
-    const registeredWords = (student.name || '').toLowerCase().split(/[\s,.-]+/).filter(w => w.length > 1);
-
-    const wordOverlap = inputWords.length > 0 && inputWords.some(w => registeredWords.some(rw => rw.includes(w) || w.includes(rw)));
-    const isMatch = registeredCleanName === inputCleanName ||
-                    registeredCleanName.includes(inputCleanName) ||
-                    inputCleanName.includes(registeredCleanName) ||
-                    wordOverlap;
-
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: `Name does not match the registered record for Roll Number ${student.rollNumber}. Please enter your registered full name.`
       });
     }
 

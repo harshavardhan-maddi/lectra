@@ -137,10 +137,10 @@ export const maskPhoneNumber = (phone) => {
   return `••••••${last4}`;
 };
 
-// Lookup and match student by Roll Number AND Full Name against HOD registry (Live DB + Cache Fallback)
-export const lookupStudentByRollAndName = async (rollNumber, fullName) => {
-  if (!rollNumber || !fullName) {
-    return { success: false, error: 'Please enter both your Roll Number and Full Name.' };
+// Lookup and fetch student by Roll Number against HOD registry (Live DB + Cache Fallback)
+export const lookupStudentByRollAndName = async (rollNumber) => {
+  if (!rollNumber) {
+    return { success: false, error: 'Please enter your College Roll Number.' };
   }
 
   const cleanRoll = rollNumber.trim().toUpperCase();
@@ -150,7 +150,7 @@ export const lookupStudentByRollAndName = async (rollNumber, fullName) => {
     const res = await fetch('/api/student-attendance/verify-outpass-student', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rollNumber: cleanRoll, name: fullName.trim() })
+      body: JSON.stringify({ rollNumber: cleanRoll })
     });
 
     const data = await res.json();
@@ -165,7 +165,7 @@ export const lookupStudentByRollAndName = async (rollNumber, fullName) => {
       });
       return { success: true, student: data.student };
     } else if (data && data.message) {
-      // Backend returned explicit validation message (e.g., student not found in HOD registry or name mismatch)
+      // Backend returned explicit validation message (e.g., student not found in HOD registry)
       return { success: false, error: data.message };
     }
   } catch (netErr) {
@@ -182,27 +182,6 @@ export const lookupStudentByRollAndName = async (rollNumber, fullName) => {
     };
   }
 
-  // Normalize registered student name
-  const registeredCleanName = (studentByRoll.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const inputCleanName = fullName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  const inputWords = fullName.trim().toLowerCase().split(/[\s,.-]+/).filter(w => w.length > 1);
-  const registeredWords = (studentByRoll.name || '').toLowerCase().split(/[\s,.-]+/).filter(w => w.length > 1);
-
-  // Flexible match: exact, contains, or word overlap
-  const wordOverlap = inputWords.length > 0 && inputWords.some(w => registeredWords.some(rw => rw.includes(w) || w.includes(rw)));
-  const isMatch = registeredCleanName === inputCleanName ||
-                  registeredCleanName.includes(inputCleanName) ||
-                  inputCleanName.includes(registeredCleanName) ||
-                  wordOverlap;
-
-  if (!isMatch) {
-    return {
-      success: false,
-      error: `Name does not match the registered record for Roll Number ${cleanRoll}. Please enter your full registered name.`
-    };
-  }
-
   return {
     success: true,
     student: {
@@ -212,6 +191,8 @@ export const lookupStudentByRollAndName = async (rollNumber, fullName) => {
     }
   };
 };
+
+export const fetchStudentByRoll = lookupStudentByRollAndName;
 
 // Fallback lookup by roll number
 export const lookupStudentByRoll = (rollNumber) => {

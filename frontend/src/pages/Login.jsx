@@ -63,10 +63,9 @@ const Login = () => {
   const [progressWidth, setProgressWidth] = useState('0%');
 
   // Direct Student Leave Application Flow states
-  // Step 1: Enter Roll No & Full Name -> Step 2: Show Verified Details & Enter Reason -> Step 3: Submitted / Live Ticket
+  // Step 1: Enter Roll No -> Step 2: Show Verified Details & Enter Reason -> Step 3: Submitted / Live Ticket
   const [applyStep, setApplyStep] = useState(1);
   const [rollInput, setRollInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
   const [verifyError, setVerifyError] = useState('');
   const [matchedStudent, setMatchedStudent] = useState(null);
   const [outpassReason, setOutpassReason] = useState('');
@@ -243,7 +242,7 @@ const Login = () => {
 
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // Step 1: Look up and Match Student by Roll Number AND Full Name against HOD student registry
+  // Step 1: Look up and Fetch Student by Roll Number against HOD student registry
   const handleVerifyStudent = async (e) => {
     e.preventDefault();
     setVerifyError('');
@@ -252,14 +251,10 @@ const Login = () => {
       setVerifyError('Please enter your College Roll Number.');
       return;
     }
-    if (!nameInput.trim()) {
-      setVerifyError('Please enter your Full Name.');
-      return;
-    }
 
     setIsVerifying(true);
     try {
-      const result = await lookupStudentByRollAndName(rollInput, nameInput);
+      const result = await lookupStudentByRollAndName(rollInput);
       if (!result.success) {
         setVerifyError(result.error);
         return;
@@ -310,7 +305,6 @@ const Login = () => {
   const handleResetApplication = () => {
     setMatchedStudent(null);
     setRollInput('');
-    setNameInput('');
     setOutpassReason('');
     setVerifyError('');
     setApplyStep(1);
@@ -465,7 +459,7 @@ const Login = () => {
                       Apply Leave / Permission to Go Out
                     </h2>
                     <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
-                      {applyStep === 1 && 'Enter your roll number and full name to verify student particulars.'}
+                      {applyStep === 1 && 'Enter your roll number to fetch student particulars.'}
                       {applyStep === 2 && 'Review verified details and provide your reason for leaving campus.'}
                       {applyStep === 3 && 'Outpass request submitted successfully.'}
                     </p>
@@ -493,7 +487,7 @@ const Login = () => {
                 </div>
               )}
 
-              {/* STEP 1: Enter Roll Number AND Full Name to Match Details */}
+              {/* STEP 1: Enter Roll Number to Fetch Details */}
               {applyStep === 1 && (
                 <form onSubmit={handleVerifyStudent} className="space-y-5">
                   <div className="space-y-4">
@@ -514,26 +508,6 @@ const Login = () => {
                         required
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                        Student Full Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={nameInput}
-                        onChange={(e) => {
-                          setNameInput(e.target.value);
-                          if (verifyError) setVerifyError('');
-                        }}
-                        placeholder="e.g. A. Sai Krishna"
-                        className="glass-input text-sm py-3"
-                        required
-                      />
-                      <p className="text-[11px] text-customText-muted mt-1">
-                        Must match the student particulars added by HOD.
-                      </p>
-                    </div>
                   </div>
 
                   <button
@@ -544,11 +518,11 @@ const Login = () => {
                     {isVerifying ? (
                       <div className="flex items-center gap-2">
                         <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
-                        <span>Verifying with HOD Registry...</span>
+                        <span>Fetching Student Details...</span>
                       </div>
                     ) : (
                       <>
-                        <span>Match Student Details</span>
+                        <span>Fetch Student Details</span>
                         <ArrowRight size={17} />
                       </>
                     )}
