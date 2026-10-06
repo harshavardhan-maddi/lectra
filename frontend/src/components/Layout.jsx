@@ -543,6 +543,16 @@ const Layout = ({ children }) => {
               </div>
             )}
 
+            {/* Top Right Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs border border-red-500/20 transition-all active:scale-[0.98] ml-1"
+              title="Log Out of System"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+
           </div>
         </header>
 
