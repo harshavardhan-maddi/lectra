@@ -115,6 +115,54 @@ const CRDashboard = () => {
         if (accessData.afternoonAccess) setAfternoonAccess(accessData.afternoonAccess);
       }
 
+      // Check department-specific timings set by HOD or Super Admin
+      try {
+        const deptTimingsStr = localStorage.getItem('lectra_department_timings');
+        if (deptTimingsStr) {
+          const allDeptTimings = JSON.parse(deptTimingsStr);
+          const dept = user?.department || 'Department of CSE(emerging Technologies)';
+          const deptTiming = allDeptTimings[dept];
+          if (deptTiming) {
+            const mStart = deptTiming.morningStart || '09:10';
+            const mEnd = deptTiming.morningEnd || '10:30';
+            const aStart = deptTiming.afternoonStart || '13:30';
+            const aEnd = deptTiming.afternoonEnd || '15:00';
+
+            const now = new Date();
+            const currentMins = now.getHours() * 60 + now.getMinutes();
+
+            const [msH, msM] = mStart.split(':').map(Number);
+            const [meH, meM] = mEnd.split(':').map(Number);
+            const [asH, asM] = aStart.split(':').map(Number);
+            const [aeH, aeM] = aEnd.split(':').map(Number);
+
+            const mStartMins = msH * 60 + msM;
+            const mEndMins = meH * 60 + meM;
+            const aStartMins = asH * 60 + asM;
+            const aEndMins = aeH * 60 + aeM;
+
+            const mAllowed = currentMins >= mStartMins && currentMins <= mEndMins;
+            const aAllowed = currentMins >= aStartMins && currentMins <= aEndMins;
+
+            setMorningAccess({
+              allowed: mAllowed,
+              startTime: mStart,
+              endTime: mEnd,
+              reason: mAllowed ? 'Active' : `Morning window: ${mStart} - ${mEnd}`
+            });
+
+            setAfternoonAccess({
+              allowed: aAllowed,
+              startTime: aStart,
+              endTime: aEnd,
+              reason: aAllowed ? 'Active' : `Afternoon window: ${aStart} - ${aEnd}`
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('CR department timing check notice:', e);
+      }
+
       // Fetch all students in CR's class
       const studRes = await fetch('/api/student-attendance/students', {
         headers: { 'Authorization': `Bearer ${token}` }
