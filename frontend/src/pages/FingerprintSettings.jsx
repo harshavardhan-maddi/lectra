@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { startRegistration } from '@simplewebauthn/browser';
+import AttendanceTimings from '../components/AttendanceTimings';
 import {
   Fingerprint,
   Trash2,
@@ -12,7 +13,8 @@ import {
   X,
   Info,
   KeyRound,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 
 const FingerprintSettings = () => {
@@ -271,13 +273,46 @@ const FingerprintSettings = () => {
         </p>
       </div>
 
-      {/* Active Section Header */}
+      {/* Active Section Header Navigation Tabs */}
       {user?.role !== 'ABSENT_CONTROLLER' && (
-        <div className="flex items-center gap-3 py-2 no-print">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary/10 text-primary-dark dark:text-primary font-bold text-sm border border-primary/20">
-            {activeTab === 'security' ? <Fingerprint size={16} /> : <ShieldCheck size={16} />}
-            <span>{activeTab === 'security' ? 'Fingerprint Security Module' : 'CR Attendance Overrides'}</span>
-          </div>
+        <div className="flex flex-wrap items-center gap-2 py-2 border-b border-slate-200/60 dark:border-slate-800/60 no-print">
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeTab === 'security'
+                ? 'bg-primary-dark text-white shadow-md shadow-primary-dark/20'
+                : 'bg-white/40 dark:bg-slate-900/40 text-customText-muted hover:text-customText border border-slate-200/40 dark:border-slate-800/40'
+            }`}
+          >
+            <Fingerprint size={16} />
+            <span>Fingerprint Security</span>
+          </button>
+
+          {(user?.role === 'SUPER_ADMIN' || user?.role === 'HOD' || user?.role === 'SUB_ADMIN') && (
+            <button
+              onClick={() => setActiveTab('timings')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+                activeTab === 'timings'
+                  ? 'bg-primary-dark text-white shadow-md shadow-primary-dark/20'
+                  : 'bg-white/40 dark:bg-slate-900/40 text-customText-muted hover:text-customText border border-slate-200/40 dark:border-slate-800/40'
+              }`}
+            >
+              <Clock size={16} />
+              <span>Attendance Timings</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setActiveTab('overrides')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeTab === 'overrides'
+                ? 'bg-primary-dark text-white shadow-md shadow-primary-dark/20'
+                : 'bg-white/40 dark:bg-slate-900/40 text-customText-muted hover:text-customText border border-slate-200/40 dark:border-slate-800/40'
+            }`}
+          >
+            <ShieldCheck size={16} />
+            <span>CR Overrides</span>
+          </button>
         </div>
       )}
 
@@ -570,6 +605,11 @@ const FingerprintSettings = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* PANEL 3: ATTENDANCE TIMINGS */}
+      {activeTab === 'timings' && (
+        <AttendanceTimings />
       )}
 
       {/* Security Verification Modal */}

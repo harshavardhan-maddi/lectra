@@ -138,6 +138,7 @@ const Layout = ({ children }) => {
       { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
       { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
       { name: 'Data Backup', path: '/backup', icon: Database },
+      { name: 'Attendance Timings', path: '/settings?tab=timings', icon: Clock },
       { name: 'Fingerprint Settings', path: '/settings', icon: Settings },
       { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
     );
@@ -156,6 +157,7 @@ const Layout = ({ children }) => {
       navLinks.push({ name: 'Data Backup', path: '/backup', icon: Database });
     }
     navLinks.push(
+      { name: 'Attendance Timings', path: '/settings?tab=timings', icon: Clock },
       { name: 'Fingerprint Settings', path: '/settings', icon: Settings },
       { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
     );

@@ -12,7 +12,13 @@ import {
   X,
   Pencil,
   KeyRound,
-  ShieldAlert
+  ShieldAlert,
+  UploadCloud,
+  FileSpreadsheet,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+  FileText
 } from 'lucide-react';
 
 const ManageUsers = () => {
@@ -48,7 +54,141 @@ const ManageUsers = () => {
   const [editPassword, setEditPassword] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
 
+  // Faculty CSV Batch Creation state
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvRawText, setCsvRawText] = useState('');
+  const [parsedFacultyList, setParsedFacultyList] = useState([]);
+  const [csvTargetDept, setCsvTargetDept] = useState(
+    currentUser?.department || 'Department of CSE(emerging Technologies)'
+  );
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvProgress, setCsvProgress] = useState(null);
+  const [csvModalError, setCsvModalError] = useState('');
+  const [csvModalSuccess, setCsvModalSuccess] = useState('');
+
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
+  const parseCsvText = (text) => {
+    setCsvModalError('');
+    setCsvModalSuccess('');
+    if (!text || !text.trim()) {
+      setParsedFacultyList([]);
+      return;
+    }
+
+    const lines = text.split(/\r?\n/);
+    const parsed = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      let parts = line.split(',');
+      if (parts.length < 2 && line.includes('\t')) {
+        parts = line.split('\t');
+      }
+
+      if (parts.length >= 2) {
+        let fName = parts[0].replace(/^["']|["']$/g, '').trim();
+        let uId = parts[1].replace(/^["']|["']$/g, '').trim();
+
+        const lowerName = fName.toLowerCase();
+        const lowerId = uId.toLowerCase();
+        if (
+          lowerName.includes('faculty name') || 
+          (lowerName.includes('name') && lowerId.includes('login')) ||
+          (lowerName.includes('name') && lowerId.includes('user id')) ||
+          lowerId.includes('login id')
+        ) {
+          continue;
+        }
+
+        if (fName && uId) {
+          parsed.push({ name: fName, userId: uId });
+        }
+      }
+    }
+
+    setParsedFacultyList(parsed);
+    if (parsed.length === 0) {
+      setCsvModalError('No valid faculty records found. Format: Faculty Name, Login ID');
+    }
+  };
+
+  const handleCsvFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const content = evt.target.result;
+      setCsvRawText(content);
+      parseCsvText(content);
+    };
+    reader.onerror = () => {
+      setCsvModalError('Failed to read CSV file');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBatchImportFaculty = async () => {
+    if (parsedFacultyList.length === 0) {
+      setCsvModalError('Please upload or paste valid CSV data with Faculty Name and Login ID');
+      return;
+    }
+
+    setCsvUploading(true);
+    setCsvModalError('');
+    setCsvModalSuccess('');
+    setCsvProgress({ current: 0, total: parsedFacultyList.length, successCount: 0, failCount: 0 });
+
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+
+    const assignedDept = isSuperAdmin
+      ? csvTargetDept
+      : (currentUser?.department || 'Department of CSE(emerging Technologies)');
+
+    for (let i = 0; i < parsedFacultyList.length; i++) {
+      const item = parsedFacultyList[i];
+      try {
+        await registerUser(
+          item.name,
+          item.userId,
+          'nrtec@nec',
+          'FACULTY',
+          null,
+          assignedDept
+        );
+        successCount++;
+      } catch (err) {
+        failCount++;
+        errors.push(`${item.name} (${item.userId}): ${err.message || 'Failed'}`);
+      }
+
+      setCsvProgress({
+        current: i + 1,
+        total: parsedFacultyList.length,
+        successCount,
+        failCount
+      });
+    }
+
+    setCsvUploading(false);
+
+    if (successCount > 0) {
+      setCsvModalSuccess(`Successfully created ${successCount} faculty login accounts with password "nrtec@nec"!`);
+      setSuccess(`Batch imported ${successCount} faculty accounts into ${assignedDept}.`);
+      setParsedFacultyList([]);
+      setCsvRawText('');
+      loadData();
+    }
+
+    if (failCount > 0) {
+      setCsvModalError(`Failed to import ${failCount} accounts (e.g. User ID already exists). Details: ${errors.slice(0, 3).join('; ')}`);
+    }
+  };
 
   const loadData = async (filterToUse = deptFilter) => {
     try {
@@ -236,13 +376,27 @@ const ManageUsers = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddUserModal(true)}
-          className="btn-primary"
-        >
-          <UserPlus size={18} />
-          <span>Create User Account</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              setCsvModalError('');
+              setCsvModalSuccess('');
+              setShowCsvModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm shadow-md transition-all active:scale-[0.98]"
+          >
+            <UploadCloud size={18} />
+            <span>Upload Faculty CSV</span>
+          </button>
+
+          <button
+            onClick={() => setShowAddUserModal(true)}
+            className="btn-primary"
+          >
+            <UserPlus size={18} />
+            <span>Create User Account</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -746,6 +900,200 @@ const ManageUsers = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* FACULTY CSV BULK IMPORT MODAL */}
+      {showCsvModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  <UploadCloud size={22} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-customText dark:text-customText-dark">
+                    Batch Create Faculty Logins (.CSV)
+                  </h3>
+                  <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                    Upload a CSV file containing Faculty Name and Login ID
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowCsvModal(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                disabled={csvUploading}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              
+              {/* Default Password Banner */}
+              <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300 font-bold">
+                  <KeyRound size={16} />
+                  <span>Default Common Password: <code className="bg-purple-950/20 dark:bg-purple-950/60 px-2 py-0.5 rounded font-mono text-purple-600 dark:text-purple-300 border border-purple-500/30">nrtec@nec</code></span>
+                </div>
+                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-purple-600 text-white">Auto-Assigned</span>
+              </div>
+
+              {csvModalError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
+                  ⚠️ {csvModalError}
+                </div>
+              )}
+
+              {csvModalSuccess && (
+                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
+                  ✅ {csvModalSuccess}
+                </div>
+              )}
+
+              {/* Department Selector for Super Admin */}
+              {isSuperAdmin && (
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                    Target Department for Faculty Logins
+                  </label>
+                  <select
+                    value={csvTargetDept}
+                    onChange={(e) => setCsvTargetDept(e.target.value)}
+                    className="glass-input text-sm"
+                    disabled={csvUploading}
+                  >
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* File Upload Drop Zone */}
+              <div>
+                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                  1. Select CSV File
+                </label>
+                <input
+                  type="file"
+                  accept=".csv,.txt"
+                  onChange={handleCsvFileUpload}
+                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 dark:file:bg-purple-950/40 dark:file:text-purple-300 cursor-pointer border border-slate-200 dark:border-slate-800 rounded-xl p-1"
+                  disabled={csvUploading}
+                />
+              </div>
+
+              {/* CSV Text Area Fallback */}
+              <div>
+                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                  Or Paste CSV Content Directly
+                </label>
+                <textarea
+                  rows={4}
+                  value={csvRawText}
+                  onChange={(e) => {
+                    setCsvRawText(e.target.value);
+                    parseCsvText(e.target.value);
+                  }}
+                  placeholder={`Faculty Name, Login ID\nDr. John Smith, CSE001\nProf. Jane Doe, CSE002`}
+                  className="glass-input font-mono text-xs p-3 leading-relaxed"
+                  disabled={csvUploading}
+                />
+                <p className="text-[10px] text-customText-muted dark:text-customText-mutedDark mt-1">
+                  Format per line: <span className="font-semibold text-customText dark:text-customText-dark">Faculty Name, Login ID</span> (e.g. "Dr. Ramesh, CSE101")
+                </p>
+              </div>
+
+              {/* Parsed Preview Table */}
+              {parsedFacultyList.length > 0 && (
+                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                      📋 Preview Ready ({parsedFacultyList.length} Accounts Found)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setParsedFacultyList([]);
+                        setCsvRawText('');
+                      }}
+                      className="text-[11px] text-slate-400 hover:text-red-500 underline"
+                      disabled={csvUploading}
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 p-2">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="text-[10px] text-slate-400 uppercase border-b border-slate-200 dark:border-slate-800">
+                          <th className="py-1 px-2">#</th>
+                          <th className="py-1 px-2">Faculty Name</th>
+                          <th className="py-1 px-2">Login ID</th>
+                          <th className="py-1 px-2">Password</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
+                        {parsedFacultyList.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="py-1.5 px-2 text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="py-1.5 px-2 font-bold text-customText dark:text-customText-dark">{item.name}</td>
+                            <td className="py-1.5 px-2 font-mono text-purple-600 dark:text-purple-400">{item.userId}</td>
+                            <td className="py-1.5 px-2 font-mono text-slate-400">nrtec@nec</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Progress Indicator */}
+              {csvProgress && (
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span>Import Progress</span>
+                    <span>{csvProgress.current} / {csvProgress.total}</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-purple-600 transition-all duration-200"
+                      style={{ width: `${(csvProgress.current / csvProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button 
+                type="button" 
+                onClick={() => setShowCsvModal(false)} 
+                className="btn-secondary"
+                disabled={csvUploading}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleBatchImportFaculty}
+                disabled={csvUploading || parsedFacultyList.length === 0}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm shadow-lg disabled:opacity-50 transition-all"
+              >
+                <UploadCloud size={16} />
+                <span>
+                  {csvUploading 
+                    ? `Creating Logins (${csvProgress?.current || 0}/${csvProgress?.total || 0})...` 
+                    : `Create ${parsedFacultyList.length} Faculty Accounts`}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
