@@ -76,7 +76,9 @@ const ManageUsers = () => {
       return;
     }
 
-    const lines = text.split(/\r?\n/);
+    // Strip UTF-8 BOM if present from Excel exports
+    const cleanText = text.replace(/^\uFEFF/, '');
+    const lines = cleanText.split(/\r?\n/);
     const parsed = [];
 
     for (let i = 0; i < lines.length; i++) {
@@ -98,6 +100,7 @@ const ManageUsers = () => {
           lowerName.includes('faculty name') || 
           (lowerName.includes('name') && lowerId.includes('login')) ||
           (lowerName.includes('name') && lowerId.includes('user id')) ||
+          (lowerName.includes('name') && lowerId.includes('id')) ||
           lowerId.includes('login id')
         ) {
           continue;
