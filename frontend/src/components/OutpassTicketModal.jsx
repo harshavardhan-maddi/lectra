@@ -112,11 +112,19 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             color: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/40 font-black',
             step: 2
           };
+        case 'FACULTY_OUT':
+          return {
+            label: 'OUTSIDE CAMPUS • AWAITING IN-TIME RETURN',
+            color: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/40 font-black',
+            step: 3
+          };
         case 'SENT_OUT':
           return {
-            label: 'FINAL SLIP GENERATED • FACULTY DEPARTED',
+            label: ticket.returned || ticket.inTime 
+              ? `RETURNED TO CAMPUS (${ticket.inTime}) • CLOSED` 
+              : 'FINAL SLIP GENERATED • DEPARTED & CLOSED',
             color: 'bg-purple-500/15 text-purple-800 dark:text-purple-300 border-purple-500/40 font-black',
-            step: 3
+            step: 4
           };
         case 'REJECTED':
           return {
@@ -329,9 +337,11 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             }`}>
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-900">
                 {isFaculty 
-                  ? (ticket.type === 'FACULTY_EARLY_OUT' 
-                      ? (isApproved ? 'Official Faculty Early Out Departure Slip (Approved)' : 'Faculty Early Out Application (Pending HOD Approval)')
-                      : (isApproved ? 'Official Faculty Permission & Gate Clearance Slip (Approved)' : 'Faculty Permission Application (Pending HOD Approval)'))
+                  ? (ticket.type === 'FACULTY_4PM'
+                      ? (isApproved ? 'Official Faculty 4:00 PM Permission & Gate Departure Slip (Approved)' : 'Faculty 4:00 PM Permission Application (Pending HOD Approval)')
+                      : ticket.type === 'FACULTY_ONE_HOUR'
+                        ? (isApproved ? 'Official Faculty 1-Hour Permission & Gate Clearance Slip (Approved)' : 'Faculty 1-Hour Permission Application (Pending HOD Approval)')
+                        : (isApproved ? 'Official Faculty Permission & Gate Clearance Slip (Approved)' : 'Faculty Permission Application (Pending HOD Approval)'))
                   : (isApproved ? 'Official Student Leave & Campus Gate Pass Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
               </h2>
             </div>
@@ -370,21 +380,33 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                         Permission Type
                       </td>
                       <td className="p-2 font-bold text-primary-dark">
-                        {ticket.type === 'FACULTY_EARLY_OUT' ? 'Early Out Permission (Same Day)' : 'Full-Day Leave'}
+                        {ticket.type === 'FACULTY_4PM' 
+                          ? '4:00 PM Permission' 
+                          : ticket.type === 'FACULTY_ONE_HOUR' 
+                            ? '1-Hour Permission' 
+                            : ticket.type === 'FACULTY_EARLY_OUT' 
+                              ? 'Early Out Permission' 
+                              : 'Full-Day Leave'}
                       </td>
                     </tr>
                     <tr className="border-b border-slate-300">
                       <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                        Scheduled Date
+                        Scheduled Out Time
                       </td>
                       <td className="p-2 font-semibold text-slate-900 border-r border-slate-300">
-                        {ticket.date || ticket.appliedDate}
+                        {ticket.date || ticket.appliedDate} • {ticket.leaveTime || '04:00 PM'}
                       </td>
                       <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
-                        Time to Leave / Departure
+                        College Return / In-Time
                       </td>
                       <td className="p-2 font-bold text-slate-900">
-                        {ticket.leaveTime || 'Full Day'}
+                        {ticket.type === 'FACULTY_4PM' 
+                          ? 'Not Required (Closed upon 4 PM exit)' 
+                          : (ticket.returned || ticket.inTime)
+                            ? `${ticket.inTime} (Recorded by Security - Closed)` 
+                            : ticket.status === 'FACULTY_OUT' 
+                              ? 'Outside Campus (Return Pending)' 
+                              : 'Pending Departure'}
                       </td>
                     </tr>
                     <tr>
@@ -495,7 +517,9 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">3. Main Gate Security Head</td>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">
+                        {ticket.type === 'FACULTY_4PM' ? '3. Main Gate Departure (4 PM)' : '3. Main Gate Departure (Out)'}
+                      </td>
                       <td className="p-2 border-r border-slate-300 font-bold">
                         {ticket.watchmanAction?.watchmanName || 'Campus Main Gate Security Head'}
                       </td>
@@ -504,7 +528,11 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       </td>
                       <td className="p-2 font-semibold">
                         {ticket.watchmanAction?.sentOut ? (
-                          <span className="text-purple-700 font-bold">✓ Final Slip Generated & Departed</span>
+                          <span className="text-purple-700 font-bold">
+                            {ticket.type === 'FACULTY_4PM' 
+                              ? '✓ Final Slip Generated • 4 PM Departure Completed & Closed' 
+                              : '✓ Final Slip Generated • Departed on 1-Hour Permission'}
+                          </span>
                         ) : isApproved ? (
                           <span className="text-emerald-700 font-bold">Gate Pass Approved • Forwarded to Security Head</span>
                         ) : (
@@ -512,6 +540,26 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                         )}
                       </td>
                     </tr>
+                    {ticket.type === 'FACULTY_ONE_HOUR' && (
+                      <tr>
+                        <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">4. Campus Entry (In-Time Record)</td>
+                        <td className="p-2 border-r border-slate-300 font-bold">
+                          {ticket.watchmanAction?.inTimeRecordedBy || 'Campus Main Gate Security Head'}
+                        </td>
+                        <td className="p-2 font-mono border-r border-slate-300">
+                          {ticket.inTime || '—'}
+                        </td>
+                        <td className="p-2 font-semibold">
+                          {ticket.returned ? (
+                            <span className="text-emerald-700 font-bold">✓ Returned to College • Permission Closed & Notified to HOD</span>
+                          ) : ticket.status === 'FACULTY_OUT' ? (
+                            <span className="text-amber-700 font-bold">⏳ Currently Outside Campus • Awaiting Return</span>
+                          ) : (
+                            <span className="text-slate-400">Pending Gate Departure First</span>
+                          )}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               ) : (

@@ -290,7 +290,7 @@ export const syncOutpassesFromBackend = async () => {
 export const hasPermissionTimePassed = (ticket) => {
   if (!ticket) return false;
   // If already departed / sent out at gate, time has passed
-  if (ticket.status === 'SENT_OUT' || ticket.watchmanAction?.sentOut) {
+  if (ticket.status === 'SENT_OUT' || ticket.status === 'FACULTY_OUT' || ticket.watchmanAction?.sentOut) {
     return true;
   }
   
@@ -338,11 +338,12 @@ export const isTicketDeleteLockedForHod = (ticket) => {
   const isFaculty = ticket.applicantType === 'FACULTY';
   const isHodAccepted = ticket.hodAction?.granted === true || 
                         ticket.status === 'PERMISSION_GRANTED' || 
+                        ticket.status === 'FACULTY_OUT' ||
                         ticket.status === 'SENT_OUT';
 
   if (isFaculty) {
-    // Faculty: HOD accepted and current time crosses faculty taken permission time
-    if (isHodAccepted && hasPermissionTimePassed(ticket)) {
+    // Faculty: HOD accepted and current time crosses faculty taken permission time or already departed
+    if (isHodAccepted && (hasPermissionTimePassed(ticket) || ticket.status === 'FACULTY_OUT' || ticket.status === 'SENT_OUT')) {
       return true;
     }
   } else {
@@ -718,13 +719,13 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
   };
 };
 
-// Apply for Faculty Full-Day Leave or Early Out Permission
+// Apply for Faculty Permission (Only One Hour or 4:00 PM Permission)
 export const applyFacultyLeave = async ({
   facultyId,
   facultyUserId,
   facultyName,
   department = 'Department of CSE(emerging Technologies)',
-  type = 'FACULTY_LEAVE', // 'FACULTY_LEAVE' or 'FACULTY_EARLY_OUT'
+  type = 'FACULTY_ONE_HOUR', // 'FACULTY_ONE_HOUR' or 'FACULTY_4PM'
   date,
   leaveTime,
   purpose
@@ -736,11 +737,21 @@ export const applyFacultyLeave = async ({
   const selectedDate = date || new Date().toISOString().slice(0, 10);
   const cleanDepartment = (department && department !== 'General') ? department : 'Department of CSE(emerging Technologies)';
 
-  if (type === 'FACULTY_EARLY_OUT' && (!leaveTime || !leaveTime.trim())) {
-    throw new Error('Please specify the time you need to leave early.');
+  // Determine final leave / out time
+  let finalLeaveTime = leaveTime;
+  if (type === 'FACULTY_4PM') {
+    // 4 PM permission is fixed to 4:00 PM itself
+    finalLeaveTime = '04:00 PM';
+  } else if (type === 'FACULTY_ONE_HOUR') {
+    if (!leaveTime || !leaveTime.trim()) {
+      throw new Error('Please specify what time you need to be out for the 1-hour permission.');
+    }
+    finalLeaveTime = leaveTime.trim();
+  } else if (!finalLeaveTime || !finalLeaveTime.trim()) {
+    finalLeaveTime = '04:00 PM';
   }
 
-  // 1. Strict Monthly Limit Check (2 leaves per month, resets every month, no carryover)
+  // 1. Strict Monthly Limit Check (2 permissions per month, resets every month, no carryover)
   const quota = getFacultyMonthlyLeaveUsage(facultyUserId || facultyName || facultyId, selectedDate);
   if (quota.isLimitExceeded) {
     throw new Error("your limit for leaves has been completed , consult principal.");
@@ -749,22 +760,24 @@ export const applyFacultyLeave = async ({
   const now = new Date();
   const dateCompact = selectedDate.replace(/-/g, '');
   const randomNum = Math.floor(1000 + Math.random() * 9000);
-  const prefix = type === 'FACULTY_EARLY_OUT' ? 'NEC-FAC-EARLY' : 'NEC-FAC-LEAVE';
+  const prefix = type === 'FACULTY_4PM' ? 'NEC-FAC-4PM' : 'NEC-FAC-1HR';
   const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
 
   const newTicket = {
     id: ticketId,
     applicantType: 'FACULTY',
-    type, // 'FACULTY_LEAVE' | 'FACULTY_EARLY_OUT'
+    type, // 'FACULTY_ONE_HOUR' | 'FACULTY_4PM' (or legacy fallback)
+    permissionType: type,
     facultyId,
     facultyUserId: facultyUserId || '',
     facultyName: facultyName || 'Faculty Member',
     department: cleanDepartment,
     date: selectedDate,
-    leaveTime: type === 'FACULTY_EARLY_OUT' ? leaveTime : 'Full Day',
+    leaveTime: finalLeaveTime,
+    outTime: finalLeaveTime,
     purpose: purpose.trim(),
     reason: purpose.trim(), // for unified compatibility
-    destination: 'Personal / Official Duty',
+    destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : '1-Hour Permission',
     rollNumber: facultyUserId || 'FACULTY',
     studentName: facultyName || 'Faculty Member',
     section: cleanDepartment,
@@ -773,11 +786,16 @@ export const applyFacultyLeave = async ({
     appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     
     // Status Flow for Faculty:
-    // 1. FORWARDED_TO_HOD: Faculty submitted -> Goes directly to HOD (no parent call needed)
-    // 2. PERMISSION_GRANTED: HOD accepted & forwarded to watchman -> Watchman sees at gate
-    // 3. SENT_OUT: Watchman generated final slip & allowed gate departure
-    // 4. REJECTED: HOD rejected the request
+    // 1. FORWARDED_TO_HOD: Faculty submitted -> Goes directly to HOD
+    // 2. PERMISSION_GRANTED: HOD accepted & forwarded to Security/Watchman
+    // 3. For 4 PM: Watchman sends out -> ticket status 'SENT_OUT' & closed = true (Completed)
+    // 4. For 1-Hour: Watchman sends out -> ticket status 'FACULTY_OUT' & pendingReturn = true.
+    //    When faculty returns, Security enters in-time -> status 'SENT_OUT', closed = true & HOD notified.
     status: 'FORWARDED_TO_HOD',
+    pendingReturn: false,
+    returned: false,
+    closed: false,
+    inTime: null,
     hodAction: null,
     watchmanAction: null
   };
@@ -821,14 +839,18 @@ export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department
   ticket.status = 'PERMISSION_GRANTED';
   if (timeToLeave) {
     ticket.leaveTime = timeToLeave;
+    ticket.outTime = timeToLeave;
   }
+
+  const isOneHour = ticket.type === 'FACULTY_ONE_HOUR';
+  const typeDesc = isOneHour ? `1-hour permission (Out: ${ticket.leaveTime})` : '4:00 PM permission';
 
   ticket.hodAction = {
     granted: true,
     approvedAt: now.toISOString(),
     displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     displayDate: now.toLocaleDateString('en-GB'),
-    remarks: remarks || `Permission accepted for ${ticket.type === 'FACULTY_EARLY_OUT' ? `early out at ${ticket.leaveTime}` : 'full day leave'}. Forwarded to watchman login.`,
+    remarks: remarks || `Permission accepted for ${typeDesc}. Forwarded to security.`,
     hodName,
     timeToLeave: ticket.leaveTime
   };
@@ -837,27 +859,129 @@ export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department
   return ticket;
 };
 
-// Security Head generates final slip and marks faculty departed (NO ID check needed for faculty)
-export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Campus Security Head', remarks = 'Final slip generated. Faculty departure permitted.' } = {}) => {
+// Security Head marks faculty departed at the gate
+// - For 4 PM: ticket is completed and closed immediately upon sending out
+// - For 1-Hour: ticket is marked FACULTY_OUT (pending return to college)
+export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Campus Security Head', remarks = '' } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Faculty gate pass not found');
 
   const now = new Date();
-  ticket.status = 'SENT_OUT';
-  ticket.watchmanAction = {
-    sentOut: true,
-    physicalIdVerified: false, // Bypassed for faculty as requested
-    finalSlipGenerated: true,
-    exitTime: now.toISOString(),
-    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    displayDate: now.toLocaleDateString('en-GB'),
-    remarks,
-    watchmanName
-  };
+  const isOneHour = ticket.type === 'FACULTY_ONE_HOUR';
+
+  if (isOneHour) {
+    // 1-Hour Permission: Faculty leaves campus, return is pending
+    ticket.status = 'FACULTY_OUT';
+    ticket.pendingReturn = true;
+    ticket.returned = false;
+    ticket.closed = false;
+    ticket.watchmanAction = {
+      sentOut: true,
+      physicalIdVerified: false,
+      finalSlipGenerated: true,
+      exitTime: now.toISOString(),
+      displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      displayDate: now.toLocaleDateString('en-GB'),
+      remarks: remarks || 'Faculty departed campus on 1-hour permission. Return to college pending.',
+      watchmanName
+    };
+  } else {
+    // 4 PM Permission (or legacy early out / leave): No return required, closed immediately
+    ticket.status = 'SENT_OUT';
+    ticket.pendingReturn = false;
+    ticket.returned = false;
+    ticket.closed = true;
+    ticket.watchmanAction = {
+      sentOut: true,
+      physicalIdVerified: false,
+      finalSlipGenerated: true,
+      exitTime: now.toISOString(),
+      displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      displayDate: now.toLocaleDateString('en-GB'),
+      remarks: remarks || 'Faculty departed campus for 4 PM permission. Ticket closed.',
+      watchmanName,
+      closed: true
+    };
+  }
 
   saveOutpasses(tickets);
   return ticket;
+};
+
+// Security enters the In-Time when faculty returns to college on 1-Hour Permission
+// Closes the ticket and notifies HOD
+export const watchmanRecordFacultyInTime = (ticketId, { inTime = null, watchmanName = 'Campus Security Head', remarks = 'Faculty entered back into college within permission time.' } = {}) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) throw new Error('Faculty permission ticket not found');
+
+  const now = new Date();
+  const formattedInTime = inTime && inTime.trim() 
+    ? inTime.trim() 
+    : now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  ticket.status = 'SENT_OUT';
+  ticket.pendingReturn = false;
+  ticket.returned = true;
+  ticket.closed = true;
+  ticket.inTime = formattedInTime;
+  ticket.inTimeRecordedAt = now.toISOString();
+  ticket.inTimeRecordedBy = watchmanName;
+  ticket.hodNotified = true;
+  ticket.hodNotification = {
+    id: `notif-${ticket.id}-${Date.now()}`,
+    ticketId: ticket.id,
+    facultyName: ticket.facultyName || ticket.studentName,
+    facultyUserId: ticket.facultyUserId,
+    department: ticket.department,
+    outTime: ticket.watchmanAction?.displayTime || ticket.leaveTime,
+    inTime: formattedInTime,
+    date: ticket.date || ticket.appliedDate,
+    timestamp: now.toISOString(),
+    message: `Faculty ${ticket.facultyName || ticket.studentName} has entered back into college at ${formattedInTime}. 1-Hour permission closed.`,
+    unread: true
+  };
+
+  if (!ticket.watchmanAction) {
+    ticket.watchmanAction = { sentOut: true };
+  }
+  ticket.watchmanAction.inTime = formattedInTime;
+  ticket.watchmanAction.inTimeRecordedAt = now.toISOString();
+  ticket.watchmanAction.inTimeRecordedBy = watchmanName;
+  ticket.watchmanAction.returnRemarks = remarks;
+  ticket.watchmanAction.closed = true;
+
+  saveOutpasses(tickets);
+  window.dispatchEvent(new CustomEvent('lectra_faculty_returned', { detail: ticket }));
+  return ticket;
+};
+
+// Mark HOD return notification as read / dismissed
+export const markHodNotificationRead = (ticketId) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (ticket && ticket.hodNotification) {
+    ticket.hodNotification.unread = false;
+    saveOutpasses(tickets);
+  }
+  return tickets;
+};
+
+// Clear / dismiss all HOD return notifications
+export const clearAllHodReturnNotifications = () => {
+  const tickets = getAllOutpasses();
+  let changed = false;
+  tickets.forEach(t => {
+    if (t.hodNotification && t.hodNotification.unread) {
+      t.hodNotification.unread = false;
+      changed = true;
+    }
+  });
+  if (changed) {
+    saveOutpasses(tickets);
+  }
+  return tickets;
 };
 
 // Get faculty leave history for a specific faculty member

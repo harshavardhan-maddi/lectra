@@ -40,7 +40,9 @@ import {
   FileArchive,
   HardDrive,
   ArrowDownToLine,
-  ShieldCheck as ShieldIcon
+  ShieldCheck as ShieldIcon,
+  BellRing,
+  LogIn
 } from 'lucide-react';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
@@ -54,7 +56,9 @@ import {
   clearOldOutpasses,
   syncOutpassesFromBackend,
   getStudentOutpassHistory,
-  isTicketDeleteLockedForHod
+  isTicketDeleteLockedForHod,
+  markHodNotificationRead,
+  clearAllHodReturnNotifications
 } from '../services/outpassService';
 import {
   exportOverallData,
@@ -1776,13 +1780,74 @@ const Dashboard = ({ initialTab }) => {
             </div>
             <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Sent Out by Watchman</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'SENT_OUT').length}</span>
+              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'SENT_OUT' || t.status === 'FACULTY_OUT').length}</span>
             </div>
             <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-customText-muted">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Total Applications</span>
               <span className="text-2xl font-black">{outpassTickets.length}</span>
             </div>
           </div>
+
+          {/* Faculty Campus Return Notification Banner (Notified to HOD when 1-hour permission faculty returns) */}
+          {(() => {
+            const unreadReturnNotifs = outpassTickets.filter(t => t.hodNotification && t.hodNotification.unread);
+            if (unreadReturnNotifs.length === 0) return null;
+            return (
+              <div className="p-5 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 space-y-3 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 text-emerald-800 dark:text-emerald-300 font-black text-sm">
+                    <BellRing size={20} className="animate-bounce" />
+                    <span>Faculty Campus Return Alerts ({unreadReturnNotifs.length})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => clearAllHodReturnNotifications()}
+                    className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline font-bold cursor-pointer"
+                  >
+                    Dismiss All
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {unreadReturnNotifs.map((t) => (
+                    <div 
+                      key={t.id}
+                      className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-500/30 flex flex-col justify-between gap-3 text-xs shadow-sm"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-black text-slate-900 dark:text-white text-sm">
+                            {t.hodNotification.facultyName || t.facultyName}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-extrabold text-[10px]">
+                            1-Hour Permission Closed
+                          </span>
+                        </div>
+                        <p className="text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+                          {t.hodNotification.message}
+                        </p>
+                        <div className="text-[10px] text-customText-muted flex flex-wrap gap-x-3 pt-1 border-t border-slate-100 dark:border-slate-800">
+                          <span><strong>Departed Out:</strong> {t.hodNotification.outTime}</span>
+                          <span><strong>College Entry In:</strong> {t.hodNotification.inTime}</span>
+                          <span><strong>Date:</strong> {t.hodNotification.date}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => markHodNotificationRead(t.id)}
+                          className="py-1 px-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText text-[11px] font-bold cursor-pointer transition-colors"
+                        >
+                          Acknowledge & Close Alert
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Section 1: Faculty Leave & Early Out Applications */}
           {(() => {
@@ -1793,7 +1858,7 @@ const Dashboard = ({ initialTab }) => {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-black text-customText dark:text-customText-dark tracking-tight flex items-center gap-2">
-                      <span>Faculty Permissions & Early Out Applications</span>
+                      <span>Faculty Permissions (1-Hour & 4:00 PM Applications)</span>
                       {pendingFacultyTickets.length > 0 && (
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-700 dark:text-amber-400">
                           {pendingFacultyTickets.length} Pending
@@ -1801,7 +1866,7 @@ const Dashboard = ({ initialTab }) => {
                       )}
                     </h3>
                     <p className="text-xs text-customText-muted">
-                      Direct faculty applications for full-day leave or same-day early departures. Approving forwards the gate clearance directly to the Watchman login.
+                      Faculty applications for 1-hour permission or 4:00 PM permission. Approving forwards gate clearance directly to the Security Head. For 1-hour permission, Security records In-Time when faculty enters back.
                     </p>
                   </div>
                 </div>
@@ -1813,7 +1878,7 @@ const Dashboard = ({ initialTab }) => {
                       No Pending Faculty Permission Requests
                     </h4>
                     <p className="text-xs text-customText-muted max-w-sm mx-auto">
-                      All faculty permission and early out applications have been processed.
+                      All faculty permission requests have been processed.
                     </p>
                   </div>
                 ) : (
@@ -1839,7 +1904,15 @@ const Dashboard = ({ initialTab }) => {
                               <span className="text-xs text-customText-muted font-medium">
                                 {ticket.department || ticket.section}
                               </span>
-                              {ticket.type === 'FACULTY_EARLY_OUT' ? (
+                              {ticket.type === 'FACULTY_4PM' ? (
+                                <span className="px-2.5 py-0.5 rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-400 text-xs font-black border border-blue-500/30">
+                                  4:00 PM Permission
+                                </span>
+                              ) : ticket.type === 'FACULTY_ONE_HOUR' ? (
+                                <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 text-xs font-black border border-amber-500/30">
+                                  1-Hour Permission (Out: {ticket.leaveTime})
+                                </span>
+                              ) : ticket.type === 'FACULTY_EARLY_OUT' ? (
                                 <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 text-xs font-black border border-amber-500/30">
                                   Early Out at {ticket.leaveTime}
                                 </span>
@@ -2156,7 +2229,13 @@ const Dashboard = ({ initialTab }) => {
                           </td>
                           <td className="p-3 italic max-w-xs truncate">
                             <span className="font-semibold block not-italic text-[11px] text-primary-dark">
-                              {t.type === 'FACULTY_EARLY_OUT' ? `Early Out (${t.leaveTime})` : (isFac ? 'Full-Day Leave' : 'Outpass')}
+                              {t.type === 'FACULTY_4PM' 
+                                ? '4:00 PM Permission' 
+                                : t.type === 'FACULTY_ONE_HOUR' 
+                                  ? `1-Hour Permission (${t.leaveTime})` 
+                                  : t.type === 'FACULTY_EARLY_OUT' 
+                                    ? `Early Out (${t.leaveTime})` 
+                                    : (isFac ? 'Full-Day Leave' : 'Outpass')}
                             </span>
                             "{t.purpose || t.reason}"
                           </td>
@@ -2179,9 +2258,17 @@ const Dashboard = ({ initialTab }) => {
                           )}
                         </td>
                         <td className="p-3">
-                          {t.watchmanAction?.sentOut ? (
+                          {t.status === 'FACULTY_OUT' ? (
+                            <span className="text-amber-600 font-extrabold flex items-center gap-1">
+                              <Clock size={13} /> Out (Return Pending)
+                            </span>
+                          ) : t.status === 'SENT_OUT' && (t.returned || t.inTime) ? (
+                            <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                              <CheckCircle2 size={13} /> Returned ({t.inTime})
+                            </span>
+                          ) : t.watchmanAction?.sentOut || t.status === 'SENT_OUT' ? (
                             <span className="text-purple-600 font-extrabold flex items-center gap-1">
-                              <DoorOpen size={13} /> Sent Out
+                              <DoorOpen size={13} /> Sent Out ({t.watchmanAction?.displayTime || 'Out'})
                             </span>
                           ) : (
                             <span className="text-slate-400">At Campus</span>

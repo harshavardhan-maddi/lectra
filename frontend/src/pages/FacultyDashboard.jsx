@@ -104,9 +104,9 @@ const FacultyDashboard = () => {
   const [facultyTickets, setFacultyTickets] = useState([]);
   const [selectedTicketForModal, setSelectedTicketForModal] = useState(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
-  const [leaveType, setLeaveType] = useState('FACULTY_LEAVE'); // 'FACULTY_LEAVE' or 'FACULTY_EARLY_OUT'
+  const [leaveType, setLeaveType] = useState('FACULTY_ONE_HOUR'); // 'FACULTY_ONE_HOUR' or 'FACULTY_4PM'
   const [leaveDate, setLeaveDate] = useState(todayDate);
-  const [leaveTime, setLeaveTime] = useState('14:30');
+  const [leaveTime, setLeaveTime] = useState('11:00');
   const [leavePurpose, setLeavePurpose] = useState('');
   const [applyingLeave, setApplyingLeave] = useState(false);
   const [leaveError, setLeaveError] = useState('');
@@ -151,8 +151,8 @@ const FacultyDashboard = () => {
       return;
     }
 
-    if (leaveType === 'FACULTY_EARLY_OUT' && (!leaveTime || !leaveTime.trim())) {
-      setLeaveError('Please specify the time you need to leave early.');
+    if (leaveType === 'FACULTY_ONE_HOUR' && (!leaveTime || !leaveTime.trim())) {
+      setLeaveError('Please specify what time you need to be out.');
       return;
     }
 
@@ -166,11 +166,11 @@ const FacultyDashboard = () => {
         department: facultyDept,
         type: leaveType,
         date: leaveDate || todayDate,
-        leaveTime: leaveType === 'FACULTY_EARLY_OUT' ? leaveTime : 'Full Day',
+        leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveTime,
         purpose: leavePurpose
       });
 
-      setLeaveSuccess(`Application submitted successfully! Ref ID: ${ticket.id}. Forwarded to HOD for approval.`);
+      setLeaveSuccess(`Permission request submitted successfully! Ref ID: ${ticket.id}. Forwarded to HOD for approval.`);
       setShowApplyModal(false);
       setLeavePurpose('');
       setTimeout(() => setLeaveSuccess(''), 5000);
@@ -1366,7 +1366,15 @@ const FacultyDashboard = () => {
                             {ticket.id}
                           </span>
 
-                          {ticket.type === 'FACULTY_EARLY_OUT' ? (
+                          {ticket.type === 'FACULTY_4PM' ? (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-400 text-[11px] font-black border border-blue-500/30">
+                              4:00 PM Permission
+                            </span>
+                          ) : ticket.type === 'FACULTY_ONE_HOUR' ? (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[11px] font-black border border-amber-500/30">
+                              1-Hour Permission (Out: {ticket.leaveTime})
+                            </span>
+                          ) : ticket.type === 'FACULTY_EARLY_OUT' ? (
                             <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[11px] font-black border border-amber-500/30">
                               Early Out at {ticket.leaveTime}
                             </span>
@@ -1388,10 +1396,22 @@ const FacultyDashboard = () => {
                             </span>
                           )}
 
-                          {ticket.status === 'SENT_OUT' && (
-                            <span className="px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-400 text-[10px] font-black border border-purple-500/30">
-                              Departed • Slip Generated ({ticket.watchmanAction?.displayTime || 'Out'})
+                          {ticket.status === 'FACULTY_OUT' && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-black border border-amber-500/30 animate-pulse">
+                              Outside Campus (Out: {ticket.watchmanAction?.displayTime || ticket.leaveTime}) • Return Pending
                             </span>
+                          )}
+
+                          {ticket.status === 'SENT_OUT' && (
+                            ticket.returned || ticket.inTime ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/30">
+                                Returned to College ({ticket.inTime}) • Closed
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-400 text-[10px] font-black border border-purple-500/30">
+                                Departed • Closed ({ticket.watchmanAction?.displayTime || 'Out'})
+                              </span>
+                            )
                           )}
 
                           {ticket.status === 'REJECTED' && (
@@ -1488,70 +1508,103 @@ const FacultyDashboard = () => {
                 </div>
               )}
 
-              {/* Leave Type Toggle */}
+              {/* Leave Type Toggle: Only 1-Hour Permission or 4:00 PM Permission */}
               <div>
                 <label className="text-xs font-bold uppercase text-customText-muted block mb-2">
-                  Request Type
+                  Permission Type
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setLeaveType('FACULTY_LEAVE')}
-                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all flex items-center justify-center gap-2 ${
-                      leaveType === 'FACULTY_LEAVE'
+                    onClick={() => setLeaveType('FACULTY_ONE_HOUR')}
+                    className={`py-3 px-3 rounded-xl font-bold text-xs border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      leaveType === 'FACULTY_ONE_HOUR'
                         ? 'bg-primary text-white border-primary shadow-sm shadow-primary/20'
                         : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
                     }`}
                   >
-                    <Calendar size={14} />
-                    <span>Full-Day Permission</span>
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={15} />
+                      <span className="font-black">1-Hour Permission</span>
+                    </div>
+                    <span className={`text-[10px] ${leaveType === 'FACULTY_ONE_HOUR' ? 'text-white/80' : 'text-slate-400'}`}>
+                      Return to college in 1 hr
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => {
-                      setLeaveType('FACULTY_EARLY_OUT');
-                      setLeaveDate(todayDate);
+                      setLeaveType('FACULTY_4PM');
+                      setLeaveTime('04:00 PM');
                     }}
-                    className={`py-2.5 px-3 rounded-xl font-bold text-xs border transition-all flex items-center justify-center gap-2 ${
-                      leaveType === 'FACULTY_EARLY_OUT'
+                    className={`py-3 px-3 rounded-xl font-bold text-xs border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      leaveType === 'FACULTY_4PM'
                         ? 'bg-primary text-white border-primary shadow-sm shadow-primary/20'
                         : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
                     }`}
                   >
-                    <Clock size={14} />
-                    <span>Early Out (Same Day)</span>
+                    <div className="flex items-center gap-1.5">
+                      <LogOut size={15} />
+                      <span className="font-black">4:00 PM Permission</span>
+                    </div>
+                    <span className={`text-[10px] ${leaveType === 'FACULTY_4PM' ? 'text-white/80' : 'text-slate-400'}`}>
+                      Departure at 4 PM (Closed)
+                    </span>
                   </button>
                 </div>
               </div>
 
-              {/* Date & Time Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
-                    {leaveType === 'FACULTY_EARLY_OUT' ? 'Date (Same Day)' : 'Permission Date'}
-                  </label>
-                  <input
-                    type="date"
-                    value={leaveDate}
-                    onChange={(e) => setLeaveDate(e.target.value)}
-                    className="glass-input text-xs w-full font-semibold"
-                    required
-                  />
-                </div>
-
-                {leaveType === 'FACULTY_EARLY_OUT' && (
+              {/* Date & Out-Time Section */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
-                      Time to Leave <span className="text-rose-500">*</span>
+                      Permission Date
                     </label>
                     <input
-                      type="time"
-                      value={leaveTime}
-                      onChange={(e) => setLeaveTime(e.target.value)}
+                      type="date"
+                      value={leaveDate}
+                      onChange={(e) => setLeaveDate(e.target.value)}
                       className="glass-input text-xs w-full font-semibold"
                       required
                     />
+                  </div>
+
+                  {leaveType === 'FACULTY_ONE_HOUR' ? (
+                    <div>
+                      <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                        What time do you need to be out? <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={leaveTime}
+                        onChange={(e) => setLeaveTime(e.target.value)}
+                        className="glass-input text-xs w-full font-semibold"
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                        Scheduled Departure Time
+                      </label>
+                      <div className="glass-input text-xs w-full font-bold text-primary flex items-center gap-1.5 bg-slate-100/50 dark:bg-slate-800/50 py-2.5">
+                        <Clock size={14} className="text-primary" />
+                        <span>04:00 PM (Fixed)</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Helpful Guidance Notice based on type */}
+                {leaveType === 'FACULTY_ONE_HOUR' ? (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
+                    <strong>1-Hour Permission:</strong> Specify what time you need to leave. When you enter back into college after some time, Security will record your In-Time and the permission will be notified to HOD and closed.
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-800 dark:text-blue-300 font-medium leading-relaxed">
+                    <strong>4:00 PM Permission:</strong> Scheduled departure is 4:00 PM itself. No in-time entry or return is required. The permission closes automatically when Security sends you out.
                   </div>
                 )}
               </div>
