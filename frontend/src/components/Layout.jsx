@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
-  const { user, logout, updateProfile, selectedDepartment, setSelectedDepartment, getDepartmentsList } = useAuth();
+  const { user, token, logout, updateProfile, selectedDepartment, setSelectedDepartment, getDepartmentsList } = useAuth();
   const { onlineCount, onlineUsers, notifications, clearNotifications } = useSocket();
   const location = useLocation();
   const navigate = useNavigate();
@@ -61,8 +61,9 @@ const Layout = ({ children }) => {
   // Department Classrooms for strict online user isolation
   const [layoutClassrooms, setLayoutClassrooms] = useState([]);
   useEffect(() => {
-    if (user?.role === 'HOD' && token) {
-      fetch('/api/classrooms', { headers: { Authorization: `Bearer ${token}` } })
+    const currentToken = token || localStorage.getItem('token');
+    if (user?.role === 'HOD' && currentToken) {
+      fetch('/api/classrooms', { headers: { Authorization: `Bearer ${currentToken}` } })
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) setLayoutClassrooms(data);
@@ -73,16 +74,18 @@ const Layout = ({ children }) => {
 
   // Online users strictly scoped: Super Admin sees all departments/users; HOD sees ONLY their department
   const displayedOnlineUsers = React.useMemo(() => {
+    const safeOnlineUsers = Array.isArray(onlineUsers) ? onlineUsers : [];
     if (user?.role === 'SUPER_ADMIN') {
-      return onlineUsers;
+      return safeOnlineUsers;
     }
     if (user?.role === 'HOD') {
       const userDept = (user?.department || '').trim().toLowerCase();
-      const deptClassNames = layoutClassrooms
+      const deptClassNames = (layoutClassrooms || [])
         .filter(c => !user?.department || c.department === user?.department)
         .map(c => (c.className || '').toLowerCase());
 
-      return onlineUsers.filter(u => {
+      return safeOnlineUsers.filter(u => {
+        if (!u) return false;
         if (u.department && u.department.toLowerCase() === userDept) return true;
         if (u.className) {
           const cleanClass = u.className.toLowerCase();

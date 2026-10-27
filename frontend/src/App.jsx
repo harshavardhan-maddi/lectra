@@ -18,6 +18,7 @@ import FacultyDashboard from './pages/FacultyDashboard';
 import WatchmanDashboard from './pages/WatchmanDashboard';
 import AODashboard from './pages/AODashboard';
 import OfficeDashboard from './pages/OfficeDashboard';
+import PWAUpdateNotification from './components/PWAUpdateNotification';
 
 // Custom router resolver to send authenticated users to their correct home dashboard
 const HomeRedirect = () => {
@@ -262,6 +263,7 @@ function App() {
       <AuthProvider>
         <SocketProvider>
           <AppRoutes />
+          <PWAUpdateNotification />
         </SocketProvider>
       </AuthProvider>
     </Router>
