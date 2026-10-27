@@ -1479,7 +1479,7 @@ const Login = () => {
                       type="text"
                       value={userId}
                       onChange={(e) => setUserId(e.target.value)}
-                      placeholder="Enter authorized User ID"
+                      placeholder="User ID or Faculty Emp ID"
                       className="glass-input pl-10 text-xs"
                       disabled={loading || biometricsLoading}
                       required
@@ -1499,7 +1499,7 @@ const Login = () => {
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password"
+                      placeholder="Password (default: nrtec@nec)"
                       className="glass-input pl-10 pr-10 text-xs"
                       disabled={loading || biometricsLoading}
                       required
@@ -1512,6 +1512,11 @@ const Login = () => {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-700 dark:text-purple-300 leading-tight flex items-center gap-2">
+                  <span className="font-bold">Faculty:</span>
+                  <span>Use your <strong>Emp ID</strong> as Login ID with password <code className="font-mono bg-purple-500/20 px-1 py-0.5 rounded font-bold">nrtec@nec</code></span>
                 </div>
 
                 <button

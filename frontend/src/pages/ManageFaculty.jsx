@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Edit, UploadCloud, Users, Phone, Loader, Plus, X, Trash2, KeyRound, CheckCircle2, FileText } from 'lucide-react';
+import { Search, Edit, UploadCloud, Users, Phone, Loader, Plus, X, Trash2, KeyRound, CheckCircle2, FileText, Lock, Download } from 'lucide-react';
 
 const ManageFaculty = () => {
   const { token, user, registerUser } = useAuth();
+  const isHOD = user?.role === 'HOD';
+  const defaultDept = user?.department || 'Department of CSE(emerging Technologies)';
+
   const [faculty, setFaculty] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -14,6 +17,20 @@ const ManageFaculty = () => {
   const [editPhone, setEditPhone] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Departments list state
+  const [departmentsList, setDepartmentsList] = useState([
+    'Department of CSE(emerging Technologies)',
+    'Department of Computer Science and Engineering',
+    'Department of Information Technology',
+    'Department of Electronics and Communication Engineering',
+    'Department of Electrical and Electronics Engineering',
+    'Department of Mechanical Engineering',
+    'Department of Civil Engineering',
+    'Department of Basic Sciences and Humanities',
+    'Department of MCA',
+    'Department of MBA'
+  ]);
+
   // Single Add Faculty Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [newEmpId, setNewEmpId] = useState('');
@@ -21,11 +38,21 @@ const ManageFaculty = () => {
   const [newPhone, setNewPhone] = useState('');
   const [newDesignation, setNewDesignation] = useState('Assistant Professor');
   const [newFacultyType, setNewFacultyType] = useState('TEACHING'); // 'TEACHING' | 'NON_TEACHING'
+  const [newDepartment, setNewDepartment] = useState(defaultDept);
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
 
-  // Metadata storage for EmpID, Designation, Faculty Type (Teaching / Non-Teaching)
+  // Bulk upload state
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkData, setBulkData] = useState('');
+  const [parsedList, setParsedList] = useState([]);
+  const [bulkDepartment, setBulkDepartment] = useState(defaultDept);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState('');
+  const [bulkError, setBulkError] = useState('');
+
+  // Metadata storage for EmpID, Designation, Faculty Type (Teaching / Non-Teaching), Department
   const [facultyMetadata, setFacultyMetadata] = useState([]);
 
   const loadMetadata = () => {
@@ -41,6 +68,26 @@ const ManageFaculty = () => {
     loadMetadata();
   }, []);
 
+  useEffect(() => {
+    if (user?.department) {
+      setNewDepartment(user.department);
+      setBulkDepartment(user.department);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (token) {
+      fetch('/api/auth/departments', { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setDepartmentsList(Array.from(new Set([...departmentsList, ...data])));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [token]);
+
   const handleAddFacultySubmit = async (e) => {
     e.preventDefault();
     if (!newEmpId.trim() || !newName.trim() || !newPhone.trim() || !newDesignation.trim()) {
@@ -53,6 +100,11 @@ const ManageFaculty = () => {
     setAddSuccess('');
 
     try {
+      // In HOD login, department is strictly fixed to HOD's department
+      const assignedDept = isHOD
+        ? (user?.department || 'Department of CSE(emerging Technologies)')
+        : (newDepartment || user?.department || 'Department of CSE(emerging Technologies)');
+
       // 1. Post to backend faculty table
       const res = await fetch('/api/faculty', {
         method: 'POST',
@@ -63,11 +115,11 @@ const ManageFaculty = () => {
         body: JSON.stringify({
           facultyName: newName.trim(),
           phoneNumber: newPhone.trim(),
+          department: assignedDept,
         }),
       });
 
-      // 2. Also register faculty login account with userId = Emp ID
-      const assignedDept = user?.department || 'Department of CSE(emerging Technologies)';
+      // 2. Also register faculty login account: Login ID = Emp ID, Password = nrtec@nec
       if (registerUser) {
         try {
           await registerUser(
@@ -83,15 +135,17 @@ const ManageFaculty = () => {
         }
       }
 
-      // 3. Save extra metadata (Emp ID, Designation, Teaching / Non-Teaching type)
+      // 3. Save extra metadata (Emp ID, Designation, Teaching / Non-Teaching type, Department)
       const existing = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
       const newEntry = {
         empid: newEmpId.trim(),
+        loginId: newEmpId.trim(),
         name: newName.trim(),
         mobileNumber: newPhone.trim(),
         designation: newDesignation.trim(),
         facultyType: newFacultyType,
         department: assignedDept,
+        password: 'nrtec@nec',
         updatedAt: new Date().toISOString()
       };
       const updated = [newEntry, ...existing.filter(item => 
@@ -101,7 +155,7 @@ const ManageFaculty = () => {
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(updated));
       setFacultyMetadata(updated);
 
-      setAddSuccess(`Faculty "${newName}" (${newFacultyType === 'NON_TEACHING' ? 'Non-Teaching' : 'Teaching'}) added successfully!`);
+      setAddSuccess(`Faculty "${newName}" added successfully! Login ID: ${newEmpId.trim()} | Password: nrtec@nec`);
       await fetchFaculty();
       setTimeout(() => {
         setShowAddModal(false);
@@ -118,14 +172,6 @@ const ManageFaculty = () => {
       setIsAdding(false);
     }
   };
-
-  // Bulk upload state
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkData, setBulkData] = useState('');
-  const [parsedList, setParsedList] = useState([]);
-  const [isBulkSaving, setIsBulkSaving] = useState(false);
-  const [bulkMessage, setBulkMessage] = useState('');
-  const [bulkError, setBulkError] = useState('');
 
   const fetchFaculty = async () => {
     setLoading(true);
@@ -146,7 +192,36 @@ const ManageFaculty = () => {
     fetchFaculty();
   }, [token]);
 
-  // Parse CSV text into structured records
+  const downloadSampleCsv = () => {
+    const headers = isHOD
+      ? "Emp ID,Faculty Name,Mobile Number,Designation,Faculty Type"
+      : "Emp ID,Faculty Name,Mobile Number,Designation,Department,Faculty Type";
+
+    const rows = isHOD
+      ? [
+          "EMP1001,Dr. K. Srinivas,9876543210,Professor,TEACHING",
+          "EMP1002,Mrs. M. Lakshmi,9848022334,Assistant Professor,NON_TEACHING",
+          "EMP1003,Mr. P. Rajesh,9988776655,Associate Professor,TEACHING"
+        ]
+      : [
+          "EMP1001,Dr. K. Srinivas,9876543210,Professor,Department of CSE(emerging Technologies),TEACHING",
+          "EMP1002,Mrs. M. Lakshmi,9848022334,Assistant Professor,Department of Information Technology,NON_TEACHING",
+          "EMP1003,Mr. P. Rajesh,9988776655,Associate Professor,Department of Computer Science and Engineering,TEACHING"
+        ];
+
+    const csvText = [headers, ...rows].join('\n');
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'faculty_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Parse CSV text into structured records with Emp ID, Name, Mobile, Designation, Department, Faculty Type
   const parseFacultyCsv = (text) => {
     setBulkError('');
     setBulkMessage('');
@@ -157,51 +232,107 @@ const ManageFaculty = () => {
 
     // Strip UTF-8 BOM if present
     const cleanText = text.replace(/^\uFEFF/, '');
-    const lines = cleanText.split(/\r?\n/);
+    const lines = cleanText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      setParsedList([]);
+      return;
+    }
+
     const parsed = [];
+    let headerMap = null;
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+    // Detect if line 0 is a header row
+    const firstLineParts = lines[0].split(/[,\t]/).map(p => p.replace(/^["']|["']$/g, '').trim().toLowerCase());
+    const hasHeader = firstLineParts.some(p => 
+      p.includes('emp') || p.includes('id') || p.includes('name') || p.includes('mobile') || p.includes('phone') || p.includes('desig') || p.includes('dept')
+    );
 
+    let startIndex = 0;
+    if (hasHeader) {
+      headerMap = {};
+      firstLineParts.forEach((header, idx) => {
+        if (header.includes('emp') || header === 'id' || header.includes('login')) headerMap.empid = idx;
+        else if (header.includes('name') || header.includes('faculty')) headerMap.name = idx;
+        else if (header.includes('phone') || header.includes('mobile') || header.includes('contact')) headerMap.phone = idx;
+        else if (header.includes('desig') || header.includes('role')) headerMap.designation = idx;
+        else if (header.includes('dept') || header.includes('department')) headerMap.department = idx;
+        else if (header.includes('type') || header.includes('category')) headerMap.facultyType = idx;
+      });
+      startIndex = 1;
+    }
+
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i];
       let parts = line.split(',');
       if (parts.length < 2 && line.includes('\t')) {
         parts = line.split('\t');
       }
+      parts = parts.map(p => p.replace(/^["']|["']$/g, '').trim());
 
-      if (parts.length >= 1) {
-        let fName = parts[0].replace(/^["']|["']$/g, '').trim();
-        let secondPart = parts.length > 1 ? parts[1].replace(/^["']|["']$/g, '').trim() : '';
-        let thirdPart = parts.length > 2 ? parts[2].replace(/^["']|["']$/g, '').trim() : '';
+      let empid = '';
+      let facultyName = '';
+      let phoneNumber = '';
+      let designation = 'Assistant Professor';
+      let department = isHOD ? (user?.department || 'Department of CSE(emerging Technologies)') : (bulkDepartment || user?.department || 'Department of CSE(emerging Technologies)');
+      let facultyType = 'TEACHING';
 
-        // Skip header lines
-        const lowerName = fName.toLowerCase();
-        const lowerSecond = secondPart.toLowerCase();
-        if (
-          lowerName.includes('faculty name') ||
-          lowerName.includes('name') && (lowerSecond.includes('login') || lowerSecond.includes('phone') || lowerSecond.includes('id'))
-        ) {
-          continue;
+      if (headerMap) {
+        if (headerMap.empid !== undefined && parts[headerMap.empid]) empid = parts[headerMap.empid];
+        if (headerMap.name !== undefined && parts[headerMap.name]) facultyName = parts[headerMap.name];
+        if (headerMap.phone !== undefined && parts[headerMap.phone]) phoneNumber = parts[headerMap.phone];
+        if (headerMap.designation !== undefined && parts[headerMap.designation]) designation = parts[headerMap.designation];
+        if (headerMap.department !== undefined && parts[headerMap.department] && !isHOD) department = parts[headerMap.department];
+        if (headerMap.facultyType !== undefined && parts[headerMap.facultyType]) {
+          const t = parts[headerMap.facultyType].toUpperCase();
+          facultyType = t.includes('NON') ? 'NON_TEACHING' : 'TEACHING';
         }
-
-        if (!fName) continue;
-
-        let loginId = '';
-        let phoneNumber = '';
-
-        // Determine if second part is a phone number or login ID
-        const isPhone = /^[+\d\s-]{7,15}$/.test(secondPart);
-        if (isPhone) {
-          phoneNumber = secondPart;
-        } else {
-          loginId = secondPart;
-          phoneNumber = thirdPart;
+      } else {
+        // Positional parsing fallback
+        if (parts.length >= 4) {
+          empid = parts[0];
+          facultyName = parts[1];
+          phoneNumber = parts[2];
+          designation = parts[3] || 'Assistant Professor';
+          if (parts[4] && !isHOD) department = parts[4];
+          if (parts[5]) {
+            facultyType = parts[5].toUpperCase().includes('NON') ? 'NON_TEACHING' : 'TEACHING';
+          }
+        } else if (parts.length === 3) {
+          if (/^[A-Za-z0-9_-]+$/.test(parts[0]) && parts[0].length < 15) {
+            empid = parts[0];
+            facultyName = parts[1];
+            phoneNumber = parts[2];
+          } else {
+            facultyName = parts[0];
+            empid = parts[1];
+            phoneNumber = parts[2];
+          }
+        } else if (parts.length === 2) {
+          facultyName = parts[0];
+          if (/^[+\d\s-]{7,15}$/.test(parts[1])) {
+            phoneNumber = parts[1];
+            empid = 'FAC_' + facultyName.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+          } else {
+            empid = parts[1];
+          }
+        } else if (parts.length === 1 && parts[0]) {
+          facultyName = parts[0];
+          empid = 'FAC_' + facultyName.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
         }
+      }
 
+      if (!empid && facultyName) {
+        empid = 'FAC_' + facultyName.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+      }
+
+      if (facultyName) {
         parsed.push({
-          facultyName: fName,
-          loginId: loginId,
-          phoneNumber: phoneNumber
+          empid: empid.toUpperCase(),
+          facultyName,
+          phoneNumber,
+          designation,
+          department,
+          facultyType
         });
       }
     }
@@ -291,7 +422,7 @@ const ManageFaculty = () => {
 
     const itemsToProcess = parsedList.length > 0 ? parsedList : [];
     if (itemsToProcess.length === 0) {
-      setBulkError('Please select or paste valid CSV data containing Faculty Name');
+      setBulkError('Please select or paste valid CSV data containing Faculty Name and Emp ID.');
       return;
     }
 
@@ -303,7 +434,8 @@ const ManageFaculty = () => {
       // 1. Bulk Upsert Faculty Contacts to database
       const facultyListPayload = itemsToProcess.map(item => ({
         facultyName: item.facultyName,
-        phoneNumber: item.phoneNumber
+        phoneNumber: item.phoneNumber,
+        department: item.department
       }));
 
       const res = await fetch('/api/faculty/bulk', {
@@ -317,32 +449,53 @@ const ManageFaculty = () => {
       
       const data = await res.json();
       
-      // 2. Also register faculty login accounts if Login ID is present
+      // 2. Register faculty login accounts: Login ID = Emp ID, Password = nrtec@nec
       let createdLoginsCount = 0;
-      const assignedDept = user?.department || 'Department of CSE(emerging Technologies)';
       for (const item of itemsToProcess) {
-        if (item.loginId && registerUser) {
+        const loginUserId = item.empid;
+        if (loginUserId && registerUser) {
           try {
             await registerUser(
               item.facultyName,
-              item.loginId,
+              loginUserId,
               'nrtec@nec',
               'FACULTY',
               null,
-              assignedDept
+              item.department
             );
             createdLoginsCount++;
           } catch (regErr) {
-            console.warn(`Login reg note for ${item.loginId}:`, regErr.message);
+            console.warn(`Login reg note for ${loginUserId}:`, regErr.message);
           }
         }
       }
 
+      // 3. Save extra metadata into lectra_faculty_metadata
+      const existingMeta = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+      const newMetaEntries = itemsToProcess.map(item => ({
+        empid: item.empid,
+        loginId: item.empid,
+        name: item.facultyName,
+        mobileNumber: item.phoneNumber,
+        designation: item.designation,
+        facultyType: item.facultyType,
+        department: item.department,
+        password: 'nrtec@nec',
+        updatedAt: new Date().toISOString()
+      }));
+
+      const mergedMeta = [...newMetaEntries, ...existingMeta.filter(ex => 
+        !itemsToProcess.some(item => 
+          (item.empid && ex.empid && item.empid.toLowerCase() === ex.empid.toLowerCase()) ||
+          (item.facultyName && ex.name && item.facultyName.toLowerCase() === ex.name.toLowerCase())
+        )
+      )];
+      localStorage.setItem('lectra_faculty_metadata', JSON.stringify(mergedMeta));
+      setFacultyMetadata(mergedMeta);
+
       if (res.ok) {
         let msg = data.message || `Successfully processed ${itemsToProcess.length} faculty records.`;
-        if (createdLoginsCount > 0) {
-          msg += ` (${createdLoginsCount} faculty logins created with default password nrtec@nec)`;
-        }
+        msg += ` (${itemsToProcess.length} faculty logins created with Login ID = Emp ID and password nrtec@nec)`;
         setBulkMessage(msg);
         setBulkData('');
         setParsedList([]);
@@ -479,16 +632,30 @@ const ManageFaculty = () => {
                     </span>
                   </div>
 
-                  {/* Emp ID and Designation if available */}
+                  {/* Emp ID, Designation, Department */}
                   <div className="space-y-1 mb-2">
-                    {meta?.empid && (
-                      <span className="font-mono text-[11px] font-bold text-primary block">
-                        Emp ID: {meta.empid}
+                    {meta?.empid ? (
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-mono text-[11px] font-bold text-primary block">
+                          Emp ID: {meta.empid}
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                          nrtec@nec
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-[10px] text-slate-400 block">
+                        Login: nrtec@nec
                       </span>
                     )}
                     <span className="text-xs text-customText-muted font-semibold block">
                       {meta?.designation || 'Faculty Member'}
                     </span>
+                    {!isHOD && (meta?.department || f.department) && (
+                      <span className="text-[10px] text-customText-muted block truncate" title={meta?.department || f.department}>
+                        🏛️ {meta?.department || f.department}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 mt-2 text-sm text-customText-muted dark:text-customText-mutedDark">
@@ -630,6 +797,35 @@ const ManageFaculty = () => {
                     <option value="Lecturer">Lecturer</option>
                   </select>
                 </div>
+
+                {/* Department: Fixed in HOD login, selectable in other logins */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                    Department {isHOD ? '(Fixed to Your Department)' : '*'}
+                  </label>
+                  {isHOD ? (
+                    <div className="p-2.5 rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary-950/20 text-xs font-bold text-customText dark:text-customText-dark flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Lock size={14} className="text-primary-dark dark:text-primary" />
+                        <span>{user?.department || 'Department of CSE(emerging Technologies)'}</span>
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary-dark dark:text-primary border border-primary/20">
+                        Fixed in HOD Login
+                      </span>
+                    </div>
+                  ) : (
+                    <select
+                      value={newDepartment}
+                      onChange={(e) => setNewDepartment(e.target.value)}
+                      className="w-full glass-input text-xs py-2.5"
+                      required
+                    >
+                      {departmentsList.map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
 
               {/* Teaching or Non-Teaching selector */}
@@ -679,6 +875,14 @@ const ManageFaculty = () => {
                       </span>
                     </div>
                   </label>
+                </div>
+              </div>
+
+              {/* Login credentials notice */}
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center gap-2.5 text-xs text-purple-700 dark:text-purple-300">
+                <KeyRound size={16} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                <div className="leading-relaxed">
+                  <span className="font-bold">Login Credentials:</span> Login ID will be <strong className="font-mono bg-purple-500/20 px-1 py-0.5 rounded">{newEmpId || 'Emp ID'}</strong> and Password is <strong className="font-mono bg-purple-500/20 px-1 py-0.5 rounded">nrtec@nec</strong>
                 </div>
               </div>
 
@@ -764,12 +968,62 @@ const ManageFaculty = () => {
             </div>
             
             <div className="space-y-4">
-              <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
-                Upload a <strong>.CSV</strong> file or paste content directly.<br/>
-                Formats supported:<br/>
-                • <span className="font-semibold text-customText dark:text-customText-dark">Faculty Name, Phone Number</span><br/>
-                • <span className="font-semibold text-customText dark:text-customText-dark">Faculty Name, Login ID</span> (creates login with password <code className="bg-purple-500/10 text-purple-600 px-1 py-0.5 rounded font-mono">nrtec@nec</code>)
-              </p>
+              {/* Template Download Banner */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+                <div>
+                  <h4 className="text-xs font-extrabold text-customText dark:text-customText-dark">Need a CSV template?</h4>
+                  <p className="text-[11px] text-customText-muted">
+                    Columns: Emp ID, Name, Phone Number, Designation{isHOD ? '' : ', Department'}, Category
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadSampleCsv}
+                  className="px-3.5 py-2 bg-primary/10 hover:bg-primary/20 text-primary-dark dark:text-primary text-xs font-bold rounded-xl border border-primary/20 flex items-center gap-2 shrink-0 transition-all cursor-pointer"
+                >
+                  <Download size={15} />
+                  <span>Download Sample CSV</span>
+                </button>
+              </div>
+
+              {/* Department Scoping in Bulk Modal */}
+              {isHOD ? (
+                <div className="p-3 bg-primary/5 dark:bg-primary-950/20 border border-primary/20 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <Lock size={15} className="text-primary-dark dark:text-primary shrink-0" />
+                    <div>
+                      <span className="font-bold text-customText dark:text-customText-dark">Department: </span>
+                      <span className="font-extrabold text-primary-dark dark:text-primary">{user?.department || 'Department of CSE(emerging Technologies)'}</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-primary/10 text-primary-dark dark:text-primary shrink-0 border border-primary/20">
+                    Fixed for HOD
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                    Default Department (for rows without department column)
+                  </label>
+                  <select
+                    value={bulkDepartment}
+                    onChange={(e) => setBulkDepartment(e.target.value)}
+                    className="w-full glass-input text-xs py-2"
+                  >
+                    {departmentsList.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Login info notification */}
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center gap-2.5 text-xs text-purple-700 dark:text-purple-300">
+                <KeyRound size={16} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                <span>
+                  For all uploaded faculty: <strong>Login ID = Emp ID</strong> and <strong>Password = nrtec@nec</strong>
+                </span>
+              </div>
 
               {bulkError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
@@ -808,7 +1062,7 @@ const ManageFaculty = () => {
                     setBulkData(e.target.value);
                     parseFacultyCsv(e.target.value);
                   }}
-                  placeholder="Dr. John Smith, 9876543210&#10;Prof. Jane Doe, CSE101"
+                  placeholder={isHOD ? "EMP1001, Dr. John Smith, 9876543210, Professor, TEACHING\nEMP1002, Mrs. Jane Doe, 9848022334, Assistant Professor, NON_TEACHING" : "EMP1001, Dr. John Smith, 9876543210, Professor, Department of CSE(emerging Technologies), TEACHING"}
                   rows={4}
                   className="glass-input w-full font-mono text-xs resize-none"
                   disabled={isBulkSaving}
@@ -835,23 +1089,37 @@ const ManageFaculty = () => {
                     </button>
                   </div>
 
-                  <div className="max-h-44 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 p-2">
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 p-2">
                     <table className="w-full text-left text-xs">
                       <thead>
                         <tr className="text-[10px] text-slate-400 uppercase border-b border-slate-200 dark:border-slate-800">
                           <th className="py-1 px-2">#</th>
+                          <th className="py-1 px-2">Emp ID (Login)</th>
                           <th className="py-1 px-2">Faculty Name</th>
-                          <th className="py-1 px-2">Login ID</th>
-                          <th className="py-1 px-2">Phone Number</th>
+                          <th className="py-1 px-2">Phone</th>
+                          <th className="py-1 px-2">Designation</th>
+                          <th className="py-1 px-2">Category</th>
+                          {!isHOD && <th className="py-1 px-2">Department</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
                         {parsedList.map((item, idx) => (
                           <tr key={idx}>
                             <td className="py-1 px-2 text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="py-1 px-2 font-mono font-bold text-primary">{item.empid}</td>
                             <td className="py-1 px-2 font-bold text-customText dark:text-customText-dark">{item.facultyName}</td>
-                            <td className="py-1 px-2 font-mono text-purple-600 dark:text-purple-400">{item.loginId || '—'}</td>
                             <td className="py-1 px-2 font-mono text-slate-500">{item.phoneNumber || '—'}</td>
+                            <td className="py-1 px-2 text-slate-500">{item.designation || 'Assistant Professor'}</td>
+                            <td className="py-1 px-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                item.facultyType === 'NON_TEACHING'
+                                  ? 'bg-amber-500/10 text-amber-600'
+                                  : 'bg-emerald-500/10 text-emerald-600'
+                              }`}>
+                                {item.facultyType === 'NON_TEACHING' ? 'Non-Teaching' : 'Teaching'}
+                              </span>
+                            </td>
+                            {!isHOD && <td className="py-1 px-2 text-[11px] text-slate-500 truncate max-w-[130px]">{item.department}</td>}
                           </tr>
                         ))}
                       </tbody>

@@ -52,7 +52,12 @@ export const AuthProvider = ({ children }) => {
         storedToken === 'watchman-session-token' ||
         storedToken === 'ao-session-token' ||
         storedToken === 'office-session-token' ||
-        (storedToken && (storedToken.startsWith('watchman-token-') || storedToken.startsWith('ao-token-') || storedToken.startsWith('office-token-')))
+        (storedToken && (
+          storedToken.startsWith('watchman-token-') || 
+          storedToken.startsWith('ao-token-') || 
+          storedToken.startsWith('office-token-') ||
+          storedToken.startsWith('faculty-token-')
+        ))
       ) {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
@@ -183,7 +188,37 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // 5. Authenticate with backend API
+    // 5. Custom Faculty Login credentials (Emp ID is login ID, pass is nrtec@nec)
+    try {
+      const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+      const matchedFaculty = metaList.find(m => 
+        (m.empid && m.empid.toLowerCase() === cleanUserId) ||
+        (m.loginId && m.loginId.toLowerCase() === cleanUserId)
+      );
+      if (matchedFaculty && (cleanPass === 'nrtec@nec' || cleanPass === (matchedFaculty.password || 'nrtec@nec'))) {
+        const facultyUser = {
+          id: matchedFaculty.id || (70000 + Math.floor(Math.random() * 9000)),
+          name: matchedFaculty.name,
+          userId: matchedFaculty.empid || matchedFaculty.loginId,
+          role: 'FACULTY',
+          facultyType: matchedFaculty.facultyType || 'TEACHING',
+          department: matchedFaculty.department || 'Department of CSE(emerging Technologies)',
+          designation: matchedFaculty.designation || 'Assistant Professor',
+          mobileNumber: matchedFaculty.mobileNumber || ''
+        };
+        const customToken = `faculty-token-${facultyUser.userId}`;
+        localStorage.setItem('token', customToken);
+        localStorage.setItem('user', JSON.stringify(facultyUser));
+        localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
+        setToken(customToken);
+        setUser(facultyUser);
+        return facultyUser;
+      }
+    } catch (e) {
+      console.warn('Custom faculty auth check notice:', e);
+    }
+
+    // 6. Authenticate with backend API
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',

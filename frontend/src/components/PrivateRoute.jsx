@@ -32,8 +32,12 @@ const PrivateRoute = ({ children, allowedRoles }) => {
       defaultRoute = '/absent-controller';
     } else if (user?.role === 'FACULTY') {
       defaultRoute = '/faculty-dashboard';
-    } else if (user?.role === 'WATCHMAN') {
+    } else if (user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') {
       defaultRoute = '/watchman-dashboard';
+    } else if (user?.role === 'AO') {
+      defaultRoute = '/ao-dashboard';
+    } else if (user?.role === 'OFFICE') {
+      defaultRoute = '/office-dashboard';
     } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') {
       defaultRoute = '/dashboard';
     }

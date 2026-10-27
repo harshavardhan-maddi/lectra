@@ -12,6 +12,65 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Automatic Self-Healing for Stale Browser Cache and Outdated Service Workers -->
+    <script>
+      (function() {
+        // 1. Recover from stale Vite dynamic imports or 404 chunks
+        window.addEventListener('vite:preloadError', function(e) {
+          e.preventDefault();
+          console.warn('[Lectra] Outdated chunk detected in browser cache. Purging caches...');
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+            }).then(function() {
+              window.location.reload();
+            });
+          } else {
+            window.location.reload();
+          }
+        });
+
+        // 2. Recover from any runtime error caused by stale cached bundles from previous deploys
+        window.addEventListener('error', function(e) {
+          var msg = (e && e.message ? e.message : '').toLowerCase();
+          if (
+            msg.includes('token is not defined') ||
+            msg.includes('failed to fetch dynamically imported module') ||
+            msg.includes('loading chunk') ||
+            msg.includes('unexpected token')
+          ) {
+            var purgeKey = 'lectra_purge_' + (new Date().toISOString().slice(0, 10));
+            if (!sessionStorage.getItem(purgeKey)) {
+              sessionStorage.setItem(purgeKey, '1');
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(regs) {
+                  regs.forEach(function(r) { r.unregister(); });
+                });
+              }
+              if ('caches' in window) {
+                caches.keys().then(function(keys) {
+                  return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+                }).then(function() {
+                  window.location.reload();
+                });
+              } else {
+                window.location.reload();
+              }
+            }
+          }
+        });
+
+        // 3. Immediately activate waiting service workers without waiting for tabs to close
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            regs.forEach(function(r) {
+              if (r.waiting) r.waiting.postMessage({ type: 'SKIP_WAITING' });
+            });
+          });
+        }
+      })();
+    </script>
   </head>
   <body class="bg-customBg text-customText transition-colors duration-300 dark:bg-customBg-dark dark:text-customText-dark">
     <div id="root"></div>
