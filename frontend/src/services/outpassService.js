@@ -210,22 +210,24 @@ export const lookupStudentByRoll = (rollNumber) => {
   return null;
 };
 
-// Get all outpasses from storage
+// Get all outpasses from storage (filtering out internal system config records)
 export const getAllOutpasses = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const list = JSON.parse(raw);
-    return list.map(t => {
-      if (t.applicantType === 'FACULTY' && (!t.department || t.department === 'General' || t.section === 'General' || t.section === 'Faculty')) {
-        return {
-          ...t,
-          department: t.department && t.department !== 'General' ? t.department : 'Department of CSE(emerging Technologies)',
-          section: t.section && t.section !== 'General' && t.section !== 'Faculty' ? t.section : 'Department of CSE(emerging Technologies)'
-        };
-      }
-      return t;
-    });
+    return list
+      .filter(t => t && t.applicantType !== 'SYSTEM_CONFIG')
+      .map(t => {
+        if (t.applicantType === 'FACULTY' && (!t.department || t.department === 'General' || t.section === 'General' || t.section === 'Faculty')) {
+          return {
+            ...t,
+            department: t.department && t.department !== 'General' ? t.department : 'Department of CSE(emerging Technologies)',
+            section: t.section && t.section !== 'General' && t.section !== 'Faculty' ? t.section : 'Department of CSE(emerging Technologies)'
+          };
+        }
+        return t;
+      });
   } catch (e) {
     console.error('Failed to parse outpasses:', e);
     return [];
@@ -234,11 +236,24 @@ export const getAllOutpasses = () => {
 
 // Save outpasses and notify listeners (both locally and to backend database)
 export const saveOutpasses = async (tickets) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
-  // Dispatch custom event for same-tab updates
-  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: tickets }));
+  // Preserve any SYSTEM_CONFIG tickets (e.g. mentor registry) currently in storage
+  let toSave = Array.isArray(tickets) ? [...tickets] : [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const currentAll = raw ? JSON.parse(raw) : [];
+    const systemConfigs = currentAll.filter(t => t && t.applicantType === 'SYSTEM_CONFIG');
+    systemConfigs.forEach(sc => {
+      if (!toSave.some(t => t.id === sc.id)) {
+        toSave.push(sc);
+      }
+    });
+  } catch (e) {}
 
-  // Send to backend database so other devices (Absent Controller, HOD, Watchman) receive it instantly
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  // Dispatch custom event for same-tab updates (filtered for normal consumers)
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: toSave.filter(t => t.applicantType !== 'SYSTEM_CONFIG') }));
+
+  // Send to backend database so other devices (Absent Controller, HOD, Watchman, Mentors) receive it instantly
   try {
     const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
       method: 'POST',
@@ -247,20 +262,30 @@ export const saveOutpasses = async (tickets) => {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
       },
-      body: JSON.stringify({ tickets })
+      body: JSON.stringify({ tickets: toSave })
     });
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.tickets)) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
-        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
-        return data.tickets;
+        
+        // Sync mentor registry if present
+        const sysMentor = data.tickets.find(t => t && t.id === 'SYS_FACULTY_MENTOR_REGISTRY' && t.applicantType === 'SYSTEM_CONFIG');
+        if (sysMentor && sysMentor.data) {
+          try {
+            localStorage.setItem('lectra_faculty_mentors', JSON.stringify(sysMentor.data));
+            window.dispatchEvent(new CustomEvent('lectra_mentors_updated', { detail: sysMentor.data }));
+          } catch (e) {}
+        }
+
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG') }));
+        return data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG');
       }
     }
   } catch (e) {
     console.warn('Sync outpass network note:', e);
   }
-  return tickets;
+  return toSave.filter(t => t.applicantType !== 'SYSTEM_CONFIG');
 };
 
 // Sync live outpasses from backend database across campus devices (Anti-Cached)
@@ -276,8 +301,18 @@ export const syncOutpassesFromBackend = async () => {
       const data = await res.json();
       if (data.success && Array.isArray(data.tickets)) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
-        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
-        return data.tickets;
+        
+        // Sync mentor registry if present
+        const sysMentor = data.tickets.find(t => t && t.id === 'SYS_FACULTY_MENTOR_REGISTRY' && t.applicantType === 'SYSTEM_CONFIG');
+        if (sysMentor && sysMentor.data) {
+          try {
+            localStorage.setItem('lectra_faculty_mentors', JSON.stringify(sysMentor.data));
+            window.dispatchEvent(new CustomEvent('lectra_mentors_updated', { detail: sysMentor.data }));
+          } catch (e) {}
+        }
+
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG') }));
+        return data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG');
       }
     }
   } catch (e) {
@@ -510,43 +545,53 @@ export const submitOutpassApplication = async ({
   return newTicket;
 };
 
-// Absent Controller makes call to parent & takes confirmation
-export const confirmParentAndForwardToHOD = (ticketId, { controllerName = 'Absent Controller', remarks = 'Parent confirmed permission over phone call.' } = {}) => {
+// Absent Controller or Faculty Mentor makes call to parent & takes confirmation
+export const confirmParentAndForwardToHOD = (ticketId, { controllerName = 'Absent Controller', remarks = 'Parent confirmed permission over phone call.', role = null, section = null } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Outpass application not found');
 
   const now = new Date();
+  const determinedRole = role || (controllerName?.toLowerCase().includes('mentor') ? 'Mentor' : 'Absent Controller');
   ticket.status = 'FORWARDED_TO_HOD';
+  ticket.forwardedByName = controllerName;
+  ticket.forwardedByRole = determinedRole;
+  ticket.forwardedSection = section || ticket.section;
   ticket.absentControllerAction = {
     confirmed: true,
     calledAt: now.toISOString(),
     displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     displayDate: now.toLocaleDateString('en-GB'),
     remarks,
-    controllerName
+    controllerName,
+    role: determinedRole,
+    section: ticket.forwardedSection
   };
 
   saveOutpasses(tickets);
   return ticket;
 };
 
-// Absent Controller marks parent denied permission
-export const rejectByAbsentController = (ticketId, { controllerName = 'Absent Controller', reason = 'Parent did not grant permission during call.' } = {}) => {
+// Absent Controller or Faculty Mentor marks parent denied permission
+export const rejectByAbsentController = (ticketId, { controllerName = 'Absent Controller', reason = 'Parent did not grant permission during call.', role = null, section = null } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Outpass application not found');
 
   const now = new Date();
+  const determinedRole = role || (controllerName?.toLowerCase().includes('mentor') ? 'Mentor' : 'Absent Controller');
   ticket.status = 'REJECTED';
   ticket.rejectionStage = 'ABSENT_CONTROLLER';
   ticket.rejectionReason = reason;
+  ticket.forwardedByName = controllerName;
+  ticket.forwardedByRole = determinedRole;
   ticket.absentControllerAction = {
     confirmed: false,
     calledAt: now.toISOString(),
     displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     remarks: reason,
-    controllerName
+    controllerName,
+    role: determinedRole
   };
 
   saveOutpasses(tickets);
@@ -671,20 +716,33 @@ export const subscribeToOutpasses = (callback) => {
 // ==========================================
 
 // Calculate faculty monthly leaves usage (Strict limit: 2 leaves per calendar month, no rollover)
+// OD Permission: Exactly 1 OD per month, does NOT cut regular permission count
 export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = null) => {
   if (!facultyIdentifier) {
-    return { count: 0, limit: 2, remaining: 2, isLimitExceeded: false, monthKey: '' };
+    return { 
+      count: 0, 
+      limit: 2, 
+      remaining: 2, 
+      isLimitExceeded: false, 
+      odCount: 0,
+      odLimit: 1,
+      odRemaining: 1,
+      isOdLimitExceeded: false,
+      monthKey: '',
+      message: '',
+      odMessage: ''
+    };
   }
 
   const cleanId = String(facultyIdentifier).trim().toLowerCase();
   const d = targetDateStr ? new Date(targetDateStr) : new Date();
   const year = isNaN(d.getFullYear()) ? new Date().getFullYear() : d.getFullYear();
   const month = isNaN(d.getMonth()) ? String(new Date().getMonth() + 1).padStart(2, '0') : String(d.getMonth() + 1).padStart(2, '0');
-  const targetMonthKey = `${year}-${month}`; // e.g. "2026-09"
+  const targetMonthKey = `${year}-${month}`; // e.g. "2026-10"
 
   const all = getAllOutpasses();
   const facultyMonthTickets = all.filter(t => {
-    if (t.applicantType !== 'FACULTY') return false;
+    if (t.applicantType !== 'FACULTY' && t.applicantType !== 'HOD') return false;
     
     const matchesUser = 
       (t.facultyUserId && String(t.facultyUserId).trim().toLowerCase() === cleanId) ||
@@ -693,7 +751,7 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
       (t.rollNumber && String(t.rollNumber).trim().toLowerCase() === cleanId);
     
     if (!matchesUser) return false;
-    if (t.status === 'REJECTED') return false; // Rejected leaves do not consume the quota
+    if (t.status === 'REJECTED') return false; // Rejected leaves do not consume quota
 
     // Determine the ticket's month (strictly based on leave date or applied date)
     const ticketDateStr = t.date || (t.appliedAt ? t.appliedAt.slice(0, 10) : '');
@@ -702,30 +760,46 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
     return ticketMonthKey === targetMonthKey;
   });
 
-  const count = facultyMonthTickets.length;
+  // Regular permissions (1-Hour & 4PM) - Max 2 per month
+  const regularTickets = facultyMonthTickets.filter(t => t.type !== 'FACULTY_OD' && t.permissionType !== 'FACULTY_OD');
+  const count = regularTickets.length;
   const limit = 2;
   const remaining = Math.max(0, limit - count);
   const isLimitExceeded = count >= limit;
+
+  // On Duty (OD) permissions - Max 1 per month, does not deduct from regular count
+  const odTickets = facultyMonthTickets.filter(t => t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_OD');
+  const odCount = odTickets.length;
+  const odLimit = 1;
+  const odRemaining = Math.max(0, odLimit - odCount);
+  const isOdLimitExceeded = odCount >= odLimit;
 
   return {
     count,
     limit,
     remaining,
     isLimitExceeded,
+    odCount,
+    odLimit,
+    odRemaining,
+    isOdLimitExceeded,
     monthKey: targetMonthKey,
     monthName: new Date(year, parseInt(month, 10) - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' }),
     tickets: facultyMonthTickets,
-    message: isLimitExceeded ? "your limit for leaves has been completed , consult principal." : ""
+    regularTickets,
+    odTickets,
+    message: isLimitExceeded ? "your limit for leaves has been completed , consult principal." : "",
+    odMessage: isOdLimitExceeded ? "Your OD's for this month has been completed." : ""
   };
 };
 
-// Apply for Faculty Permission (Only One Hour or 4:00 PM Permission)
+// Apply for Faculty Permission (One Hour, 4:00 PM, or OD Permission)
 export const applyFacultyLeave = async ({
   facultyId,
   facultyUserId,
   facultyName,
   department = 'Department of CSE(emerging Technologies)',
-  type = 'FACULTY_ONE_HOUR', // 'FACULTY_ONE_HOUR' or 'FACULTY_4PM'
+  type = 'FACULTY_ONE_HOUR', // 'FACULTY_ONE_HOUR' | 'FACULTY_4PM' | 'FACULTY_OD'
   date,
   leaveTime,
   purpose
@@ -737,11 +811,25 @@ export const applyFacultyLeave = async ({
   const selectedDate = date || new Date().toISOString().slice(0, 10);
   const cleanDepartment = (department && department !== 'General') ? department : 'Department of CSE(emerging Technologies)';
 
+  // Quota validation
+  const quota = getFacultyMonthlyLeaveUsage(facultyUserId || facultyName || facultyId, selectedDate);
+  if (type === 'FACULTY_OD') {
+    if (quota.isOdLimitExceeded) {
+      throw new Error("Your OD's for this month has been completed.");
+    }
+  } else {
+    if (quota.isLimitExceeded) {
+      throw new Error("your limit for leaves has been completed , consult principal.");
+    }
+  }
+
   // Determine final leave / out time
   let finalLeaveTime = leaveTime;
   if (type === 'FACULTY_4PM') {
     // 4 PM permission is fixed to 4:00 PM itself
     finalLeaveTime = '04:00 PM';
+  } else if (type === 'FACULTY_OD') {
+    finalLeaveTime = leaveTime && leaveTime.trim() ? leaveTime.trim() : 'On Duty (Full Day)';
   } else if (type === 'FACULTY_ONE_HOUR') {
     if (!leaveTime || !leaveTime.trim()) {
       throw new Error('Please specify what time you need to be out for the 1-hour permission.');
@@ -751,22 +839,16 @@ export const applyFacultyLeave = async ({
     finalLeaveTime = '04:00 PM';
   }
 
-  // 1. Strict Monthly Limit Check (2 permissions per month, resets every month, no carryover)
-  const quota = getFacultyMonthlyLeaveUsage(facultyUserId || facultyName || facultyId, selectedDate);
-  if (quota.isLimitExceeded) {
-    throw new Error("your limit for leaves has been completed , consult principal.");
-  }
-
   const now = new Date();
   const dateCompact = selectedDate.replace(/-/g, '');
   const randomNum = Math.floor(1000 + Math.random() * 9000);
-  const prefix = type === 'FACULTY_4PM' ? 'NEC-FAC-4PM' : 'NEC-FAC-1HR';
+  const prefix = type === 'FACULTY_4PM' ? 'NEC-FAC-4PM' : type === 'FACULTY_OD' ? 'NEC-FAC-OD' : 'NEC-FAC-1HR';
   const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
 
   const newTicket = {
     id: ticketId,
     applicantType: 'FACULTY',
-    type, // 'FACULTY_ONE_HOUR' | 'FACULTY_4PM' (or legacy fallback)
+    type,
     permissionType: type,
     facultyId,
     facultyUserId: facultyUserId || '',
@@ -776,8 +858,8 @@ export const applyFacultyLeave = async ({
     leaveTime: finalLeaveTime,
     outTime: finalLeaveTime,
     purpose: purpose.trim(),
-    reason: purpose.trim(), // for unified compatibility
-    destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : '1-Hour Permission',
+    reason: purpose.trim(),
+    destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : type === 'FACULTY_OD' ? 'On Duty (OD)' : '1-Hour Permission',
     rollNumber: facultyUserId || 'FACULTY',
     studentName: facultyName || 'Faculty Member',
     section: cleanDepartment,
@@ -785,12 +867,7 @@ export const applyFacultyLeave = async ({
     appliedDate: now.toLocaleDateString('en-GB'),
     appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     
-    // Status Flow for Faculty:
-    // 1. FORWARDED_TO_HOD: Faculty submitted -> Goes directly to HOD
-    // 2. PERMISSION_GRANTED: HOD accepted & forwarded to Security/Watchman
-    // 3. For 4 PM: Watchman sends out -> ticket status 'SENT_OUT' & closed = true (Completed)
-    // 4. For 1-Hour: Watchman sends out -> ticket status 'FACULTY_OUT' & pendingReturn = true.
-    //    When faculty returns, Security enters in-time -> status 'SENT_OUT', closed = true & HOD notified.
+    // Status Flow: Faculty submitted -> Goes directly to HOD
     status: 'FORWARDED_TO_HOD',
     pendingReturn: false,
     returned: false,
@@ -829,6 +906,161 @@ export const applyFacultyLeave = async ({
   return newTicket;
 };
 
+// HOD applies for Leave / Permission (One Hour, 4:00 PM, or OD Permission)
+// Routes directly to AO (Administrative Officer)
+export const applyHodLeave = async ({
+  hodUserId,
+  hodName,
+  department = 'Department of CSE(emerging Technologies)',
+  type = 'FACULTY_ONE_HOUR', // 'FACULTY_ONE_HOUR' | 'FACULTY_4PM' | 'FACULTY_OD'
+  date,
+  leaveTime,
+  purpose
+}) => {
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Please specify a valid and proper purpose for your request.');
+  }
+
+  const selectedDate = date || new Date().toISOString().slice(0, 10);
+  const cleanDepartment = (department && department !== 'General') ? department : 'Department of CSE(emerging Technologies)';
+
+  // Quota validation for HOD (same 2 permissions + 1 OD limit)
+  const quota = getFacultyMonthlyLeaveUsage(hodUserId || hodName || 'HOD', selectedDate);
+  if (type === 'FACULTY_OD') {
+    if (quota.isOdLimitExceeded) {
+      throw new Error("Your OD's for this month has been completed.");
+    }
+  } else {
+    if (quota.isLimitExceeded) {
+      throw new Error("your limit for leaves has been completed , consult principal.");
+    }
+  }
+
+  let finalLeaveTime = leaveTime;
+  if (type === 'FACULTY_4PM') {
+    finalLeaveTime = '04:00 PM';
+  } else if (type === 'FACULTY_OD') {
+    finalLeaveTime = leaveTime && leaveTime.trim() ? leaveTime.trim() : 'On Duty (Full Day)';
+  } else if (type === 'FACULTY_ONE_HOUR') {
+    if (!leaveTime || !leaveTime.trim()) {
+      throw new Error('Please specify what time you need to be out for the 1-hour permission.');
+    }
+    finalLeaveTime = leaveTime.trim();
+  } else if (!finalLeaveTime || !finalLeaveTime.trim()) {
+    finalLeaveTime = '04:00 PM';
+  }
+
+  const now = new Date();
+  const dateCompact = selectedDate.replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const prefix = type === 'FACULTY_4PM' ? 'NEC-HOD-4PM' : type === 'FACULTY_OD' ? 'NEC-HOD-OD' : 'NEC-HOD-1HR';
+  const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
+
+  const newTicket = {
+    id: ticketId,
+    applicantType: 'HOD',
+    type,
+    permissionType: type,
+    facultyId: hodUserId || 'HOD',
+    facultyUserId: hodUserId || 'HOD',
+    facultyName: hodName || 'Head of Department (HOD)',
+    department: cleanDepartment,
+    date: selectedDate,
+    leaveTime: finalLeaveTime,
+    outTime: finalLeaveTime,
+    purpose: purpose.trim(),
+    reason: purpose.trim(),
+    destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : type === 'FACULTY_OD' ? 'On Duty (OD)' : '1-Hour Permission',
+    rollNumber: hodUserId || 'HOD',
+    studentName: hodName || 'Head of Department (HOD)',
+    section: cleanDepartment,
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    
+    // Status Flow for HOD:
+    // 1. FORWARDED_TO_AO: HOD submitted -> Routes to AO login
+    // 2. PERMISSION_GRANTED: AO accepted & forwarded to Security/Watchman
+    status: 'FORWARDED_TO_AO',
+    pendingReturn: false,
+    returned: false,
+    closed: false,
+    inTime: null,
+    aoAction: null,
+    watchmanAction: null
+  };
+
+  const currentTickets = getAllOutpasses();
+  const updatedLocal = [newTicket, ...currentTickets.filter(t => t.id !== newTicket.id)];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLocal));
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: updatedLocal }));
+
+  try {
+    const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({ tickets: [newTicket] })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
+      }
+    }
+  } catch (e) {
+    console.warn('Network sync note on HOD leave submit:', e);
+  }
+
+  return newTicket;
+};
+
+// AO (Administrative Officer) accepts HOD Leave & forwards to Security for gate clearance
+export const aoApproveHodLeave = (ticketId, { aoName = 'Administrative Officer (AO)', remarks = 'Permission accepted by AO. Forwarded to campus security.' } = {}) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) throw new Error('Leave application not found');
+
+  const now = new Date();
+  ticket.status = 'PERMISSION_GRANTED'; // Transferred to Security
+  ticket.aoAction = {
+    granted: true,
+    approvedAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    aoName
+  };
+
+  saveOutpasses(tickets);
+  return ticket;
+};
+
+// AO rejects HOD Leave
+export const aoRejectHodLeave = (ticketId, { aoName = 'Administrative Officer (AO)', reason = 'Permission denied by AO.' } = {}) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) throw new Error('Leave application not found');
+
+  const now = new Date();
+  ticket.status = 'REJECTED';
+  ticket.rejectionStage = 'AO';
+  ticket.rejectionReason = reason;
+  ticket.aoAction = {
+    granted: false,
+    approvedAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    remarks: reason,
+    aoName
+  };
+
+  saveOutpasses(tickets);
+  return ticket;
+};
+
 // HOD accepts Faculty Leave / Early Out & forwards to Watchman role login
 export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department (HOD)', remarks = 'Accepted and forwarded to watchman login.', timeToLeave = null } = {}) => {
   const tickets = getAllOutpasses();
@@ -859,19 +1091,20 @@ export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department
   return ticket;
 };
 
-// Security Head marks faculty departed at the gate
-// - For 4 PM: ticket is completed and closed immediately upon sending out
+// Security Head marks faculty or HOD departed at the gate
+// - For 4 PM / OD: ticket is completed and closed immediately upon sending out
 // - For 1-Hour: ticket is marked FACULTY_OUT (pending return to college)
 export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Campus Security Head', remarks = '' } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
-  if (!ticket) throw new Error('Faculty gate pass not found');
+  if (!ticket) throw new Error('Gate pass not found');
 
   const now = new Date();
   const isOneHour = ticket.type === 'FACULTY_ONE_HOUR';
+  const personRole = ticket.applicantType === 'HOD' ? 'HOD' : 'Faculty';
 
   if (isOneHour) {
-    // 1-Hour Permission: Faculty leaves campus, return is pending
+    // 1-Hour Permission: Leaves campus, return is pending
     ticket.status = 'FACULTY_OUT';
     ticket.pendingReturn = true;
     ticket.returned = false;
@@ -883,11 +1116,11 @@ export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Campus Securi
       exitTime: now.toISOString(),
       displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       displayDate: now.toLocaleDateString('en-GB'),
-      remarks: remarks || 'Faculty departed campus on 1-hour permission. Return to college pending.',
+      remarks: remarks || `${personRole} departed campus on 1-hour permission. Return to college pending.`,
       watchmanName
     };
   } else {
-    // 4 PM Permission (or legacy early out / leave): No return required, closed immediately
+    // 4 PM Permission or On Duty (OD): No return required, closed immediately upon departure
     ticket.status = 'SENT_OUT';
     ticket.pendingReturn = false;
     ticket.returned = false;
@@ -899,7 +1132,9 @@ export const watchmanReleaseFaculty = (ticketId, { watchmanName = 'Campus Securi
       exitTime: now.toISOString(),
       displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       displayDate: now.toLocaleDateString('en-GB'),
-      remarks: remarks || 'Faculty departed campus for 4 PM permission. Ticket closed.',
+      remarks: remarks || (ticket.type === 'FACULTY_OD' 
+        ? `${personRole} departed campus for On Duty (OD). Ticket closed.`
+        : `${personRole} departed campus for 4 PM permission. Ticket closed.`),
       watchmanName,
       closed: true
     };
@@ -999,4 +1234,382 @@ export const getFacultyLeaveHistory = (facultyIdentifier) => {
     );
   }).sort((a, b) => new Date(b.appliedAt || 0) - new Date(a.appliedAt || 0));
 };
+
+// ==========================================
+// FACULTY MENTORSHIP & SECTION ASSIGNMENT SYSTEM
+// ==========================================
+
+export const MENTOR_REGISTRY_KEY = 'lectra_faculty_mentors';
+export const SYS_CONFIG_MENTOR_ID = 'SYS_FACULTY_MENTOR_REGISTRY';
+
+// Get current faculty mentor registry
+export const getFacultyMentorRegistry = () => {
+  try {
+    const raw = localStorage.getItem(MENTOR_REGISTRY_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (e) {}
+
+  // Fallback: check raw tickets in storage for SYS_CONFIG_MENTOR_ID
+  try {
+    const rawStorage = localStorage.getItem(STORAGE_KEY);
+    if (rawStorage) {
+      const all = JSON.parse(rawStorage);
+      const sys = Array.isArray(all) && all.find(t => t && t.id === SYS_CONFIG_MENTOR_ID);
+      if (sys && sys.data) return sys.data;
+    }
+  } catch (e) {}
+
+  return { facultyAssignments: {}, sectionMentors: {} };
+};
+
+// Save faculty mentor registry and persist to backend system setting
+export const saveFacultyMentorRegistry = async (registry) => {
+  try {
+    localStorage.setItem(MENTOR_REGISTRY_KEY, JSON.stringify(registry));
+    window.dispatchEvent(new CustomEvent('lectra_mentors_updated', { detail: registry }));
+  } catch (e) {}
+
+  // Upsert into storage so it persists to database through /outpass/tickets
+  try {
+    const rawStorage = localStorage.getItem(STORAGE_KEY);
+    let all = rawStorage ? JSON.parse(rawStorage) : [];
+    if (!Array.isArray(all)) all = [];
+
+    const sysIndex = all.findIndex(t => t && t.id === SYS_CONFIG_MENTOR_ID);
+    const sysRecord = {
+      id: SYS_CONFIG_MENTOR_ID,
+      applicantType: 'SYSTEM_CONFIG',
+      data: registry,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (sysIndex >= 0) {
+      all[sysIndex] = sysRecord;
+    } else {
+      all.push(sysRecord);
+    }
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+
+    // Send to backend database
+    await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      body: JSON.stringify({ tickets: all })
+    });
+  } catch (e) {
+    console.warn('Sync mentor registry note:', e);
+  }
+
+  return registry;
+};
+
+// Check if a faculty user already has an assigned section
+export const getFacultyAssignedSection = (facultyUser) => {
+  if (!facultyUser) return null;
+  const registry = getFacultyMentorRegistry();
+  const key1 = facultyUser.userId ? String(facultyUser.userId).trim().toLowerCase() : '';
+  const key2 = facultyUser.id ? String(facultyUser.id).trim().toLowerCase() : '';
+  const key3 = (facultyUser.name || '').trim().toLowerCase();
+
+  const fa = registry.facultyAssignments || {};
+  let found = null;
+
+  for (const [key, assignment] of Object.entries(fa)) {
+    if (!assignment) continue;
+    const aKey = String(key).trim().toLowerCase();
+    const aUserId = assignment.facultyUserId ? String(assignment.facultyUserId).trim().toLowerCase() : '';
+    const aId = assignment.facultyId ? String(assignment.facultyId).trim().toLowerCase() : '';
+    const aName = assignment.facultyName ? String(assignment.facultyName).trim().toLowerCase() : '';
+
+    if (
+      (key1 && (aKey === key1 || aUserId === key1)) ||
+      (key2 && (aKey === key2 || aId === key2)) ||
+      (key3 && (aKey === key3 || aName === key3))
+    ) {
+      found = assignment;
+      break;
+    }
+  }
+
+  if (found && found.section) {
+    return found;
+  }
+
+  // Also check sectionMentors
+  const sm = registry.sectionMentors || {};
+  for (const [secName, mentorInfo] of Object.entries(sm)) {
+    if (!mentorInfo) continue;
+    const mUserId = mentorInfo.facultyUserId ? String(mentorInfo.facultyUserId).trim().toLowerCase() : '';
+    const mId = mentorInfo.facultyId ? String(mentorInfo.facultyId).trim().toLowerCase() : '';
+    const mName = mentorInfo.facultyName ? String(mentorInfo.facultyName).trim().toLowerCase() : '';
+
+    if (
+      (key1 && mUserId === key1) ||
+      (key2 && mId === key2) ||
+      (key3 && mName === key3)
+    ) {
+      return {
+        section: secName,
+        department: mentorInfo.department,
+        facultyName: mentorInfo.facultyName,
+        facultyUserId: mentorInfo.facultyUserId,
+        facultyId: mentorInfo.facultyId,
+        assignedBy: mentorInfo.assignedBy || 'FACULTY',
+        lockedForFaculty: true
+      };
+    }
+  }
+
+  return null;
+};
+
+// Faculty by himself/herself can assign themselves ONLY ONCE. Cannot change once assigned!
+export const assignFacultyMentorByFaculty = async (facultyUser, section) => {
+  if (!facultyUser) throw new Error('Faculty details are required.');
+  if (!section || !section.trim()) throw new Error('Please select a valid section.');
+
+  const existing = getFacultyAssignedSection(facultyUser);
+  if (existing && existing.section) {
+    throw new Error(`You have already assigned yourself to Section ${existing.section}. Mentorship assignment is locked.`);
+  }
+
+  const registry = getFacultyMentorRegistry();
+  if (!registry.facultyAssignments) registry.facultyAssignments = {};
+  if (!registry.sectionMentors) registry.sectionMentors = {};
+
+  const cleanSection = section.trim();
+  const facultyKey = facultyUser.userId || facultyUser.id || facultyUser.name;
+
+  const assignment = {
+    facultyId: facultyUser.id || null,
+    facultyUserId: facultyUser.userId || null,
+    facultyName: facultyUser.name || '',
+    department: facultyUser.department || '',
+    section: cleanSection,
+    assignedAt: new Date().toISOString(),
+    assignedBy: 'FACULTY',
+    lockedForFaculty: true
+  };
+
+  registry.facultyAssignments[facultyKey] = assignment;
+  registry.sectionMentors[cleanSection] = assignment;
+
+  await saveFacultyMentorRegistry(registry);
+  return assignment;
+};
+
+// HOD can view and can change / override / re-assign mentorship for any section or faculty
+export const assignFacultyMentorByHod = async ({ facultyId, facultyUserId, facultyName, department, section }) => {
+  if (!section || !section.trim()) throw new Error('Section name is required.');
+  if (!facultyName || !facultyName.trim()) throw new Error('Faculty name is required.');
+
+  const registry = getFacultyMentorRegistry();
+  if (!registry.facultyAssignments) registry.facultyAssignments = {};
+  if (!registry.sectionMentors) registry.sectionMentors = {};
+
+  const cleanSection = section.trim();
+  const facultyKey = facultyUserId || facultyId || facultyName.trim();
+
+  // If this faculty was previously assigned to another section, clean up old section mapping
+  for (const [sec, info] of Object.entries(registry.sectionMentors)) {
+    if (!info) continue;
+    const matchUserId = facultyUserId && info.facultyUserId && String(info.facultyUserId).toLowerCase() === String(facultyUserId).toLowerCase();
+    const matchId = facultyId && info.facultyId && String(info.facultyId) === String(facultyId);
+    const matchName = info.facultyName && String(info.facultyName).trim().toLowerCase() === String(facultyName).trim().toLowerCase();
+    if (matchUserId || matchId || matchName) {
+      delete registry.sectionMentors[sec];
+    }
+  }
+
+  const assignment = {
+    facultyId: facultyId || null,
+    facultyUserId: facultyUserId || null,
+    facultyName: facultyName.trim(),
+    department: department || '',
+    section: cleanSection,
+    assignedAt: new Date().toISOString(),
+    assignedBy: 'HOD',
+    lockedForFaculty: true // Locked for the faculty from their login
+  };
+
+  registry.facultyAssignments[facultyKey] = assignment;
+  registry.sectionMentors[cleanSection] = assignment;
+
+  await saveFacultyMentorRegistry(registry);
+  return assignment;
+};
+
+// HOD can remove a mentor assignment from a section
+export const removeFacultyMentorByHod = async (sectionName) => {
+  const registry = getFacultyMentorRegistry();
+  if (!registry.sectionMentors) registry.sectionMentors = {};
+  if (!registry.facultyAssignments) registry.facultyAssignments = {};
+
+  const cleanSec = (sectionName || '').trim();
+  const existing = registry.sectionMentors[cleanSec];
+  if (existing) {
+    const key = existing.facultyUserId || existing.facultyId || existing.facultyName;
+    if (key && registry.facultyAssignments[key]) {
+      delete registry.facultyAssignments[key];
+    }
+    delete registry.sectionMentors[cleanSec];
+  }
+
+  await saveFacultyMentorRegistry(registry);
+  return true;
+};
+
+// Subscribe to mentor registry updates across tabs/sync
+export const subscribeToMentors = (callback) => {
+  const handler = (e) => {
+    callback(e.detail || getFacultyMentorRegistry());
+  };
+  window.addEventListener('lectra_mentors_updated', handler);
+  return () => window.removeEventListener('lectra_mentors_updated', handler);
+};
+
+// ==========================================
+// STUDENT CERTIFICATE REQUESTS SERVICE
+// Routed to OFFICE login role
+// ==========================================
+const CERT_STORAGE_KEY = 'lectra_certificate_requests';
+const SYS_CONFIG_CERT_ID = 'SYS_CONFIG_CERTIFICATES';
+
+export const getAllCertificateRequests = () => {
+  try {
+    const cached = localStorage.getItem(CERT_STORAGE_KEY);
+    let localCerts = cached ? JSON.parse(cached) : [];
+    
+    // Also check if synced from central tickets
+    const tickets = getAllOutpasses();
+    const syncTicket = tickets.find(t => t.id === SYS_CONFIG_CERT_ID);
+    if (syncTicket && syncTicket.requests && Array.isArray(syncTicket.requests)) {
+      if (syncTicket.requests.length >= localCerts.length) {
+        localStorage.setItem(CERT_STORAGE_KEY, JSON.stringify(syncTicket.requests));
+        return syncTicket.requests;
+      }
+    }
+    return localCerts;
+  } catch (e) {
+    return [];
+  }
+};
+
+export const saveCertificateRequests = async (requests) => {
+  try {
+    localStorage.setItem(CERT_STORAGE_KEY, JSON.stringify(requests));
+    window.dispatchEvent(new CustomEvent('lectra_certificates_updated', { detail: requests }));
+
+    // Sync to central backend tickets storage for cross-device visibility
+    const syncTicket = {
+      id: SYS_CONFIG_CERT_ID,
+      applicantType: 'SYSTEM_CONFIG',
+      type: 'CERTIFICATE_REGISTRY',
+      requests,
+      updatedAt: new Date().toISOString()
+    };
+
+    const currentTickets = getAllOutpasses();
+    const updatedTickets = [syncTicket, ...currentTickets.filter(t => t.id !== SYS_CONFIG_CERT_ID)];
+    saveOutpasses(updatedTickets);
+
+    await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      body: JSON.stringify({ tickets: [syncTicket] })
+    });
+  } catch (e) {
+    console.warn('Certificate requests save/sync warning:', e);
+  }
+};
+
+export const submitCertificateRequest = async ({
+  rollNumber,
+  studentName,
+  section = '',
+  department = '',
+  studentMobile = '',
+  parentMobile = '',
+  certificateName,
+  reason = ''
+}) => {
+  if (!certificateName || !certificateName.trim()) {
+    throw new Error('Please enter the certificate name you need.');
+  }
+  if (!rollNumber || !studentName) {
+    throw new Error('Student roll number and name are required.');
+  }
+
+  const requests = getAllCertificateRequests();
+  const now = new Date();
+  const dateCompact = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const reqId = `CERT-${dateCompact}-${randomNum}`;
+
+  const newRequest = {
+    id: reqId,
+    rollNumber: rollNumber.trim().toUpperCase(),
+    studentName: studentName.trim(),
+    section: section || '',
+    department: department || '',
+    studentMobile: studentMobile || '',
+    parentMobile: parentMobile || '',
+    certificateName: certificateName.trim(),
+    reason: (reason || '').trim(),
+    status: 'PENDING', // 'PENDING' | 'APPROVED' | 'IN_PROGRESS' | 'READY' | 'ISSUED' | 'REJECTED'
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    officeAction: null
+  };
+
+  const updated = [newRequest, ...requests.filter(r => r.id !== reqId)];
+  await saveCertificateRequests(updated);
+  return newRequest;
+};
+
+export const updateCertificateStatus = async (requestId, { status, remarks = '', processedBy = 'Administrative Office' }) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = status;
+  req.officeAction = {
+    status,
+    updatedAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    processedBy
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+export const getStudentCertificateRequests = (rollNumber) => {
+  if (!rollNumber) return [];
+  const clean = rollNumber.trim().toUpperCase();
+  const requests = getAllCertificateRequests();
+  return requests.filter(r => (r.rollNumber || '').toUpperCase() === clean);
+};
+
+export const subscribeToCertificates = (callback) => {
+  const handler = (e) => {
+    callback(e.detail || getAllCertificateRequests());
+  };
+  window.addEventListener('lectra_certificates_updated', handler);
+  return () => window.removeEventListener('lectra_certificates_updated', handler);
+};
+
+
 

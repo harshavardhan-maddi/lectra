@@ -58,6 +58,51 @@ const Layout = ({ children }) => {
   const [onlineListOpen, setOnlineListOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // Department Classrooms for strict online user isolation
+  const [layoutClassrooms, setLayoutClassrooms] = useState([]);
+  useEffect(() => {
+    if (user?.role === 'HOD' && token) {
+      fetch('/api/classrooms', { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) setLayoutClassrooms(data);
+        })
+        .catch(() => {});
+    }
+  }, [user?.role, token]);
+
+  // Online users strictly scoped: Super Admin sees all departments/users; HOD sees ONLY their department
+  const displayedOnlineUsers = React.useMemo(() => {
+    if (user?.role === 'SUPER_ADMIN') {
+      return onlineUsers;
+    }
+    if (user?.role === 'HOD') {
+      const userDept = (user?.department || '').trim().toLowerCase();
+      const deptClassNames = layoutClassrooms
+        .filter(c => !user?.department || c.department === user?.department)
+        .map(c => (c.className || '').toLowerCase());
+
+      return onlineUsers.filter(u => {
+        if (u.department && u.department.toLowerCase() === userDept) return true;
+        if (u.className) {
+          const cleanClass = u.className.toLowerCase();
+          if (deptClassNames.includes(cleanClass)) return true;
+          if (userDept.includes('cse') && (cleanClass.includes('cse') || cleanClass.includes('csm') || cleanClass.includes('csd') || cleanClass.includes('cso') || cleanClass.includes('ai'))) return true;
+          if (userDept.includes('ece') && cleanClass.includes('ece')) return true;
+          if (userDept.includes('eee') && cleanClass.includes('eee')) return true;
+          if (userDept.includes('mech') && cleanClass.includes('mech')) return true;
+          if (userDept.includes('civil') && cleanClass.includes('civil')) return true;
+          if (userDept.includes('it') && cleanClass.includes('it')) return true;
+        }
+        if (u.name && u.name.trim().toLowerCase() === (user?.name || '').trim().toLowerCase()) return true;
+        return false;
+      });
+    }
+    return [];
+  }, [user, onlineUsers, layoutClassrooms]);
+
+  const displayedOnlineCount = displayedOnlineUsers.length;
+
   // Profile Edit Modal States
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileName, setProfileName] = useState('');
@@ -131,6 +176,8 @@ const Layout = ({ children }) => {
       { name: 'Reports', path: '/reports', icon: FileSpreadsheet },
       { name: 'Gate Exit Clearance', path: '/watchman-dashboard', icon: DoorOpen },
       { name: 'Gate Exit History', path: '/watchman-dashboard?tab=exitHistory', icon: CheckCircle2 },
+      { name: 'AO Portal (HOD Leaves)', path: '/ao-dashboard', icon: ShieldCheck },
+      { name: 'Office Certificates', path: '/office-dashboard', icon: FileText },
       { name: 'Section Absentees', path: '/absent-controller', icon: Users },
       { name: 'All Section Absentees', path: '/absent-controller?tab=allSections', icon: AlertCircle },
       { name: 'Student Outpasses', path: '/absent-controller?tab=outpassRequests', icon: FileText },
@@ -175,10 +222,45 @@ const Layout = ({ children }) => {
       { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
     );
   } else if (user?.role === 'FACULTY') {
+    // Check if faculty is non-teaching
+    let isNonTeaching = user?.facultyType === 'NON_TEACHING';
+    if (!isNonTeaching) {
+      try {
+        const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+        const meta = metaList.find(m => 
+          (m.empid && String(m.empid).toLowerCase() === String(user?.userId).toLowerCase()) ||
+          (m.name && String(m.name).trim().toLowerCase() === String(user?.name).trim().toLowerCase())
+        );
+        if (meta && meta.facultyType === 'NON_TEACHING') {
+          isNonTeaching = true;
+        }
+      } catch (e) {}
+    }
+
+    if (isNonTeaching) {
+      // Non-teaching faculty can ONLY apply permissions, cannot take attendance or make calls
+      navLinks.push(
+        { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
+      );
+    } else {
+      navLinks.push(
+        { name: 'Attendance Registry', path: '/faculty-dashboard', icon: UserCheck },
+        { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
+        { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
+        { name: 'Class Mentorship', path: '/faculty-dashboard?tab=mentor', icon: GraduationCap }
+      );
+    }
+  } else if (user?.role === 'AO') {
     navLinks.push(
-      { name: 'Attendance Registry', path: '/faculty-dashboard', icon: UserCheck },
-      { name: 'Parent Call Logs', path: '/faculty-dashboard?tab=calls', icon: PhoneCall },
-      { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
+      { name: 'AO Portal', path: '/ao-dashboard', icon: ShieldCheck },
+      { name: 'Pending Leaves', path: '/ao-dashboard?tab=PENDING', icon: Clock },
+      { name: 'Security Cleared', path: '/ao-dashboard?tab=GRANTED', icon: DoorOpen }
+    );
+  } else if (user?.role === 'OFFICE') {
+    navLinks.push(
+      { name: 'Certificates Portal', path: '/office-dashboard', icon: FileText },
+      { name: 'Pending Requests', path: '/office-dashboard?tab=PENDING', icon: Clock },
+      { name: 'Ready for Collection', path: '/office-dashboard?tab=READY', icon: CheckCircle2 }
     );
   } else if (user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') {
     navLinks.push(
@@ -433,15 +515,15 @@ const Layout = ({ children }) => {
 
           <div className="flex items-center gap-2">
             
-            {/* Online Indicator Toggle — visible to HOD / SUB_ADMIN / SUPER_ADMIN */}
-            {(user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') && (
+            {/* Online Indicator Toggle — visible to HOD and SUPER_ADMIN ONLY */}
+            {(user?.role === 'HOD' || user?.role === 'SUPER_ADMIN') && (
             <div className="relative">
               <button
                 onClick={() => setOnlineListOpen(!onlineListOpen)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-600 dark:text-green-400 font-semibold text-xs active:scale-[0.98] transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-600 dark:text-green-400 font-semibold text-xs active:scale-[0.98] transition-all cursor-pointer"
               >
                 <Globe size={14} className="animate-spin" style={{ animationDuration: '6s' }} />
-                <span>{onlineCount} Online</span>
+                <span>{displayedOnlineCount} Online</span>
               </button>
 
               {/* Online Users List Dropdown */}
@@ -450,13 +532,13 @@ const Layout = ({ children }) => {
                   <div className="fixed inset-0 z-40" onClick={() => setOnlineListOpen(false)} />
                   <div className="absolute right-0 mt-2 w-64 glass-card z-50 p-4 border border-slate-200 dark:border-slate-800 animate-fade-in max-h-80 overflow-y-auto">
                     <h3 className="font-bold text-sm text-customText dark:text-customText-dark pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
-                      Connected Users ({onlineCount})
+                      Connected Users ({displayedOnlineCount})
                     </h3>
-                    {onlineUsers.length === 0 ? (
-                      <p className="text-xs text-customText-muted dark:text-customText-mutedDark py-2">No active users logged</p>
+                    {displayedOnlineUsers.length === 0 ? (
+                      <p className="text-xs text-customText-muted dark:text-customText-mutedDark py-2">No active users in department</p>
                     ) : (
                       <div className="space-y-2">
-                        {onlineUsers.map((u, i) => (
+                        {displayedOnlineUsers.map((u, i) => (
                           <div key={i} className="flex items-center gap-2.5 py-1">
                             <div className="w-2 h-2 rounded-full bg-green-500" />
                             <div className="min-w-0 flex-1">

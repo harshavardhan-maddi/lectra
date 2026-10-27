@@ -48,7 +48,12 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem('token');
-      if (storedToken === 'watchman-session-token') {
+      if (
+        storedToken === 'watchman-session-token' ||
+        storedToken === 'ao-session-token' ||
+        storedToken === 'office-session-token' ||
+        (storedToken && (storedToken.startsWith('watchman-token-') || storedToken.startsWith('ao-token-') || storedToken.startsWith('office-token-')))
+      ) {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
           try {
@@ -92,11 +97,14 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (userId, password) => {
+    const cleanUserId = (userId || '').trim().toLowerCase();
+    const cleanPass = (password || '').trim();
+
     // 1. Check custom watchman accounts stored on device
     try {
       const customWatchmen = JSON.parse(localStorage.getItem('lectra_custom_watchmen') || '[]');
-      const matchedCustomWatchman = customWatchmen.find(w => w.userId.toLowerCase() === userId.toLowerCase());
-      if (matchedCustomWatchman && matchedCustomWatchman.password === password) {
+      const matchedCustomWatchman = customWatchmen.find(w => w.userId.toLowerCase() === cleanUserId);
+      if (matchedCustomWatchman && matchedCustomWatchman.password === cleanPass) {
         const watchmanUser = {
           id: matchedCustomWatchman.id || 90001,
           name: matchedCustomWatchman.name || 'Campus Gate Watchman',
@@ -117,8 +125,8 @@ export const AuthProvider = ({ children }) => {
     }
 
     // 2. Default Watchman Gate Security fallback credentials
-    if (userId.toLowerCase() === 'watchman' || userId.toLowerCase() === 'security' || userId.toLowerCase() === 'gate') {
-      if (password === 'watchman' || password === 'watchman123' || password === 'security123' || password === 'password123' || password === 'gate123') {
+    if (cleanUserId === 'watchman' || cleanUserId === 'security' || cleanUserId === 'gate') {
+      if (cleanPass === 'watchman' || cleanPass === 'watchman123' || cleanPass === 'security123' || cleanPass === 'password123' || cleanPass === 'gate123') {
         const watchmanUser = {
           id: 9999,
           name: 'Main Gate Security (Watchman)',
@@ -135,7 +143,47 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // 3. Authenticate with backend API
+    // 3. AO (Administrative Officer) Login fallback credentials
+    if (cleanUserId === 'ao' || cleanUserId === 'adminofficer' || cleanUserId === 'ao_admin') {
+      if (cleanPass === 'ao' || cleanPass === 'ao123' || cleanPass === 'password123' || cleanPass === 'admin123') {
+        const aoUser = {
+          id: 8888,
+          name: 'Administrative Officer (AO)',
+          userId: 'ao',
+          role: 'AO',
+          className: null,
+          department: 'Administrative Office'
+        };
+        localStorage.setItem('token', 'ao-session-token');
+        localStorage.setItem('user', JSON.stringify(aoUser));
+        localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
+        setToken('ao-session-token');
+        setUser(aoUser);
+        return aoUser;
+      }
+    }
+
+    // 4. OFFICE (Administrative Office for Student Certificates) Login fallback credentials
+    if (cleanUserId === 'office' || cleanUserId === 'adminoffice' || cleanUserId === 'office_admin') {
+      if (cleanPass === 'office' || cleanPass === 'office123' || cleanPass === 'password123' || cleanPass === 'admin123') {
+        const officeUser = {
+          id: 7777,
+          name: 'Administrative Office (Certificates)',
+          userId: 'office',
+          role: 'OFFICE',
+          className: null,
+          department: 'Administrative Office'
+        };
+        localStorage.setItem('token', 'office-session-token');
+        localStorage.setItem('user', JSON.stringify(officeUser));
+        localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
+        setToken('office-session-token');
+        setUser(officeUser);
+        return officeUser;
+      }
+    }
+
+    // 5. Authenticate with backend API
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',

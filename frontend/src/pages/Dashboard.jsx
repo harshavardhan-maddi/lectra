@@ -42,7 +42,10 @@ import {
   ArrowDownToLine,
   ShieldCheck as ShieldIcon,
   BellRing,
-  LogIn
+  LogIn,
+  GraduationCap,
+  Briefcase,
+  Clock
 } from 'lucide-react';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
@@ -50,6 +53,7 @@ import {
   hodGrantOutpass, 
   hodRejectOutpass, 
   hodApproveFacultyLeave,
+  applyHodLeave,
   subscribeToOutpasses,
   syncHODStudents,
   deleteOutpassTicket,
@@ -58,7 +62,11 @@ import {
   getStudentOutpassHistory,
   isTicketDeleteLockedForHod,
   markHodNotificationRead,
-  clearAllHodReturnNotifications
+  clearAllHodReturnNotifications,
+  getFacultyMentorRegistry,
+  assignFacultyMentorByHod,
+  removeFacultyMentorByHod,
+  subscribeToMentors
 } from '../services/outpassService';
 import {
   exportOverallData,
@@ -112,6 +120,144 @@ const Dashboard = ({ initialTab }) => {
   const [studentHistoryModalStudent, setStudentHistoryModalStudent] = useState(null);
   const [outpassActionSuccess, setOutpassActionSuccess] = useState('');
   const [outpassActionError, setOutpassActionError] = useState('');
+
+  // HOD Faculty Mentorship Management
+  const [showMentorModal, setShowMentorModal] = useState(false);
+  const [mentorRegistry, setMentorRegistry] = useState(getFacultyMentorRegistry);
+  const [facultyListForMentors, setFacultyListForMentors] = useState([]);
+  const [loadingFacultyList, setLoadingFacultyList] = useState(false);
+  const [editingSectionMentor, setEditingSectionMentor] = useState(null); // section string
+  const [selectedFacultyForSection, setSelectedFacultyForSection] = useState('');
+  const [savingMentorAssignment, setSavingMentorAssignment] = useState(false);
+  const [mentorSuccessMsg, setMentorSuccessMsg] = useState('');
+  const [mentorErrorMsg, setMentorErrorMsg] = useState('');
+
+  // HOD Leave Application states (routes to AO)
+  const [showHodApplyModal, setShowHodApplyModal] = useState(false);
+  const [hodLeaveType, setHodLeaveType] = useState('FACULTY_ONE_HOUR');
+  const [hodLeaveDate, setHodLeaveDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [hodLeaveTime, setHodLeaveTime] = useState('10:00 AM');
+  const [hodLeavePurpose, setHodLeavePurpose] = useState('');
+  const [hodApplyingLeave, setHodApplyingLeave] = useState(false);
+  const [hodLeaveSuccess, setHodLeaveSuccess] = useState('');
+  const [hodLeaveError, setHodLeaveError] = useState('');
+
+  const handleHodApplySubmit = async (e) => {
+    e.preventDefault();
+    setHodApplyingLeave(true);
+    setHodLeaveError('');
+    setHodLeaveSuccess('');
+    try {
+      await applyHodLeave({
+        hodUserId: user?.userId || user?.username || 'HOD',
+        hodName: user?.name || 'Head of Department (HOD)',
+        department: user?.department,
+        type: hodLeaveType,
+        date: hodLeaveDate,
+        leaveTime: hodLeaveType === 'FACULTY_4PM' ? '04:00 PM' : hodLeaveTime,
+        purpose: hodLeavePurpose
+      });
+      setHodLeaveSuccess('HOD leave application submitted! Request forwarded to Administrative Officer (AO) for approval.');
+      setHodLeavePurpose('');
+      setTimeout(() => {
+        setShowHodApplyModal(false);
+        setHodLeaveSuccess('');
+      }, 2000);
+    } catch (err) {
+      setHodLeaveError(err.message || 'Failed to submit HOD leave application');
+    } finally {
+      setHodApplyingLeave(false);
+    }
+  };
+
+  // Subscribe to mentor registry updates
+  useEffect(() => {
+    setMentorRegistry(getFacultyMentorRegistry());
+    const unsub = subscribeToMentors(setMentorRegistry);
+    return () => unsub();
+  }, []);
+
+  const loadFacultyForMentors = async () => {
+    try {
+      setLoadingFacultyList(true);
+      const res = await fetch('/api/faculty', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data) && data.length > 0) {
+        setFacultyListForMentors(data);
+      } else {
+        const userRes = await fetch('/api/users', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const userData = await userRes.json();
+        if (userRes.ok && Array.isArray(userData)) {
+          setFacultyListForMentors(userData.filter(u => u.role === 'FACULTY').map(u => ({
+            id: u.id,
+            name: u.name,
+            loginId: u.userId,
+            department: u.department
+          })));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load faculty list for mentors:', err);
+    } finally {
+      setLoadingFacultyList(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showMentorModal) {
+      loadFacultyForMentors();
+    }
+  }, [showMentorModal]);
+
+  const handleHodSaveMentor = async (sectionName) => {
+    if (!selectedFacultyForSection) {
+      setMentorErrorMsg('Please select a faculty member.');
+      return;
+    }
+    const foundFaculty = facultyListForMentors.find(f => String(f.id) === String(selectedFacultyForSection) || f.loginId === selectedFacultyForSection || f.name === selectedFacultyForSection);
+    if (!foundFaculty) {
+      setMentorErrorMsg('Selected faculty not found.');
+      return;
+    }
+    try {
+      setSavingMentorAssignment(true);
+      setMentorErrorMsg('');
+      await assignFacultyMentorByHod({
+        facultyId: foundFaculty.id,
+        facultyUserId: foundFaculty.loginId || foundFaculty.userId,
+        facultyName: foundFaculty.name,
+        department: foundFaculty.department || user?.department,
+        section: sectionName
+      });
+      setMentorSuccessMsg(`Successfully assigned ${foundFaculty.name} as mentor for Section ${sectionName}!`);
+      setEditingSectionMentor(null);
+      setSelectedFacultyForSection('');
+      setTimeout(() => setMentorSuccessMsg(''), 4000);
+    } catch (err) {
+      setMentorErrorMsg(err.message || 'Failed to assign mentor.');
+    } finally {
+      setSavingMentorAssignment(false);
+    }
+  };
+
+  const handleHodRemoveMentor = async (sectionName) => {
+    try {
+      setSavingMentorAssignment(true);
+      setMentorErrorMsg('');
+      await removeFacultyMentorByHod(sectionName);
+      setMentorSuccessMsg(`Mentor removed for Section ${sectionName}.`);
+      setEditingSectionMentor(null);
+      setTimeout(() => setMentorSuccessMsg(''), 4000);
+    } catch (err) {
+      setMentorErrorMsg(err.message || 'Failed to remove mentor.');
+    } finally {
+      setSavingMentorAssignment(false);
+    }
+  };
 
   // Data Backup & Migration States (Admin-only)
   const [isExporting, setIsExporting] = useState(false);
@@ -561,10 +707,18 @@ const Dashboard = ({ initialTab }) => {
       if (!classRes.ok) {
         throw new Error(classData.message || 'Failed to fetch classrooms');
       }
-      setClassrooms(classData);
+
+      // Department scoping: ensure only this department's classrooms are displayed for HOD
+      let filteredClassrooms = classData;
+      if (user?.role !== 'SUPER_ADMIN' && user?.department) {
+        filteredClassrooms = classData.filter(c => !c.department || c.department.trim().toLowerCase() === user.department.trim().toLowerCase());
+      } else if (user?.role === 'SUPER_ADMIN' && selectedDepartment && selectedDepartment !== 'ALL') {
+        filteredClassrooms = classData.filter(c => !c.department || c.department.trim().toLowerCase() === selectedDepartment.trim().toLowerCase());
+      }
+      setClassrooms(filteredClassrooms);
       
-      if (classData.length > 0 && !studentSection) {
-        setStudentSection(classData[0].className);
+      if (filteredClassrooms.length > 0 && (!studentSection || !filteredClassrooms.some(c => c.className === studentSection))) {
+        setStudentSection(filteredClassrooms[0].className);
         setFilterStudentSection('');
       }
 
@@ -584,11 +738,10 @@ const Dashboard = ({ initialTab }) => {
     }
   };
 
-  // Fetch student directories
+  // Fetch student directories with department scoping
   const fetchStudents = async () => {
     try {
       setError('');
-      // Always fetch all students so we can display section/overall counts and filter locally in React memory.
       let url = '/api/student-attendance/students';
       if (user?.role === 'SUPER_ADMIN' && selectedDepartment && selectedDepartment !== 'ALL') {
         url += `?department=${encodeURIComponent(selectedDepartment)}`;
@@ -599,8 +752,20 @@ const Dashboard = ({ initialTab }) => {
       });
       const data = await res.json();
       if (res.ok) {
-        setStudents(data);
-        syncHODStudents(data);
+        let filteredStudents = data;
+        const targetDept = (user?.role === 'SUPER_ADMIN') 
+          ? (selectedDepartment && selectedDepartment !== 'ALL' ? selectedDepartment : null)
+          : user?.department;
+
+        if (targetDept) {
+          const deptClassNames = (classrooms || []).filter(c => !c.department || c.department.trim().toLowerCase() === targetDept.trim().toLowerCase()).map(c => c.className);
+          filteredStudents = data.filter(s => 
+            (s.department && s.department.trim().toLowerCase() === targetDept.trim().toLowerCase()) ||
+            (deptClassNames.length > 0 && deptClassNames.includes(s.section))
+          );
+        }
+        setStudents(filteredStudents);
+        syncHODStudents(filteredStudents);
       } else {
         setError(data.message || 'Failed to fetch students list');
       }
@@ -613,7 +778,7 @@ const Dashboard = ({ initialTab }) => {
     return students.filter(s => s.section === className).length;
   };
 
-  // Fetch absentees today
+  // Fetch absentees today with strict department isolation
   const fetchAbsentees = async () => {
     if (!absenteesSection) return;
     const targetDate = absenteesDate || todayDate;
@@ -626,7 +791,20 @@ const Dashboard = ({ initialTab }) => {
       );
       const data = await res.json();
       if (res.ok) {
-        setAbsentees(data);
+        let filteredAbsentees = data;
+        const targetDept = (user?.role === 'SUPER_ADMIN') 
+          ? (selectedDepartment && selectedDepartment !== 'ALL' ? selectedDepartment : null)
+          : user?.department;
+
+        if (targetDept) {
+          const deptClassNames = (classrooms || []).filter(c => !c.department || c.department.trim().toLowerCase() === targetDept.trim().toLowerCase()).map(c => c.className);
+          filteredAbsentees = data.filter(item => {
+            const matchesDept = item.department && item.department.trim().toLowerCase() === targetDept.trim().toLowerCase();
+            const matchesSection = deptClassNames.length > 0 && (deptClassNames.includes(item.section) || deptClassNames.includes(item.className));
+            return matchesDept || matchesSection;
+          });
+        }
+        setAbsentees(filteredAbsentees);
       } else {
         setAbsenteesError(data.message || 'Failed to fetch absentees');
       }
@@ -1768,6 +1946,27 @@ const Dashboard = ({ initialTab }) => {
             </div>
           )}
 
+          {/* Top Bar with Manage Faculty Mentors Button */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white/40 dark:bg-slate-900/40 p-5 rounded-2xl border border-slate-200/50 dark:border-slate-800/40">
+            <div>
+              <h2 className="text-xl font-black text-customText dark:text-customText-dark tracking-tight">
+                Leave & Outpass Approvals Desk
+              </h2>
+              <p className="text-xs text-customText-muted">
+                Review verified student applications and faculty leave requests for your department
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMentorModal(true)}
+              className="py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black flex items-center gap-2 shadow-md shadow-purple-600/25 transition-all cursor-pointer active:scale-95 shrink-0"
+            >
+              <GraduationCap size={16} />
+              <span>Manage Faculty Mentors</span>
+            </button>
+          </div>
+
           {/* Metric Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 text-primary-dark dark:text-primary">
@@ -1855,10 +2054,10 @@ const Dashboard = ({ initialTab }) => {
             
             return (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-black text-customText dark:text-customText-dark tracking-tight flex items-center gap-2">
-                      <span>Faculty Permissions (1-Hour & 4:00 PM Applications)</span>
+                      <span>Faculty Permissions (1-Hour, 4:00 PM & OD)</span>
                       {pendingFacultyTickets.length > 0 && (
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-700 dark:text-amber-400">
                           {pendingFacultyTickets.length} Pending
@@ -1866,9 +2065,28 @@ const Dashboard = ({ initialTab }) => {
                       )}
                     </h3>
                     <p className="text-xs text-customText-muted">
-                      Faculty applications for 1-hour permission or 4:00 PM permission. Approving forwards gate clearance directly to the Security Head. For 1-hour permission, Security records In-Time when faculty enters back.
+                      Faculty applications for 1-hour permission, 4:00 PM permission, or OD. Approving forwards gate clearance directly to the Security Head.
                     </p>
                   </div>
+
+                  {user?.role === 'HOD' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHodLeaveType('FACULTY_ONE_HOUR');
+                        setHodLeaveDate(new Date().toISOString().slice(0, 10));
+                        setHodLeaveTime('10:00 AM');
+                        setHodLeavePurpose('');
+                        setHodLeaveError('');
+                        setHodLeaveSuccess('');
+                        setShowHodApplyModal(true);
+                      }}
+                      className="py-2.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs flex items-center gap-2 shadow-md shadow-indigo-600/20 transition-all cursor-pointer active:scale-95 shrink-0"
+                    >
+                      <Plus size={16} />
+                      <span>Apply HOD Leave / Permission (Routes to AO)</span>
+                    </button>
+                  )}
                 </div>
 
                 {pendingFacultyTickets.length === 0 ? (
@@ -2101,23 +2319,41 @@ const Dashboard = ({ initialTab }) => {
                       </div>
                     </div>
 
-                    {/* Parent Verification Stamp by Absent Controller */}
-                    <div className="p-3 rounded-2xl bg-blue-500/5 border border-blue-500/20 text-xs space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                          Parent Verification by Controller
-                        </span>
-                        <span className="text-[10px] text-customText-muted font-mono">
-                          {ticket.absentControllerAction?.displayTime}
-                        </span>
-                      </div>
-                      <p className="font-medium text-customText dark:text-customText-dark">
-                        ✓ {ticket.absentControllerAction?.remarks || 'Parent confirmed permission over phone call.'}
-                      </p>
-                      <span className="text-[10px] text-customText-muted block">
-                        Parent Mobile: +91 {ticket.parentMobile}
-                      </span>
-                    </div>
+                    {/* Parent Verification Stamp by Absent Controller or Faculty Mentor */}
+                    {(() => {
+                      const isMentor = ticket.forwardedByRole === 'Mentor' || ticket.absentControllerAction?.role === 'Mentor';
+                      const forwarderName = ticket.forwardedByName || ticket.absentControllerAction?.controllerName || (isMentor ? 'Faculty Mentor' : 'Absent Controller');
+                      return (
+                        <div className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
+                          isMentor 
+                            ? 'bg-purple-500/10 border-purple-500/25' 
+                            : 'bg-blue-500/5 border-blue-500/20'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                              isMentor ? 'text-purple-700 dark:text-purple-300' : 'text-blue-600 dark:text-blue-400'
+                            }`}>
+                              {isMentor ? <GraduationCap size={13} /> : <PhoneCall size={13} />}
+                              {isMentor ? 'Forwarded by Faculty Mentor' : 'Forwarded by Absent Controller'}
+                            </span>
+                            <span className="text-[10px] text-customText-muted font-mono">
+                              {ticket.absentControllerAction?.displayTime}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-black text-customText dark:text-customText-dark">
+                              Verified by: {forwarderName} {isMentor ? `(Section ${ticket.section} Mentor)` : ''}
+                            </span>
+                          </div>
+                          <p className="font-medium text-customText dark:text-customText-dark">
+                            ✓ {ticket.absentControllerAction?.remarks || 'Parent confirmed permission over phone call.'}
+                          </p>
+                          <span className="text-[10px] text-customText-muted block">
+                            Parent Mobile: +91 {ticket.parentMobile}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* HOD Action Buttons for Students */}
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
@@ -2940,7 +3176,8 @@ const Dashboard = ({ initialTab }) => {
                                   <div className="text-emerald-600 font-semibold mt-0.5">
                                     ✓ Confirmed ({item.absentControllerAction.displayTime || 'Verified'})
                                     <div className="text-[10px] text-customText-muted truncate font-normal">
-                                      By: {item.absentControllerAction.controllerName || 'Controller'}
+                                      By: {item.forwardedByRole === 'Mentor' || item.absentControllerAction?.role === 'Mentor' ? 'Mentor ' : 'Controller '}
+                                      {item.forwardedByName || item.absentControllerAction.controllerName || 'Controller'}
                                     </div>
                                   </div>
                                 ) : item.status === 'REJECTED' && item.rejectionStage === 'ABSENT_CONTROLLER' ? (
@@ -3531,6 +3768,408 @@ const Dashboard = ({ initialTab }) => {
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: HOD Faculty Mentorship Manager */}
+      {showMentorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
+                  <GraduationCap size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-customText dark:text-customText-dark">
+                    Department Faculty Mentorship Manager
+                  </h3>
+                  <p className="text-xs text-customText-muted">
+                    Assign, re-assign, or change class mentors for sections in {user?.department || 'Department'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMentorModal(false);
+                  setEditingSectionMentor(null);
+                  setSelectedFacultyForSection('');
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              
+              {mentorSuccessMsg && (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2">
+                  <CheckCircle2 size={16} className="shrink-0" />
+                  <span>{mentorSuccessMsg}</span>
+                </div>
+              )}
+
+              {mentorErrorMsg && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{mentorErrorMsg}</span>
+                </div>
+              )}
+
+              <p className="text-xs text-customText-muted">
+                Faculty can assign themselves as mentor only once from their login. If a section mentor needs to be reassigned or changed, the HOD has exclusive access to update it here.
+              </p>
+
+              {/* Sections & Mentors List */}
+              <div className="space-y-3">
+                {classrooms
+                  .filter(c => !user?.department || user.department === 'General' || c.department === user.department)
+                  .map((cls) => {
+                    const sec = cls.className;
+                    const assignedMentor = mentorRegistry.sectionMentors ? mentorRegistry.sectionMentors[sec] : null;
+                    const isEditingThis = editingSectionMentor === sec;
+
+                    return (
+                      <div
+                        key={cls.id || sec}
+                        className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-sm text-customText dark:text-customText-dark">
+                                Section {sec}
+                              </span>
+                              <span className="text-xs text-customText-muted font-mono">
+                                ({cls.roomNumber || 'Room'})
+                              </span>
+                            </div>
+                            
+                            {assignedMentor ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                                  Mentor: {assignedMentor.facultyName}
+                                </span>
+                                {assignedMentor.facultyUserId && (
+                                  <span className="text-[10px] text-customText-muted font-mono">
+                                    ({assignedMentor.facultyUserId})
+                                  </span>
+                                )}
+                                <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.2 rounded text-customText-muted font-medium">
+                                  {assignedMentor.assignedBy === 'FACULTY' ? 'Self-Assigned' : 'HOD Assigned'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic mt-1 block">
+                                No mentor currently assigned
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSectionMentor(sec);
+                                setSelectedFacultyForSection(assignedMentor?.facultyId || assignedMentor?.facultyUserId || '');
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-purple-600/10 hover:bg-purple-600/20 text-purple-700 dark:text-purple-300 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              {assignedMentor ? 'Change Mentor' : 'Assign Mentor'}
+                            </button>
+
+                            {assignedMentor && (
+                              <button
+                                type="button"
+                                onClick={() => handleHodRemoveMentor(sec)}
+                                disabled={savingMentorAssignment}
+                                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 text-xs font-bold transition-all cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inline Assign / Reassign Selector */}
+                        {isEditingThis && (
+                          <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-purple-500/30 space-y-3">
+                            <label className="text-[11px] font-bold uppercase text-customText-muted block">
+                              Select Faculty to Assign for Section {sec}:
+                            </label>
+                            
+                            {loadingFacultyList ? (
+                              <p className="text-xs text-slate-400">Loading faculty list...</p>
+                            ) : (
+                              <select
+                                value={selectedFacultyForSection}
+                                onChange={(e) => setSelectedFacultyForSection(e.target.value)}
+                                className="glass-input w-full text-xs font-bold py-2 px-3 border border-slate-200 dark:border-slate-700 rounded-lg text-customText dark:text-customText-dark"
+                              >
+                                <option value="">-- Choose Faculty Member --</option>
+                                {facultyListForMentors.map((f) => (
+                                  <option key={f.id || f.loginId} value={f.id || f.loginId || f.name}>
+                                    {f.name} {f.loginId ? `(${f.loginId})` : ''} {f.department ? `- ${f.department}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setEditingSectionMentor(null)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleHodSaveMentor(sec)}
+                                disabled={savingMentorAssignment || !selectedFacultyForSection}
+                                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+                              >
+                                {savingMentorAssignment ? 'Saving...' : 'Save Assignment'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50/50 dark:bg-slate-950/30 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMentorModal(false);
+                  setEditingSectionMentor(null);
+                }}
+                className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-customText text-xs font-bold hover:bg-slate-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* HOD Apply Leave Modal (Routes to AO) */}
+      {showHodApplyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-scale-up">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/20">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  Head of Department Portal
+                </span>
+                <h3 className="text-lg font-black text-customText dark:text-customText-dark mt-0.5 flex items-center gap-2">
+                  <span>Apply HOD Leave / Permission</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
+                    Routes to AO
+                  </span>
+                </h3>
+                <p className="text-xs text-customText-muted mt-0.5">
+                  Your application routes to the Administrative Officer (AO) for approval.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHodApplyModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleHodApplySubmit} className="p-6 space-y-4">
+              {hodLeaveError && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-700 dark:text-rose-400 text-xs font-bold">
+                  ⚠️ {hodLeaveError}
+                </div>
+              )}
+              {hodLeaveSuccess && (
+                <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold">
+                  ✓ {hodLeaveSuccess}
+                </div>
+              )}
+
+              {/* 3 Permission Types */}
+              <div>
+                <label className="text-xs font-bold uppercase text-customText-muted block mb-2">
+                  Select Permission Type
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setHodLeaveType('FACULTY_ONE_HOUR')}
+                    className={`py-3 px-3 rounded-xl font-bold text-xs border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      hodLeaveType === 'FACULTY_ONE_HOUR'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/20'
+                        : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={15} />
+                      <span className="font-black">1-Hour</span>
+                    </div>
+                    <span className={`text-[10px] ${hodLeaveType === 'FACULTY_ONE_HOUR' ? 'text-white/80' : 'text-slate-400'}`}>
+                      Return in 1 hr
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHodLeaveType('FACULTY_4PM');
+                      setHodLeaveTime('04:00 PM');
+                    }}
+                    className={`py-3 px-3 rounded-xl font-bold text-xs border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      hodLeaveType === 'FACULTY_4PM'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/20'
+                        : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <ShieldIcon size={15} />
+                      <span className="font-black">4:00 PM</span>
+                    </div>
+                    <span className={`text-[10px] ${hodLeaveType === 'FACULTY_4PM' ? 'text-white/80' : 'text-slate-400'}`}>
+                      Departure at 4 PM
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHodLeaveType('FACULTY_OD');
+                      if (!hodLeaveTime || hodLeaveTime === '04:00 PM') {
+                        setHodLeaveTime('10:00 AM');
+                      }
+                    }}
+                    className={`py-3 px-3 rounded-xl font-bold text-xs border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      hodLeaveType === 'FACULTY_OD'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm shadow-amber-600/20'
+                        : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Briefcase size={15} />
+                      <span className="font-black">On Duty (OD)</span>
+                    </div>
+                    <span className={`text-[10px] ${hodLeaveType === 'FACULTY_OD' ? 'text-white/80' : 'text-slate-400'}`}>
+                      Max 1/mo
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Date & Out-time */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={hodLeaveDate}
+                    onChange={(e) => setHodLeaveDate(e.target.value)}
+                    className="glass-input text-xs w-full font-semibold"
+                    required
+                  />
+                </div>
+
+                {hodLeaveType === 'FACULTY_ONE_HOUR' ? (
+                  <div>
+                    <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                      Out Time <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={hodLeaveTime}
+                      onChange={(e) => setHodLeaveTime(e.target.value)}
+                      className="glass-input text-xs w-full font-semibold"
+                      required
+                    />
+                  </div>
+                ) : hodLeaveType === 'FACULTY_4PM' ? (
+                  <div>
+                    <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                      Departure Time
+                    </label>
+                    <div className="glass-input text-xs w-full font-bold text-primary flex items-center gap-1.5 bg-slate-100/50 dark:bg-slate-800/50 py-2.5">
+                      <Clock size={14} className="text-primary" />
+                      <span>04:00 PM (Fixed)</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                      Departure Time for OD <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={hodLeaveTime}
+                      onChange={(e) => setHodLeaveTime(e.target.value)}
+                      className="glass-input text-xs w-full font-semibold"
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Guidance notice */}
+              <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-300">
+                <strong>Routing Flow:</strong> Request routes to the Administrative Officer (AO) portal. When AO grants clearance, it is automatically forwarded to Security gate login.
+              </div>
+
+              {/* Purpose */}
+              <div>
+                <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                  Reason / Purpose <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={hodLeavePurpose}
+                  onChange={(e) => setHodLeavePurpose(e.target.value)}
+                  placeholder="Specify reason for HOD permission..."
+                  rows={3}
+                  className="glass-input text-xs w-full resize-none font-medium"
+                  required
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowHodApplyModal(false)}
+                  className="btn-secondary py-2.5 px-4 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={hodApplyingLeave}
+                  className="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {hodApplyingLeave ? 'Submitting to AO...' : 'Submit Request to AO'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

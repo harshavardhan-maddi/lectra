@@ -22,7 +22,12 @@ import {
   ArrowRight,
   ShieldCheck,
   LogOut,
-  AlertTriangle
+  AlertTriangle,
+  GraduationCap,
+  Lock,
+  CheckCircle,
+  Send,
+  Briefcase
 } from 'lucide-react';
 import Loading from '../components/Loading';
 import OutpassTicketModal from '../components/OutpassTicketModal';
@@ -30,7 +35,13 @@ import {
   applyFacultyLeave, 
   getFacultyMonthlyLeaveUsage, 
   getFacultyLeaveHistory, 
-  subscribeToOutpasses 
+  subscribeToOutpasses,
+  getAllOutpasses,
+  getFacultyAssignedSection,
+  assignFacultyMentorByFaculty,
+  subscribeToMentors,
+  confirmParentAndForwardToHOD,
+  rejectByAbsentController
 } from '../services/outpassService';
 
 const ABSENCE_REASONS = {
@@ -53,16 +64,38 @@ const FacultyDashboard = () => {
   // Navigation & Dropdown States
   const [classrooms, setClassrooms] = useState([]);
   const [selectedSection, setSelectedSection] = useState('');
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'attendance');
+
+  // Non-teaching faculty detection: Unable to take attendance to students, just apply permissions
+  const isNonTeaching = React.useMemo(() => {
+    if (user?.facultyType === 'NON_TEACHING') return true;
+    try {
+      const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+      const meta = metaList.find(m => 
+        (m.empid && String(m.empid).toLowerCase() === String(user?.userId).toLowerCase()) ||
+        (m.name && String(m.name).trim().toLowerCase() === String(user?.name).trim().toLowerCase())
+      );
+      return meta?.facultyType === 'NON_TEACHING';
+    } catch (e) {
+      return false;
+    }
+  }, [user]);
+
+  const [activeTab, setActiveTab] = useState(
+    isNonTeaching ? 'leaves' : (searchParams.get('tab') || 'attendance')
+  );
 
   useEffect(() => {
+    if (isNonTeaching) {
+      setActiveTab('leaves');
+      return;
+    }
     const tabParam = searchParams.get('tab');
     if (tabParam) {
       setActiveTab(tabParam);
     } else {
       setActiveTab('attendance');
     }
-  }, [searchParams]);
+  }, [searchParams, isNonTeaching]);
   
   // Data States
   const [students, setStudents] = useState([]);
@@ -124,6 +157,111 @@ const FacultyDashboard = () => {
     return () => unsub();
   }, [user]);
 
+  // Mentorship States
+  const [mentorAssignment, setMentorAssignment] = useState(() => getFacultyAssignedSection(user));
+  const [selectedSectionToAssign, setSelectedSectionToAssign] = useState('');
+  const [assigningMentor, setAssigningMentor] = useState(false);
+  const [mentorAssignError, setMentorAssignError] = useState('');
+  const [mentorAssignSuccess, setMentorAssignSuccess] = useState('');
+
+  // Student Outpasses for Mentored Section
+  const [allOutpassTickets, setAllOutpassTickets] = useState([]);
+  const [mentorActionSuccess, setMentorActionSuccess] = useState('');
+  const [mentorActionError, setMentorActionError] = useState('');
+  const [rejectingStudentTicket, setRejectingStudentTicket] = useState(null);
+  const [customRejectReason, setCustomRejectReason] = useState('Parent refused permission during phone call.');
+
+  // Sync and listen to mentorship registry updates
+  useEffect(() => {
+    if (user) {
+      setMentorAssignment(getFacultyAssignedSection(user));
+    }
+    const unsubMentors = subscribeToMentors(() => {
+      if (user) {
+        setMentorAssignment(getFacultyAssignedSection(user));
+      }
+    });
+    return () => unsubMentors();
+  }, [user]);
+
+  // Load and subscribe to live outpass tickets (for student outpass applications in this mentor's section)
+  useEffect(() => {
+    const updateAllTickets = () => {
+      setAllOutpassTickets(getAllOutpasses());
+    };
+    updateAllTickets();
+    const unsubAll = subscribeToOutpasses(updateAllTickets);
+    return () => unsubAll();
+  }, []);
+
+  // Default section selection for assignment
+  useEffect(() => {
+    if (classrooms.length > 0 && !selectedSectionToAssign) {
+      const deptClass = classrooms.find(c => !user?.department || user.department === 'General' || c.department === user.department);
+      setSelectedSectionToAssign(deptClass ? deptClass.className : classrooms[0].className);
+    }
+  }, [classrooms, user, selectedSectionToAssign]);
+
+  // Self-assign mentor (Only once, locked afterwards)
+  const handleAssignSelfAsMentor = async () => {
+    setMentorAssignError('');
+    setMentorAssignSuccess('');
+    if (!selectedSectionToAssign) {
+      setMentorAssignError('Please select a valid section.');
+      return;
+    }
+    try {
+      setAssigningMentor(true);
+      const assignment = await assignFacultyMentorByFaculty(user, selectedSectionToAssign);
+      setMentorAssignment(assignment);
+      setMentorAssignSuccess(`Mentorship confirmed for Section ${assignment.section}!`);
+      setTimeout(() => setMentorAssignSuccess(''), 4500);
+    } catch (err) {
+      setMentorAssignError(err.message || 'Failed to assign mentorship.');
+    } finally {
+      setAssigningMentor(false);
+    }
+  };
+
+  // Mentor parent confirmation & forward to HOD
+  const handleMentorConfirmAndForward = async (ticket) => {
+    try {
+      setMentorActionError('');
+      await confirmParentAndForwardToHOD(ticket.id, {
+        controllerName: user?.name || 'Faculty Mentor',
+        role: 'Mentor',
+        section: mentorAssignment?.section || ticket.section,
+        remarks: 'Parent confirmed permission over phone call with Faculty Mentor.'
+      });
+      setMentorActionSuccess(`Parent confirmed! Outpass for ${ticket.studentName} (${ticket.rollNumber}) has been forwarded to HOD.`);
+      setTimeout(() => setMentorActionSuccess(''), 4500);
+    } catch (err) {
+      setMentorActionError(err.message || 'Failed to forward outpass to HOD.');
+    }
+  };
+
+  // Mentor reject outpass
+  const handleMentorReject = async (ticket, reason) => {
+    try {
+      setMentorActionError('');
+      await rejectByAbsentController(ticket.id, {
+        controllerName: user?.name || 'Faculty Mentor',
+        role: 'Mentor',
+        section: mentorAssignment?.section || ticket.section,
+        reason: reason || 'Parent did not grant permission during phone call with Faculty Mentor.'
+      });
+      setRejectingStudentTicket(null);
+      setMentorActionSuccess(`Outpass for ${ticket.studentName} rejected.`);
+      setTimeout(() => setMentorActionSuccess(''), 4500);
+    } catch (err) {
+      setMentorActionError(err.message || 'Failed to reject outpass.');
+    }
+  };
+
+  const pendingMentorCallsCount = mentorAssignment?.section
+    ? allOutpassTickets.filter(t => t.applicantType !== 'FACULTY' && t.section === mentorAssignment.section && t.status === 'PENDING_PARENT_CALL').length
+    : 0;
+
   // Current month quota check
   const facultyMonthlyQuota = getFacultyMonthlyLeaveUsage(
     user?.userId || user?.name || user?.id,
@@ -135,15 +273,23 @@ const FacultyDashboard = () => {
     setLeaveError('');
     setLeaveSuccess('');
 
-    // Pre-check monthly quota (Strict limit: 2 leaves per month, no carryover)
+    // Pre-check monthly quota
+    // Regular permissions limit = 2; OD limit = 1 (OD does NOT deduct from regular count)
     const currentQuota = getFacultyMonthlyLeaveUsage(
       user?.userId || user?.name || user?.id,
       leaveDate || todayDate
     );
 
-    if (currentQuota.count >= 2) {
-      setLeaveError("your limit for leaves has been completed , consult principal.");
-      return;
+    if (leaveType === 'FACULTY_OD') {
+      if (currentQuota.isOdLimitExceeded || currentQuota.odRemaining <= 0) {
+        setLeaveError("Your OD's for this month has been completed.");
+        return;
+      }
+    } else {
+      if (currentQuota.isLimitExceeded || currentQuota.remaining <= 0) {
+        setLeaveError("your limit for leaves has been completed , consult principal.");
+        return;
+      }
     }
 
     if (!leavePurpose || !leavePurpose.trim()) {
@@ -152,7 +298,7 @@ const FacultyDashboard = () => {
     }
 
     if (leaveType === 'FACULTY_ONE_HOUR' && (!leaveTime || !leaveTime.trim())) {
-      setLeaveError('Please specify what time you need to be out.');
+      setLeaveError('Please specify what time you need to be out for the 1-hour permission.');
       return;
     }
 
@@ -166,7 +312,7 @@ const FacultyDashboard = () => {
         department: facultyDept,
         type: leaveType,
         date: leaveDate || todayDate,
-        leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveTime,
+        leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveType === 'FACULTY_OD' ? (leaveTime || 'On Duty (Full Day)') : leaveTime,
         purpose: leavePurpose
       });
 
@@ -479,7 +625,90 @@ const FacultyDashboard = () => {
         </div>
       </div>
 
-      {/* Active Section Header (Feature selection driven by Left Menu) */}
+      {/* Non-Teaching Faculty notice or Standard Sub-Nav Tabs */}
+      {isNonTeaching ? (
+        <div className="space-y-3 mb-3 no-print">
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-300 flex items-center justify-between gap-3 text-xs font-bold animate-fade-in">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle size={18} className="text-amber-600 shrink-0" />
+              <span>Non-Teaching Staff Portal • Attendance and Call Desk access are disabled. You can apply for permissions and gate departure passes below.</span>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 text-[10px] font-black uppercase tracking-wider shrink-0 border border-amber-500/30">
+              Non-Teaching
+            </span>
+          </div>
+          <div className="flex items-center gap-2 pb-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-primary text-white shadow-md shadow-primary/20"
+            >
+              <Calendar size={15} />
+              <span>Faculty Permissions</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 pb-2 no-print">
+          <button
+            type="button"
+            onClick={() => setActiveTab('attendance')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'attendance'
+                ? 'bg-primary text-white shadow-md shadow-primary/20'
+                : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
+            }`}
+          >
+            <Users size={15} />
+            <span>Attendance Registry</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('calls')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'calls'
+                ? 'bg-primary text-white shadow-md shadow-primary/20'
+                : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
+            }`}
+          >
+            <PhoneCall size={15} />
+            <span>Parent Call Logs</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('leaves')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'leaves'
+                ? 'bg-primary text-white shadow-md shadow-primary/20'
+                : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
+            }`}
+          >
+            <Calendar size={15} />
+            <span>Faculty Permissions</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('mentor')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 relative ${
+              activeTab === 'mentor'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
+            }`}
+          >
+            <GraduationCap size={15} />
+            <span>Class Mentorship & Outpasses</span>
+            {pendingMentorCallsCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
+                {pendingMentorCallsCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Active Section Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 gap-3 no-print">
         <div className="flex items-center gap-3">
           {activeTab === 'attendance' && (
@@ -512,6 +741,21 @@ const FacultyDashboard = () => {
               <div>
                 <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Faculty Permissions & Gate Pass</h3>
                 <p className="text-xs text-customText-muted dark:text-customText-mutedDark">Apply for leaves, same-day early out permissions, and download official departure slips</p>
+              </div>
+            </>
+          )}
+          {activeTab === 'mentor' && (
+            <>
+              <div className="p-2.5 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                <GraduationCap size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">Class Mentorship & Student Outpasses</h3>
+                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                  {mentorAssignment 
+                    ? `Assigned Mentor for Section ${mentorAssignment.section} • Verify and forward student outpasses to HOD`
+                    : 'Assign yourself to your mentored section to enable student permission approvals'}
+                </p>
               </div>
             </>
           )}
@@ -1219,13 +1463,13 @@ const FacultyDashboard = () => {
           )}
 
           {/* Monthly Quota & Overview Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             
             {/* Metric 1: Monthly Usage */}
             <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
-                  Monthly Permissions Used
+                  Regular Used
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
                   facultyMonthlyQuota.count >= 2 
@@ -1248,14 +1492,14 @@ const FacultyDashboard = () => {
                 />
               </div>
               <p className="text-[10px] text-customText-muted">
-                Strict limit: 2 permissions per month. Unused permissions do not roll over.
+                Strict limit: 2 permissions per month.
               </p>
             </div>
 
             {/* Metric 2: Remaining Leaves */}
             <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
-                Remaining Permissions
+                Regular Remaining
               </span>
               <div className="flex items-baseline gap-2">
                 <span className={`text-3xl font-black ${
@@ -1272,7 +1516,34 @@ const FacultyDashboard = () => {
               </p>
             </div>
 
-            {/* Metric 3: Approved / Passes */}
+            {/* Metric 3: OD (On Duty) Quota */}
+            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
+                  OD (On Duty) Quota
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                  (facultyMonthlyQuota.odCount || 0) >= 1 
+                    ? 'bg-rose-500/10 text-rose-600 border border-rose-500/30' 
+                    : 'bg-amber-500/10 text-amber-600 border border-amber-500/30'
+                }`}>
+                  {facultyMonthlyQuota.odRemaining > 0 ? '1 Avail' : '0 Avail'}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-amber-600 dark:text-amber-400">
+                  {facultyMonthlyQuota.odCount || 0}
+                </span>
+                <span className="text-sm font-bold text-customText-muted">/ 1 OD Used</span>
+              </div>
+              <p className="text-[10px] text-customText-muted">
+                {facultyMonthlyQuota.odRemaining > 0 
+                  ? '1 OD/month. Does not cut regular permission count.' 
+                  : "Your OD's for this month has been completed."}
+              </p>
+            </div>
+
+            {/* Metric 4: Approved / Passes */}
             <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
                 Approved Gate Passes
@@ -1456,6 +1727,369 @@ const FacultyDashboard = () => {
         </div>
       )}
 
+      {/* TAB 4: CLASS MENTORSHIP & STUDENT OUTPASSES */}
+      {activeTab === 'mentor' && (
+        <div className="space-y-6 animate-fade-in">
+
+          {/* Feedback Alerts for Mentor Actions */}
+          {mentorActionSuccess && (
+            <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-semibold rounded-2xl flex items-center gap-2">
+              <CheckCircle size={18} className="shrink-0" />
+              <span>{mentorActionSuccess}</span>
+            </div>
+          )}
+
+          {mentorActionError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm font-semibold rounded-2xl flex items-center gap-2">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>{mentorActionError}</span>
+            </div>
+          )}
+
+          {/* CASE 1: FACULTY HAS NOT YET ASSIGNED THEMSELVES */}
+          {!mentorAssignment ? (
+            <div className="glass-card p-6 sm:p-8 border border-purple-500/30 bg-purple-500/5 dark:bg-purple-950/15 rounded-3xl space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-purple-600/20">
+                  <GraduationCap size={26} />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-xl font-black text-customText dark:text-customText-dark tracking-tight">
+                    Class Mentorship Assignment
+                  </h3>
+                  <p className="text-sm text-customText-muted dark:text-customText-mutedDark">
+                    Assign yourself as the mentor to a section in your department ({user?.department || 'Department'}). Once assigned, you will be able to review and forward student leave applications to the HOD.
+                  </p>
+                </div>
+              </div>
+
+              {mentorAssignError && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{mentorAssignError}</span>
+                </div>
+              )}
+
+              {mentorAssignSuccess && (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2">
+                  <CheckCircle size={16} className="shrink-0" />
+                  <span>{mentorAssignSuccess}</span>
+                </div>
+              )}
+
+              <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-customText-muted dark:text-customText-mutedDark block mb-2">
+                    Select Your Mentored Section:
+                  </label>
+                  <select
+                    value={selectedSectionToAssign}
+                    onChange={(e) => setSelectedSectionToAssign(e.target.value)}
+                    className="glass-input w-full max-w-md text-sm font-bold py-2.5 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-customText dark:text-customText-dark"
+                  >
+                    {classrooms.map((c) => (
+                      <option key={c.id} value={c.className}>
+                        {c.className} ({c.department || user?.department || 'Department'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-medium flex items-center gap-2">
+                  <Lock size={15} className="shrink-0" />
+                  <span>Important: You can assign yourself as mentor only once. Please ensure you pick the correct section.</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAssignSelfAsMentor}
+                  disabled={assigningMentor || !selectedSectionToAssign}
+                  className="btn-primary py-3 px-6 rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md shadow-primary/20 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle size={16} />
+                  <span>{assigningMentor ? 'Confirming Mentorship...' : 'Confirm Mentorship Assignment'}</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* CASE 2: FACULTY IS ALREADY ASSIGNED AS MENTOR */
+            <div className="space-y-6">
+              {/* Mentorship Status Card */}
+              <div className="glass-card p-6 border border-purple-500/30 bg-purple-500/5 dark:bg-purple-950/20 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-purple-600/25">
+                    <GraduationCap size={26} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-md bg-purple-600 text-white font-mono text-xs font-black uppercase">
+                        Section {mentorAssignment.section}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/30 flex items-center gap-1">
+                        <Lock size={11} />
+                        Assigned & Active
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-black text-customText dark:text-customText-dark mt-1">
+                      Faculty Class Mentor — {mentorAssignment.section}
+                    </h3>
+                    <p className="text-xs text-customText-muted">
+                      You are the designated mentor for Section {mentorAssignment.section}. You have authority to call parents and forward student outpasses to the HOD.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] font-bold text-customText-muted uppercase block">Awaiting Parent Verification</span>
+                  <span className="text-2xl font-black text-purple-600 dark:text-purple-400">
+                    {pendingMentorCallsCount}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pending Student Applications for this Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-black text-customText dark:text-customText-dark tracking-tight">
+                      Student Leave Applications Awaiting Parent Call ({mentorAssignment.section})
+                    </h3>
+                    <p className="text-xs text-customText-muted">
+                      Verify leave reason by calling the parent, then confirm and forward directly to the Head of Department (HOD).
+                    </p>
+                  </div>
+                </div>
+
+                {allOutpassTickets.filter(t => t.applicantType !== 'FACULTY' && t.section === mentorAssignment.section && t.status === 'PENDING_PARENT_CALL').length === 0 ? (
+                  <div className="p-10 text-center rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 space-y-2">
+                    <CheckCircle size={32} className="mx-auto text-emerald-500" />
+                    <h4 className="font-bold text-customText dark:text-customText-dark">
+                      No Pending Student Applications
+                    </h4>
+                    <p className="text-xs text-customText-muted max-w-sm mx-auto">
+                      All student leave requests for Section {mentorAssignment.section} have been verified and forwarded.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {allOutpassTickets
+                      .filter(t => t.applicantType !== 'FACULTY' && t.section === mentorAssignment.section && t.status === 'PENDING_PARENT_CALL')
+                      .map((ticket) => (
+                        <div
+                          key={ticket.id}
+                          className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-purple-500/20 dark:border-purple-500/30 shadow-sm space-y-4 relative overflow-hidden"
+                        >
+                          {/* Card Header */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span className="text-[10px] font-mono font-bold text-primary block">
+                                {ticket.id}
+                              </span>
+                              <h4 className="text-lg font-black text-customText dark:text-customText-dark mt-0.5">
+                                {ticket.studentName}
+                              </h4>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-xs font-bold text-customText">
+                                  {ticket.rollNumber}
+                                </span>
+                                <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                                  Section {ticket.section}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTicketForModal(ticket)}
+                              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 hover:text-primary text-xs font-bold text-customText-muted flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="View Official Ticket"
+                            >
+                              <FileText size={15} />
+                              <span>Slip</span>
+                            </button>
+                          </div>
+
+                          {/* Reason */}
+                          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80 space-y-1 text-xs">
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block">
+                              Reason to Go Out:
+                            </span>
+                            <p className="font-semibold text-customText dark:text-customText-dark italic">
+                              "{ticket.reason}"
+                            </p>
+                            <div className="flex flex-wrap gap-4 pt-1.5 text-[11px] text-customText-muted">
+                              <span><strong>Destination:</strong> {ticket.destination}</span>
+                              {ticket.expectedReturnTime && <span><strong>Expected Return:</strong> {ticket.expectedReturnTime}</span>}
+                            </div>
+                          </div>
+
+                          {/* Parent Contact & Call Desk */}
+                          <div className="p-3.5 rounded-2xl bg-purple-500/5 border border-purple-500/20 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider block">
+                                  Auto-Fetched Parent Mobile
+                                </span>
+                                <p className="text-sm font-mono font-black text-customText dark:text-customText-dark">
+                                  +91 {ticket.parentMobile}
+                                </p>
+                              </div>
+
+                              <a
+                                href={`tel:${ticket.parentMobile}`}
+                                className="flex items-center gap-2 py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+                              >
+                                <PhoneCall size={14} />
+                                <span>Call Parent</span>
+                              </a>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="pt-2 border-t border-purple-500/20 flex flex-col sm:flex-row gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleMentorConfirmAndForward(ticket)}
+                                className="flex-1 py-2.5 px-3.5 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
+                              >
+                                <CheckCircle size={15} />
+                                <span>Parent Confirmed (OK) & Forward to HOD</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setRejectingStudentTicket(ticket)}
+                                className="py-2.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          </div>
+
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Section Outpasses History */}
+              <div className="glass-card rounded-3xl border border-slate-200/50 dark:border-slate-800/40 overflow-hidden space-y-0">
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-extrabold text-sm text-customText dark:text-customText-dark">
+                      Outpass History for Section {mentorAssignment.section}
+                    </h3>
+                    <p className="text-[11px] text-customText-muted">
+                      Track approvals, security gate clearances, and return status for your section
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-customText-muted font-mono">
+                    {allOutpassTickets.filter(t => t.applicantType !== 'FACULTY' && t.section === mentorAssignment.section).length} Total Slips
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-96 overflow-y-auto">
+                  {allOutpassTickets
+                    .filter(t => t.applicantType !== 'FACULTY' && t.section === mentorAssignment.section)
+                    .map((item) => (
+                      <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-primary">{item.id}</span>
+                            <span className="font-black text-customText dark:text-customText-dark">{item.studentName}</span>
+                            <span className="font-mono text-slate-400">({item.rollNumber})</span>
+                          </div>
+                          <p className="text-[11px] text-customText-muted italic">"{item.reason}"</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {item.status === 'PENDING_PARENT_CALL' && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold text-[10px]">
+                              Awaiting Parent Call
+                            </span>
+                          )}
+                          {item.status === 'FORWARDED_TO_HOD' && (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 font-bold text-[10px]">
+                              Forwarded to HOD
+                            </span>
+                          )}
+                          {item.status === 'PERMISSION_GRANTED' && (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold text-[10px]">
+                              Approved by HOD (Gate Ready)
+                            </span>
+                          )}
+                          {item.status === 'SENT_OUT' && (
+                            <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-400 font-bold text-[10px]">
+                              Sent Out at Gate
+                            </span>
+                          )}
+                          {item.status === 'REJECTED' && (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-400 font-bold text-[10px]">
+                              Rejected
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTicketForModal(item)}
+                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-primary cursor-pointer"
+                          >
+                            <FileText size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* Modal: Custom Reject Reason */}
+          {rejectingStudentTicket && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+              <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-black text-sm text-customText dark:text-customText-dark">
+                    Reject Outpass Application
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setRejectingStudentTicket(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <p className="text-xs text-customText-muted">
+                  State the reason for rejecting {rejectingStudentTicket.studentName}'s leave application (e.g. parent denied permission):
+                </p>
+                <textarea
+                  value={customRejectReason}
+                  onChange={(e) => setCustomRejectReason(e.target.value)}
+                  className="glass-input w-full p-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800"
+                  rows={3}
+                />
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setRejectingStudentTicket(null)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMentorReject(rejectingStudentTicket, customRejectReason)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white hover:bg-rose-700"
+                  >
+                    Confirm Rejection
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
       {/* Modal: Apply Leave or Early Out */}
       {showApplyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
@@ -1489,31 +2123,52 @@ const FacultyDashboard = () => {
             <form onSubmit={handleApplyLeave} className="p-6 space-y-4">
               
               {/* Quota Exhaustion Alert inside Modal */}
-              {facultyMonthlyQuota.isLimitExceeded ? (
-                <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-black space-y-1">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle size={16} className="text-rose-600 shrink-0" />
-                    <span>your limit for permissions has been completed , consult principal.</span>
+              {leaveType === 'FACULTY_OD' ? (
+                (facultyMonthlyQuota.isOdLimitExceeded || (facultyMonthlyQuota.odRemaining <= 0)) ? (
+                  <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-black space-y-1">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                      <span>Your OD's for this month has been completed.</span>
+                    </div>
+                    <p className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
+                      You have already utilized your maximum allowance of 1 OD permission for this calendar month.
+                    </p>
                   </div>
-                  <p className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
-                    You have already used {facultyMonthlyQuota.count} / 2 permissions for this calendar month. Unused permissions do not carry forward.
-                  </p>
-                </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs flex items-center justify-between">
+                    <span className="text-amber-800 dark:text-amber-300 font-bold">OD Monthly Quota:</span>
+                    <span className="font-black text-amber-700 dark:text-amber-300">
+                      {facultyMonthlyQuota.odCount || 0} / 1 OD used (1 Available, will not cut regular count)
+                    </span>
+                  </div>
+                )
               ) : (
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 text-xs flex items-center justify-between">
-                  <span className="text-customText-muted font-bold">Monthly Quota Status:</span>
-                  <span className="font-black text-emerald-600 dark:text-emerald-400">
-                    {facultyMonthlyQuota.count} / 2 permissions used ({facultyMonthlyQuota.remaining} left)
-                  </span>
-                </div>
+                (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0) ? (
+                  <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-black space-y-1">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                      <span>your limit for permissions has been completed , consult principal.</span>
+                    </div>
+                    <p className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
+                      You have already used {facultyMonthlyQuota.count} / 2 permissions for this calendar month. Unused permissions do not carry forward.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 text-xs flex items-center justify-between">
+                    <span className="text-customText-muted font-bold">Regular Permissions Quota:</span>
+                    <span className="font-black text-emerald-600 dark:text-emerald-400">
+                      {facultyMonthlyQuota.count} / 2 used ({facultyMonthlyQuota.remaining} left)
+                    </span>
+                  </div>
+                )
               )}
 
-              {/* Leave Type Toggle: Only 1-Hour Permission or 4:00 PM Permission */}
+              {/* Leave Type Toggle: 1-Hour Permission, 4:00 PM Permission, or OD */}
               <div>
                 <label className="text-xs font-bold uppercase text-customText-muted block mb-2">
                   Permission Type
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setLeaveType('FACULTY_ONE_HOUR')}
@@ -1528,7 +2183,7 @@ const FacultyDashboard = () => {
                       <span className="font-black">1-Hour Permission</span>
                     </div>
                     <span className={`text-[10px] ${leaveType === 'FACULTY_ONE_HOUR' ? 'text-white/80' : 'text-slate-400'}`}>
-                      Return to college in 1 hr
+                      Return in 1 hr (Timing)
                     </span>
                   </button>
 
@@ -1550,6 +2205,29 @@ const FacultyDashboard = () => {
                     </div>
                     <span className={`text-[10px] ${leaveType === 'FACULTY_4PM' ? 'text-white/80' : 'text-slate-400'}`}>
                       Departure at 4 PM (Closed)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLeaveType('FACULTY_OD');
+                      if (!leaveTime || leaveTime === '04:00 PM') {
+                        setLeaveTime('10:00 AM');
+                      }
+                    }}
+                    className={`py-3 px-3 rounded-xl font-bold text-xs border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      leaveType === 'FACULTY_OD'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm shadow-amber-600/20'
+                        : 'bg-slate-50 dark:bg-slate-800 text-customText-muted border-slate-200 dark:border-slate-700 hover:text-customText'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Briefcase size={15} />
+                      <span className="font-black">On Duty (OD)</span>
+                    </div>
+                    <span className={`text-[10px] ${leaveType === 'FACULTY_OD' ? 'text-white/80' : 'text-slate-400'}`}>
+                      Max 1/mo (No count cut)
                     </span>
                   </button>
                 </div>
@@ -1584,7 +2262,7 @@ const FacultyDashboard = () => {
                         required
                       />
                     </div>
-                  ) : (
+                  ) : leaveType === 'FACULTY_4PM' ? (
                     <div>
                       <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
                         Scheduled Departure Time
@@ -1594,6 +2272,19 @@ const FacultyDashboard = () => {
                         <span>04:00 PM (Fixed)</span>
                       </div>
                     </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-bold uppercase text-customText-muted block mb-1">
+                        Departure Time for OD <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={leaveTime}
+                        onChange={(e) => setLeaveTime(e.target.value)}
+                        className="glass-input text-xs w-full font-semibold"
+                        required
+                      />
+                    </div>
                   )}
                 </div>
 
@@ -1602,9 +2293,13 @@ const FacultyDashboard = () => {
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
                     <strong>1-Hour Permission:</strong> Specify what time you need to leave. When you enter back into college after some time, Security will record your In-Time and the permission will be notified to HOD and closed.
                   </div>
-                ) : (
+                ) : leaveType === 'FACULTY_4PM' ? (
                   <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-800 dark:text-blue-300 font-medium leading-relaxed">
                     <strong>4:00 PM Permission:</strong> Scheduled departure is 4:00 PM itself. No in-time entry or return is required. The permission closes automatically when Security sends you out.
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
+                    <strong>On Duty (OD):</strong> Allowed 1 per month. OD does not cut into your 2 regular permissions. Sent out by Security on duty clearance. Once completed, your monthly OD quota becomes 0.
                   </div>
                 )}
               </div>
@@ -1635,9 +2330,16 @@ const FacultyDashboard = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={applyingLeave || facultyMonthlyQuota.isLimitExceeded}
+                  disabled={
+                    applyingLeave ||
+                    (leaveType === 'FACULTY_OD'
+                      ? (facultyMonthlyQuota.isOdLimitExceeded || (facultyMonthlyQuota.odRemaining <= 0))
+                      : (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0))
+                  }
                   className={`py-2.5 px-5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    facultyMonthlyQuota.isLimitExceeded
+                    (leaveType === 'FACULTY_OD'
+                      ? (facultyMonthlyQuota.isOdLimitExceeded || (facultyMonthlyQuota.odRemaining <= 0))
+                      : (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0))
                       ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                       : 'bg-primary hover:bg-primary-dark text-white shadow-md shadow-primary/20 active:scale-95'
                   }`}

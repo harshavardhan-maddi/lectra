@@ -582,7 +582,9 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                     <tr>
                       <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">2. Parent Phone Call</td>
                       <td className="p-2 border-r border-slate-300 font-bold">
-                        {ticket.absentControllerAction?.controllerName || 'Absent Controller'}
+                        {ticket.forwardedByRole === 'Mentor' || ticket.absentControllerAction?.role === 'Mentor'
+                          ? `${ticket.forwardedByName || ticket.absentControllerAction?.controllerName || 'Faculty Mentor'} (Faculty Mentor)`
+                          : `${ticket.absentControllerAction?.controllerName || ticket.forwardedByName || 'Absent Controller'}`}
                       </td>
                       <td className="p-2 font-mono border-r border-slate-300">
                         {ticket.absentControllerAction?.displayDate || ticket.appliedDate} {ticket.absentControllerAction?.displayTime || '—'}

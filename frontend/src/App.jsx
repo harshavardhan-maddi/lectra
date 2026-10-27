@@ -16,6 +16,8 @@ import AbsentControllerDashboard from './pages/AbsentControllerDashboard';
 import PrintReport from './pages/PrintReport';
 import FacultyDashboard from './pages/FacultyDashboard';
 import WatchmanDashboard from './pages/WatchmanDashboard';
+import AODashboard from './pages/AODashboard';
+import OfficeDashboard from './pages/OfficeDashboard';
 
 // Custom router resolver to send authenticated users to their correct home dashboard
 const HomeRedirect = () => {
@@ -34,6 +36,12 @@ const HomeRedirect = () => {
   }
   if (user.role === 'WATCHMAN' || user.role === 'SECURITY_HEAD') {
     return <Navigate to="/watchman-dashboard" replace />;
+  }
+  if (user.role === 'AO') {
+    return <Navigate to="/ao-dashboard" replace />;
+  }
+  if (user.role === 'OFFICE') {
+    return <Navigate to="/office-dashboard" replace />;
   }
   if (user.role === 'HOD' || user.role === 'SUB_ADMIN' || user.role === 'SUPER_ADMIN') {
     return <Navigate to="/dashboard" replace />;
@@ -94,6 +102,31 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
+
+      {/* Protected AO (Administrative Officer) Routes */}
+      <Route
+        path="/ao-dashboard"
+        element={
+          <PrivateRoute allowedRoles={['AO', 'SUPER_ADMIN']}>
+            <Layout>
+              <AODashboard />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Protected Administrative Office (Certificates) Routes */}
+      <Route
+        path="/office-dashboard"
+        element={
+          <PrivateRoute allowedRoles={['OFFICE', 'SUPER_ADMIN']}>
+            <Layout>
+              <OfficeDashboard />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
 
       {/* Protected Admin/Sub Admin Routes */}
       <Route

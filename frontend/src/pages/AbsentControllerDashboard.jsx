@@ -19,7 +19,11 @@ import {
   ArrowRight,
   ExternalLink,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  UserPlus,
+  Edit,
+  Plus,
+  Save
 } from 'lucide-react';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
@@ -126,6 +130,131 @@ const AbsentControllerDashboard = () => {
     }
   };
 
+  // Student Addition and Modification states
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [newStudentRoll, setNewStudentRoll] = useState('');
+  const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentSection, setNewStudentSection] = useState('');
+  const [newStudentMobile, setNewStudentMobile] = useState('');
+  const [newParentMobile, setNewParentMobile] = useState('');
+  const [studentSubmitting, setStudentSubmitting] = useState(false);
+  const [studentSubmitError, setStudentSubmitError] = useState('');
+  const [studentSubmitSuccess, setStudentSubmitSuccess] = useState('');
+
+  const [showEditStudentModal, setShowEditStudentModal] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editStudentRoll, setEditStudentRoll] = useState('');
+  const [editStudentName, setEditStudentName] = useState('');
+  const [editStudentSection, setEditStudentSection] = useState('');
+  const [editStudentMobile, setEditStudentMobile] = useState('');
+  const [editParentMobile, setEditParentMobile] = useState('');
+  const [editStudentSubmitting, setEditStudentSubmitting] = useState(false);
+  const [editStudentSubmitError, setEditStudentSubmitError] = useState('');
+  const [editStudentSubmitSuccess, setEditStudentSubmitSuccess] = useState('');
+
+  const handleAddStudentSubmit = async (e) => {
+    e.preventDefault();
+    if (!newStudentName || !newStudentRoll || !newStudentSection || !newStudentMobile || !newParentMobile) {
+      setStudentSubmitError('All fields are required');
+      return;
+    }
+    setStudentSubmitting(true);
+    setStudentSubmitError('');
+    setStudentSubmitSuccess('');
+    try {
+      const res = await fetch('/api/student-attendance/students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          rollNumber: newStudentRoll,
+          name: newStudentName,
+          section: newStudentSection,
+          studentMobile: newStudentMobile,
+          parentMobile: newParentMobile,
+          department: user?.department
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStudentSubmitSuccess(`Student "${newStudentName}" added successfully.`);
+        setNewStudentName('');
+        setNewStudentRoll('');
+        setNewStudentMobile('');
+        setNewParentMobile('');
+        loadSectionData();
+        setTimeout(() => {
+          setShowAddStudentModal(false);
+          setStudentSubmitSuccess('');
+        }, 1500);
+      } else {
+        setStudentSubmitError(data.message || 'Failed to add student');
+      }
+    } catch (err) {
+      setStudentSubmitError('Network connection issue');
+    } finally {
+      setStudentSubmitting(false);
+    }
+  };
+
+  const handleEditStudentClick = (student) => {
+    setEditingStudent(student);
+    setEditStudentName(student.name);
+    setEditStudentRoll(student.rollNumber);
+    setEditStudentSection(student.section || selectedSection);
+    setEditStudentMobile(student.studentMobile || '');
+    setEditParentMobile(student.parentMobile || '');
+    setEditStudentSubmitError('');
+    setEditStudentSubmitSuccess('');
+    setShowEditStudentModal(true);
+  };
+
+  const handleEditStudentSubmit = async (e) => {
+    e.preventDefault();
+    if (!editStudentName || !editStudentRoll || !editStudentSection || !editStudentMobile || !editParentMobile) {
+      setEditStudentSubmitError('All fields are required');
+      return;
+    }
+    setEditStudentSubmitting(true);
+    setEditStudentSubmitError('');
+    setEditStudentSubmitSuccess('');
+    try {
+      const res = await fetch(`/api/student-attendance/students/${editingStudent.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: editStudentName,
+          rollNumber: editStudentRoll,
+          section: editStudentSection,
+          studentMobile: editStudentMobile,
+          parentMobile: editParentMobile,
+          department: user?.department
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEditStudentSubmitSuccess('Student details updated successfully.');
+        loadSectionData();
+        setTimeout(() => {
+          setShowEditStudentModal(false);
+          setEditingStudent(null);
+          setEditStudentSubmitSuccess('');
+        }, 1500);
+      } else {
+        setEditStudentSubmitError(data.message || 'Failed to update student details');
+      }
+    } catch (err) {
+      setEditStudentSubmitError('Network connection issue');
+    } finally {
+      setEditStudentSubmitting(false);
+    }
+  };
+
   const downloadReportFile = async (url, fallbackFilename) => {
     try {
       const res = await fetch(url, {
@@ -221,9 +350,12 @@ const AbsentControllerDashboard = () => {
         });
         const data = await res.json();
         if (res.ok) {
-          setClassrooms(data);
-          if (data.length > 0) {
-            setSelectedSection(data[0].className);
+          const deptClassrooms = (user?.role === 'SUPER_ADMIN')
+            ? data
+            : (user?.department ? data.filter(c => !c.department || c.department.trim().toLowerCase() === user.department.trim().toLowerCase()) : data);
+          setClassrooms(deptClassrooms);
+          if (deptClassrooms.length > 0) {
+            setSelectedSection(deptClassrooms[0].className);
           }
         } else {
           setError(data.message || 'Failed to fetch classrooms');
@@ -250,7 +382,10 @@ const AbsentControllerDashboard = () => {
         });
         const studData = await studRes.json();
         if (studRes.ok) {
-          setStudents(studData);
+          const filteredStud = user?.department && user?.role !== 'SUPER_ADMIN'
+            ? studData.filter(s => !s.department || s.department.trim().toLowerCase() === user.department.trim().toLowerCase())
+            : studData;
+          setStudents(filteredStud);
         }
 
         // 2. Fetch absentees for section today
@@ -259,7 +394,10 @@ const AbsentControllerDashboard = () => {
         });
         const absData = await absRes.json();
         if (absRes.ok) {
-          setAbsentees(absData);
+          const filteredAbs = user?.department && user?.role !== 'SUPER_ADMIN'
+            ? absData.filter(a => !a.department || a.department.trim().toLowerCase() === user.department.trim().toLowerCase())
+            : absData;
+          setAbsentees(filteredAbs);
         }
       } else {
         // activeBoardTab === 'allSections'
@@ -269,7 +407,16 @@ const AbsentControllerDashboard = () => {
         });
         const absData = await absRes.json();
         if (absRes.ok) {
-          setAbsentees(absData);
+          let filteredAbs = absData;
+          if (user?.department && user?.role !== 'SUPER_ADMIN') {
+            const deptClassNames = (classrooms || []).map(c => c.className);
+            filteredAbs = absData.filter(item => {
+              const matchesDept = item.department && item.department.trim().toLowerCase() === user.department.trim().toLowerCase();
+              const matchesSection = deptClassNames.length > 0 && (deptClassNames.includes(item.section) || deptClassNames.includes(item.className));
+              return matchesDept || matchesSection;
+            });
+          }
+          setAbsentees(filteredAbs);
         }
         setStudents([]);
       }
@@ -607,6 +754,25 @@ const AbsentControllerDashboard = () => {
             >
               <span>Monthly PDF</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setNewStudentRoll('');
+                setNewStudentName('');
+                setNewStudentSection(selectedSection || (classrooms[0]?.className || ''));
+                setNewStudentMobile('');
+                setNewParentMobile('');
+                setStudentSubmitError('');
+                setStudentSubmitSuccess('');
+                setShowAddStudentModal(true);
+              }}
+              className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-black bg-primary hover:bg-primary-dark text-white shadow-md shadow-primary/20 active:scale-[0.98] transition-all cursor-pointer"
+              title="Add a new student to this section"
+            >
+              <UserPlus size={14} />
+              <span>Add Student</span>
+            </button>
           </div>
 
         </div>
@@ -936,27 +1102,37 @@ const AbsentControllerDashboard = () => {
                                       </div>
                                     )}
 
-                                    {isLate ? (
-                                      <span className="mt-2 text-center text-xs font-bold text-amber-600 bg-amber-500/10 py-2 px-4 rounded-xl border border-amber-500/20">
-                                        Late Entry - No Call Required
-                                      </span>
-                                    ) : student.callLog?.isPreExcused ? (
-                                      <span className="mt-2 text-center text-xs font-bold text-sky-600 bg-sky-500/10 py-2 px-4 rounded-xl border border-sky-500/20">
-                                        No Call Required (Pre-informed)
-                                      </span>
-                                    ) : (
+                                    <div className="flex items-center gap-2 mt-2">
+                                      {isLate ? (
+                                        <span className="flex-1 text-center text-xs font-bold text-amber-600 bg-amber-500/10 py-2 px-3 rounded-xl border border-amber-500/20">
+                                          Late Entry - No Call Required
+                                        </span>
+                                      ) : student.callLog?.isPreExcused ? (
+                                        <span className="flex-1 text-center text-xs font-bold text-sky-600 bg-sky-500/10 py-2 px-3 rounded-xl border border-sky-500/20">
+                                          No Call Required (Pre-informed)
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleMakeCall(student)}
+                                          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold text-white transition-all active:scale-[0.98] ${
+                                            hasCallLog 
+                                              ? 'bg-slate-600 hover:bg-slate-700' 
+                                              : 'bg-primary-dark hover:bg-primary text-white shadow-md shadow-primary-dark/10'
+                                          }`}
+                                        >
+                                          <PhoneCall size={14} />
+                                          <span>{hasCallLog ? 'Call Again' : 'Call Parent'}</span>
+                                        </button>
+                                      )}
                                       <button
-                                        onClick={() => handleMakeCall(student)}
-                                        className={`mt-2 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold text-white transition-all active:scale-[0.98] ${
-                                          hasCallLog 
-                                            ? 'bg-slate-600 hover:bg-slate-700' 
-                                            : 'bg-primary-dark hover:bg-primary text-white shadow-md shadow-primary-dark/10'
-                                        }`}
+                                        type="button"
+                                        onClick={() => handleEditStudentClick(student)}
+                                        className="py-2 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-customText hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                        title="Modify Student Details"
                                       >
-                                        <PhoneCall size={14} />
-                                        <span>{hasCallLog ? 'Call Again / Update' : 'Call Parent'}</span>
+                                        <Edit size={14} />
                                       </button>
-                                    )}
+                                    </div>
                                   </div>
                                 </>
                               )}
@@ -1048,27 +1224,37 @@ const AbsentControllerDashboard = () => {
                                   </div>
                                 )}
 
-                                {isLate ? (
-                                  <span className="mt-2 text-center text-xs font-bold text-amber-600 bg-amber-500/10 py-2 px-4 rounded-xl border border-amber-500/20">
-                                    Late Entry - Calling Restricted
-                                  </span>
-                                ) : student.callLog?.isPreExcused ? (
-                                  <span className="mt-2 text-center text-xs font-bold text-sky-600 bg-sky-500/10 py-2 px-4 rounded-xl border border-sky-500/20">
-                                    No Call Required (Pre-informed)
-                                  </span>
-                                ) : (
+                                <div className="flex items-center gap-2 mt-2">
+                                  {isLate ? (
+                                    <span className="flex-1 text-center text-xs font-bold text-amber-600 bg-amber-500/10 py-2 px-3 rounded-xl border border-amber-500/20">
+                                      Late Entry - Calling Restricted
+                                    </span>
+                                  ) : student.callLog?.isPreExcused ? (
+                                    <span className="flex-1 text-center text-xs font-bold text-sky-600 bg-sky-500/10 py-2 px-3 rounded-xl border border-sky-500/20">
+                                      No Call Required (Pre-informed)
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleMakeCall(student)}
+                                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold text-white transition-all active:scale-[0.98] ${
+                                        hasCallLog 
+                                          ? 'bg-slate-600 hover:bg-slate-700' 
+                                          : 'bg-primary-dark hover:bg-primary text-white shadow-md shadow-primary-dark/10'
+                                      }`}
+                                    >
+                                      <PhoneCall size={14} />
+                                      <span>{hasCallLog ? 'Call Again' : 'Call Parent'}</span>
+                                    </button>
+                                  )}
                                   <button
-                                    onClick={() => handleMakeCall(student)}
-                                    className={`mt-2 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold text-white transition-all active:scale-[0.98] ${
-                                      hasCallLog 
-                                        ? 'bg-slate-600 hover:bg-slate-700' 
-                                        : 'bg-primary-dark hover:bg-primary text-white shadow-md shadow-primary-dark/10'
-                                    }`}
+                                    type="button"
+                                    onClick={() => handleEditStudentClick(student)}
+                                    className="py-2 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-customText hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                    title="Modify Student Details"
                                   >
-                                    <PhoneCall size={14} />
-                                    <span>{hasCallLog ? 'Call Again / Update' : 'Call Parent'}</span>
+                                    <Edit size={14} />
                                   </button>
-                                )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -1136,6 +1322,14 @@ const AbsentControllerDashboard = () => {
                       >
                         <History size={12} className="text-slate-400" />
                         <span>View History</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEditStudentClick(student)}
+                        className="py-1.5 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-customText hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                        title="Modify Student Details"
+                      >
+                        <Edit size={12} />
                       </button>
                     </div>
                   </div>
@@ -1473,17 +1667,27 @@ const AbsentControllerDashboard = () => {
                                       No Call Required (Pre-informed)
                                     </span>
                                   ) : (
-                                    <button
-                                      onClick={() => handleMakeCall(student)}
-                                      className={`mt-2 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold text-white transition-all active:scale-[0.98] ${
-                                        hasCallLog 
-                                          ? 'bg-slate-600 hover:bg-slate-700' 
-                                          : 'bg-primary-dark hover:bg-primary text-white shadow-md shadow-primary-dark/10'
-                                      }`}
-                                    >
-                                      <PhoneCall size={14} />
-                                      <span>{hasCallLog ? 'Call Again / Update' : 'Call Parent'}</span>
-                                    </button>
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <button
+                                        onClick={() => handleMakeCall(student)}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold text-white transition-all active:scale-[0.98] ${
+                                          hasCallLog 
+                                            ? 'bg-slate-600 hover:bg-slate-700' 
+                                            : 'bg-primary-dark hover:bg-primary text-white shadow-md shadow-primary-dark/10'
+                                        }`}
+                                      >
+                                        <PhoneCall size={14} />
+                                        <span>{hasCallLog ? 'Call Again' : 'Call Parent'}</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEditStudentClick(student)}
+                                        className="py-2 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-customText hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                        title="Modify Student Details"
+                                      >
+                                        <Edit size={14} />
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                               </>
@@ -1576,9 +1780,19 @@ const AbsentControllerDashboard = () => {
                                 </div>
                               )}
 
-                              <span className="mt-2 text-center text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 py-2 px-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                                Afternoon Entry - Calling Not Allowed
-                              </span>
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className="flex-1 text-center text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                                  Afternoon Entry - Calling Not Allowed
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditStudentClick(student)}
+                                  className="py-2 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-customText hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                  title="Modify Student Details"
+                                >
+                                  <Edit size={14} />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -1889,6 +2103,269 @@ const AbsentControllerDashboard = () => {
                 Close Logs
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Student Modal */}
+      {showAddStudentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-scale-up">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
+                  Add New Student
+                </h3>
+                <p className="text-xs text-customText-muted mt-0.5">
+                  Register a student to your department classroom
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddStudentModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddStudentSubmit} className="p-5 space-y-3.5">
+              {studentSubmitError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                  ⚠️ {studentSubmitError}
+                </div>
+              )}
+              {studentSubmitSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                  ✓ {studentSubmitSuccess}
+                </div>
+              )}
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                  Roll Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 21B01A1201"
+                  value={newStudentRoll}
+                  onChange={(e) => setNewStudentRoll(e.target.value.toUpperCase())}
+                  className="glass-input text-xs w-full uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                  Student Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Full Name"
+                  value={newStudentName}
+                  onChange={(e) => setNewStudentName(e.target.value)}
+                  className="glass-input text-xs w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                  Classroom Section *
+                </label>
+                <select
+                  required
+                  value={newStudentSection}
+                  onChange={(e) => setNewStudentSection(e.target.value)}
+                  className="glass-input text-xs w-full"
+                >
+                  <option value="">-- Choose Classroom --</option>
+                  {classrooms.map((c) => (
+                    <option key={c.id} value={c.className}>
+                      {c.className}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                    Student Mobile *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="10-digit number"
+                    value={newStudentMobile}
+                    onChange={(e) => setNewStudentMobile(e.target.value)}
+                    className="glass-input text-xs w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                    Parent Mobile *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="10-digit number"
+                    value={newParentMobile}
+                    onChange={(e) => setNewParentMobile(e.target.value)}
+                    className="glass-input text-xs w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddStudentModal(false)}
+                  className="btn-secondary py-2 px-4 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={studentSubmitting}
+                  className="btn-primary py-2 px-5 text-xs font-black shadow-md shadow-primary/20"
+                >
+                  {studentSubmitting ? 'Adding...' : 'Add Student'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Modal */}
+      {showEditStudentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-scale-up">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
+                  Modify Student Details
+                </h3>
+                <p className="text-xs text-customText-muted mt-0.5">
+                  Update records for {editingStudent?.name} ({editingStudent?.rollNumber})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditStudentModal(false);
+                  setEditingStudent(null);
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditStudentSubmit} className="p-5 space-y-3.5">
+              {editStudentSubmitError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                  ⚠️ {editStudentSubmitError}
+                </div>
+              )}
+              {editStudentSubmitSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                  ✓ {editStudentSubmitSuccess}
+                </div>
+              )}
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                  Roll Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editStudentRoll}
+                  onChange={(e) => setEditStudentRoll(e.target.value.toUpperCase())}
+                  className="glass-input text-xs w-full uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                  Student Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editStudentName}
+                  onChange={(e) => setEditStudentName(e.target.value)}
+                  className="glass-input text-xs w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                  Section *
+                </label>
+                <select
+                  required
+                  value={editStudentSection}
+                  onChange={(e) => setEditStudentSection(e.target.value)}
+                  className="glass-input text-xs w-full"
+                >
+                  {classrooms.map((c) => (
+                    <option key={c.id} value={c.className}>
+                      {c.className}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                    Student Mobile *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={editStudentMobile}
+                    onChange={(e) => setEditStudentMobile(e.target.value)}
+                    className="glass-input text-xs w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-customText-muted block mb-1">
+                    Parent Mobile *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={editParentMobile}
+                    onChange={(e) => setEditParentMobile(e.target.value)}
+                    className="glass-input text-xs w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditStudentModal(false);
+                    setEditingStudent(null);
+                  }}
+                  className="btn-secondary py-2 px-4 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editStudentSubmitting}
+                  className="btn-primary py-2 px-5 text-xs font-black shadow-md shadow-primary/20"
+                >
+                  {editStudentSubmitting ? 'Updating...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
