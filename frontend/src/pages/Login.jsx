@@ -486,44 +486,46 @@ const Login = () => {
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] rounded-full bg-secondary/10 dark:bg-secondary-dark/5 blur-3xl pointer-events-none" />
 
         {/* 2. Top Navigation Bar with Logo and Prominent Staff Login Button */}
-        <header className="w-full border-b border-slate-200/60 dark:border-slate-800/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-sm">
+        <header className="w-full border-b border-slate-200/60 dark:border-slate-800/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-3 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between shadow-sm">
           
           {/* Left Brand */}
           <div 
             onClick={() => setViewMode('landing')}
-            className="flex items-center gap-3 cursor-pointer select-none"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none min-w-0"
           >
-            <div className="w-11 h-11 rounded-full overflow-hidden shadow-md bg-white p-0.5 border border-slate-200">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden shadow-md bg-white p-0.5 border border-slate-200 shrink-0">
               <img src={logo} alt="NEC Logo" className="w-full h-full object-contain rounded-full" />
             </div>
-            <div>
-              <h1 className="text-sm sm:text-base font-black tracking-tight text-primary-dark dark:text-primary leading-tight uppercase">
-                Narasaraopeta Engineering College
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-base font-black tracking-tight text-primary-dark dark:text-primary leading-tight uppercase truncate">
+                <span className="sm:hidden">NEC Autonomous</span>
+                <span className="hidden sm:inline">Narasaraopeta Engineering College</span>
               </h1>
-              <p className="text-[11px] font-extrabold text-customText-muted dark:text-customText-mutedDark">
-                Lectra • <span className="text-primary font-bold">Student Leave & Gate Clearance</span>
+              <p className="text-[10px] sm:text-[11px] font-extrabold text-customText-muted dark:text-customText-mutedDark truncate">
+                Lectra • <span className="text-primary font-bold">Gate Clearance & Leaves</span>
               </p>
             </div>
           </div>
 
-          {/* Top Right: Prominent "Staff Login" button (Larger as requested) */}
-          <div className="flex items-center gap-3">
+          {/* Top Right: Prominent "Staff Login" button */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-2">
             {viewMode === 'login' ? (
               <button
                 type="button"
                 onClick={() => setViewMode('landing')}
-                className="flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-customText dark:text-customText-dark text-xs sm:text-sm font-black shadow-sm transition-all cursor-pointer active:scale-95 border border-slate-200 dark:border-slate-700"
+                className="flex items-center gap-1.5 sm:gap-2.5 px-3 py-2 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-customText dark:text-customText-dark text-xs sm:text-sm font-black shadow-sm transition-all cursor-pointer active:scale-95 border border-slate-200 dark:border-slate-700"
               >
-                <FileText size={18} className="text-primary" />
-                <span>Student Leave Portal</span>
+                <FileText size={16} className="text-primary" />
+                <span className="hidden xs:inline">Student Portal</span>
+                <span className="xs:hidden">Portal</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setViewMode('login')}
-                className="flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-gradient-to-r from-primary to-primary-dark text-white hover:opacity-95 text-sm sm:text-base font-black shadow-lg shadow-primary/25 hover:shadow-xl hover:scale-105 transition-all cursor-pointer border border-primary/30 active:scale-95"
+                className="flex items-center gap-1.5 sm:gap-2.5 px-3.5 py-2 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl bg-gradient-to-r from-primary to-primary-dark text-white hover:opacity-95 text-xs sm:text-base font-black shadow-lg shadow-primary/25 hover:shadow-xl hover:scale-105 transition-all cursor-pointer border border-primary/30 active:scale-95"
               >
-                <LogIn size={19} />
+                <LogIn size={16} />
                 <span>Staff Login</span>
               </button>
             )}
@@ -531,13 +533,13 @@ const Login = () => {
         </header>
 
         {/* 3. Main Body: Switch between Landing Box and Staff Login Card */}
-        <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 z-10 w-full max-w-4xl mx-auto my-auto">
+        <main className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 pb-12 sm:pb-8 z-10 w-full max-w-4xl mx-auto my-auto">
           
           {viewMode === 'landing' ? (
-            <div className="w-full max-w-2xl space-y-6 flex flex-col items-center">
+            <div className="w-full max-w-2xl space-y-5 sm:space-y-6 flex flex-col items-center">
               
               {/* DIRECT APPLY LEAVE / REQUEST CERTIFICATE BOX ON LANDING PAGE */}
-              <div className="w-full bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 animate-fade-in space-y-6 my-auto relative">
+              <div className="w-full bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-8 animate-fade-in space-y-5 sm:space-y-6 my-auto relative">
               
               {/* Service Tab Switcher: Apply Leave (Outpass) vs Request Certificate */}
               <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/60">
@@ -1407,19 +1409,19 @@ const Login = () => {
           ) : (
 
             /* STAFF LOGIN CARD (Cleaned up, no Quick Demo Accounts) */
-            <div className="w-full max-w-md glass-card p-8 border border-white/60 dark:border-slate-800/65 relative z-10 animate-fade-in my-auto">
+            <div className="w-full max-w-md glass-card p-5 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/60 dark:border-slate-800/65 relative z-10 animate-fade-in my-auto">
               
               {/* Back to Student Portal button */}
               <button
                 type="button"
                 onClick={() => setViewMode('landing')}
-                className="absolute top-6 left-6 text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                className="absolute top-4 sm:top-6 left-4 sm:left-6 text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer active:scale-95"
               >
                 ← Back to Portal
               </button>
 
               {/* Fingerprint Login Option */}
-              <div className="absolute top-6 right-6 z-20">
+              <div className="absolute top-4 sm:top-6 right-4 sm:right-6 z-20">
                 <button
                   type="button"
                   onClick={handleFingerprintLogin}

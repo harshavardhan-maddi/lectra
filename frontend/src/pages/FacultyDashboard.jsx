@@ -724,11 +724,11 @@ const FacultyDashboard = () => {
           </div>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 pb-2 no-print">
+        <div className="flex items-center gap-2 pb-2 overflow-x-auto sm:flex-wrap no-print -mx-1 px-1">
           <button
             type="button"
             onClick={() => setActiveTab('attendance')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'attendance'
                 ? 'bg-primary text-white shadow-md shadow-primary/20'
                 : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
@@ -741,7 +741,7 @@ const FacultyDashboard = () => {
           <button
             type="button"
             onClick={() => setActiveTab('calls')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'calls'
                 ? 'bg-primary text-white shadow-md shadow-primary/20'
                 : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
@@ -754,7 +754,7 @@ const FacultyDashboard = () => {
           <button
             type="button"
             onClick={() => setActiveTab('leaves')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'leaves'
                 ? 'bg-primary text-white shadow-md shadow-primary/20'
                 : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
@@ -767,14 +767,14 @@ const FacultyDashboard = () => {
           <button
             type="button"
             onClick={() => setActiveTab('mentor')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 relative ${
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 relative ${
               activeTab === 'mentor'
                 ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                 : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
             }`}
           >
             <GraduationCap size={15} />
-            <span>Class Mentorship & Outpasses</span>
+            <span>Class Mentorship</span>
             {pendingMentorCallsCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
                 {pendingMentorCallsCount}
