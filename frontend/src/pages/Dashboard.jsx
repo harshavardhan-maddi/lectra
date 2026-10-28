@@ -4072,7 +4072,7 @@ const Dashboard = ({ initialTab }) => {
                       <span className="font-black">On Duty (OD)</span>
                     </div>
                     <span className={`text-[10px] ${hodLeaveType === 'FACULTY_OD' ? 'text-white/80' : 'text-slate-400'}`}>
-                      Max 1/mo
+                      Official Duty
                     </span>
                   </button>
                 </div>

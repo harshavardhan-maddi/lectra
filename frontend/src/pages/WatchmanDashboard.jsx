@@ -61,7 +61,7 @@ const WatchmanDashboard = () => {
   // 1. Pending Gate Exit (Approved passes awaiting departure)
   const pendingExitTickets = tickets.filter(t => t.status === 'PERMISSION_GRANTED');
   // 2. Faculty Currently Outside Campus on 1-Hour Permission (Awaiting In-Time entry upon return)
-  const facultyAwaitingReturnTickets = tickets.filter(t => t.applicantType === 'FACULTY' && t.status === 'FACULTY_OUT');
+  const facultyAwaitingReturnTickets = tickets.filter(t => (t.applicantType === 'FACULTY' || t.applicantType === 'HOD') && t.status === 'FACULTY_OUT');
   // 3. Completed Gate Departures / Closed Records
   const exitedTickets = tickets.filter(t => t.status === 'SENT_OUT');
 
@@ -73,8 +73,8 @@ const WatchmanDashboard = () => {
 
   const filteredTickets = baseTickets.filter(t => {
     // Role filter
-    if (applicantFilter === 'FACULTY' && t.applicantType !== 'FACULTY') return false;
-    if (applicantFilter === 'STUDENT' && t.applicantType === 'FACULTY') return false;
+    if (applicantFilter === 'FACULTY' && t.applicantType !== 'FACULTY' && t.applicantType !== 'HOD') return false;
+    if (applicantFilter === 'STUDENT' && (t.applicantType === 'FACULTY' || t.applicantType === 'HOD')) return false;
 
     // Search filter
     const q = searchQuery.toLowerCase();
@@ -434,9 +434,10 @@ const WatchmanDashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredTickets.map((ticket) => {
             const isIdChecked = !!verifyingIdMap[ticket.id];
-            const isFaculty = ticket.applicantType === 'FACULTY';
+            const isFaculty = ticket.applicantType === 'FACULTY' || ticket.applicantType === 'HOD';
             const is1Hour = ticket.type === 'FACULTY_ONE_HOUR';
             const is4PM = ticket.type === 'FACULTY_4PM';
+            const isOD = ticket.type === 'FACULTY_OD';
 
             return (
               <div 
@@ -454,7 +455,7 @@ const WatchmanDashboard = () => {
                     </h3>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-xs font-extrabold text-customText">
-                        {isFaculty ? (ticket.facultyUserId || 'FACULTY') : ticket.rollNumber}
+                        {isFaculty ? (ticket.facultyUserId || (ticket.applicantType === 'HOD' ? 'HOD' : 'FACULTY')) : ticket.rollNumber}
                       </span>
                       <span className="text-xs text-customText-muted font-medium">
                         {isFaculty ? (ticket.department || ticket.section) : ticket.section}
@@ -468,6 +469,10 @@ const WatchmanDashboard = () => {
                         ) : is1Hour ? (
                           <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 font-black text-[11px] border border-amber-500/30">
                             1-Hour Permission (Out: {ticket.leaveTime})
+                          </span>
+                        ) : isOD ? (
+                          <span className="px-2.5 py-0.5 rounded-lg bg-teal-500/15 text-teal-700 dark:text-teal-400 font-black text-[11px] border border-teal-500/30">
+                            Official Duty (OD)
                           </span>
                         ) : ticket.type === 'FACULTY_EARLY_OUT' ? (
                           <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 font-black text-[11px] border border-amber-500/30">

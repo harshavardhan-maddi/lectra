@@ -198,6 +198,7 @@ const Layout = ({ children }) => {
       { name: 'Student Registry', path: '/students', icon: GraduationCap },
       { name: 'Absentees Tracking', path: '/absentees', icon: AlertCircle },
       { name: 'Outpass Approvals', path: '/outpasses', icon: FileText },
+      { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
       { name: 'Classrooms', path: '/classrooms', icon: CalendarDays },
       { name: 'Faculty Contacts', path: '/faculty', icon: UserCheck },
       { name: 'Reports', path: '/reports', icon: FileSpreadsheet }

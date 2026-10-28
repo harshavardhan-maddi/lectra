@@ -96,7 +96,7 @@ const AppRoutes = () => {
       <Route
         path="/faculty-dashboard"
         element={
-          <PrivateRoute allowedRoles={['FACULTY']}>
+          <PrivateRoute allowedRoles={['FACULTY', 'HOD', 'SUB_ADMIN']}>
             <Layout>
               <FacultyDashboard />
             </Layout>

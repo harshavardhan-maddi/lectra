@@ -716,7 +716,7 @@ export const subscribeToOutpasses = (callback) => {
 // ==========================================
 
 // Calculate faculty monthly leaves usage (Strict limit: 2 leaves per calendar month, no rollover)
-// OD Permission: Exactly 1 OD per month, does NOT cut regular permission count
+// OD Permission: Does NOT cut regular permission count (2 permissions remain unaffected)
 export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = null) => {
   if (!facultyIdentifier) {
     return { 
@@ -725,8 +725,6 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
       remaining: 2, 
       isLimitExceeded: false, 
       odCount: 0,
-      odLimit: 1,
-      odRemaining: 1,
       isOdLimitExceeded: false,
       monthKey: '',
       message: '',
@@ -767,12 +765,10 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
   const remaining = Math.max(0, limit - count);
   const isLimitExceeded = count >= limit;
 
-  // On Duty (OD) permissions - Max 1 per month, does not deduct from regular count
+  // On Duty (OD) permissions - Does not deduct from regular permissions count
   const odTickets = facultyMonthTickets.filter(t => t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_OD');
   const odCount = odTickets.length;
-  const odLimit = 1;
-  const odRemaining = Math.max(0, odLimit - odCount);
-  const isOdLimitExceeded = odCount >= odLimit;
+  const isOdLimitExceeded = false; // OD is not restricted by the 1/month limit
 
   return {
     count,
@@ -780,8 +776,6 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
     remaining,
     isLimitExceeded,
     odCount,
-    odLimit,
-    odRemaining,
     isOdLimitExceeded,
     monthKey: targetMonthKey,
     monthName: new Date(year, parseInt(month, 10) - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' }),
@@ -789,7 +783,7 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
     regularTickets,
     odTickets,
     message: isLimitExceeded ? "your limit for leaves has been completed , consult principal." : "",
-    odMessage: isOdLimitExceeded ? "Your OD's for this month has been completed." : ""
+    odMessage: ""
   };
 };
 
@@ -811,13 +805,9 @@ export const applyFacultyLeave = async ({
   const selectedDate = date || new Date().toISOString().slice(0, 10);
   const cleanDepartment = (department && department !== 'General') ? department : 'Department of CSE(emerging Technologies)';
 
-  // Quota validation
-  const quota = getFacultyMonthlyLeaveUsage(facultyUserId || facultyName || facultyId, selectedDate);
-  if (type === 'FACULTY_OD') {
-    if (quota.isOdLimitExceeded) {
-      throw new Error("Your OD's for this month has been completed.");
-    }
-  } else {
+  // Quota validation: only regular permissions (1-Hour & 4PM) are capped at 2 per month
+  if (type !== 'FACULTY_OD') {
+    const quota = getFacultyMonthlyLeaveUsage(facultyUserId || facultyName || facultyId, selectedDate);
     if (quota.isLimitExceeded) {
       throw new Error("your limit for leaves has been completed , consult principal.");
     }
@@ -924,13 +914,9 @@ export const applyHodLeave = async ({
   const selectedDate = date || new Date().toISOString().slice(0, 10);
   const cleanDepartment = (department && department !== 'General') ? department : 'Department of CSE(emerging Technologies)';
 
-  // Quota validation for HOD (same 2 permissions + 1 OD limit)
-  const quota = getFacultyMonthlyLeaveUsage(hodUserId || hodName || 'HOD', selectedDate);
-  if (type === 'FACULTY_OD') {
-    if (quota.isOdLimitExceeded) {
-      throw new Error("Your OD's for this month has been completed.");
-    }
-  } else {
+  // Quota validation for HOD: only regular permissions (1-Hour & 4PM) are capped at 2 per month
+  if (type !== 'FACULTY_OD') {
+    const quota = getFacultyMonthlyLeaveUsage(hodUserId || hodName || 'HOD', selectedDate);
     if (quota.isLimitExceeded) {
       throw new Error("your limit for leaves has been completed , consult principal.");
     }
@@ -1225,7 +1211,7 @@ export const getFacultyLeaveHistory = (facultyIdentifier) => {
   const cleanId = String(facultyIdentifier).trim().toLowerCase();
   const all = getAllOutpasses();
   return all.filter(t => {
-    if (t.applicantType !== 'FACULTY') return false;
+    if (t.applicantType !== 'FACULTY' && t.applicantType !== 'HOD') return false;
     return (
       (t.facultyUserId && String(t.facultyUserId).trim().toLowerCase() === cleanId) ||
       (t.facultyName && String(t.facultyName).trim().toLowerCase() === cleanId) ||

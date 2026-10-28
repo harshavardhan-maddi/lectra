@@ -33,6 +33,7 @@ import Loading from '../components/Loading';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
   applyFacultyLeave, 
+  applyHodLeave,
   getFacultyMonthlyLeaveUsage, 
   getFacultyLeaveHistory, 
   subscribeToOutpasses,
@@ -80,12 +81,15 @@ const FacultyDashboard = () => {
     }
   }, [user]);
 
+  // HOD user detection: HOD applies permissions here with routing to AO -> Security
+  const isHodUser = user?.role === 'HOD' || user?.role === 'SUB_ADMIN';
+
   const [activeTab, setActiveTab] = useState(
-    isNonTeaching ? 'leaves' : (searchParams.get('tab') || 'attendance')
+    (isNonTeaching || isHodUser) ? 'leaves' : (searchParams.get('tab') || 'attendance')
   );
 
   useEffect(() => {
-    if (isNonTeaching) {
+    if (isNonTeaching || isHodUser) {
       setActiveTab('leaves');
       return;
     }
@@ -95,7 +99,7 @@ const FacultyDashboard = () => {
     } else {
       setActiveTab('attendance');
     }
-  }, [searchParams, isNonTeaching]);
+  }, [searchParams, isNonTeaching, isHodUser]);
   
   // Data States
   const [students, setStudents] = useState([]);
@@ -206,6 +210,10 @@ const FacultyDashboard = () => {
   const handleAssignSelfAsMentor = async () => {
     setMentorAssignError('');
     setMentorAssignSuccess('');
+    if (isNonTeaching) {
+      setMentorAssignError('Non-teaching staff cannot be assigned as class mentors.');
+      return;
+    }
     if (!selectedSectionToAssign) {
       setMentorAssignError('Please select a valid section.');
       return;
@@ -273,19 +281,14 @@ const FacultyDashboard = () => {
     setLeaveError('');
     setLeaveSuccess('');
 
-    // Pre-check monthly quota
-    // Regular permissions limit = 2; OD limit = 1 (OD does NOT deduct from regular count)
+    // Pre-check monthly quota: only regular permissions (1-Hour & 4PM) are capped at 2
+    // OD does NOT cut regular permissions count
     const currentQuota = getFacultyMonthlyLeaveUsage(
       user?.userId || user?.name || user?.id,
       leaveDate || todayDate
     );
 
-    if (leaveType === 'FACULTY_OD') {
-      if (currentQuota.isOdLimitExceeded || currentQuota.odRemaining <= 0) {
-        setLeaveError("Your OD's for this month has been completed.");
-        return;
-      }
-    } else {
+    if (leaveType !== 'FACULTY_OD') {
       if (currentQuota.isLimitExceeded || currentQuota.remaining <= 0) {
         setLeaveError("your limit for leaves has been completed , consult principal.");
         return;
@@ -305,18 +308,33 @@ const FacultyDashboard = () => {
     try {
       setApplyingLeave(true);
       const facultyDept = user?.department || 'Department of CSE(emerging Technologies)';
-      const ticket = await applyFacultyLeave({
-        facultyId: user?.id,
-        facultyUserId: user?.userId,
-        facultyName: user?.name,
-        department: facultyDept,
-        type: leaveType,
-        date: leaveDate || todayDate,
-        leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveType === 'FACULTY_OD' ? (leaveTime || 'On Duty (Full Day)') : leaveTime,
-        purpose: leavePurpose
-      });
+      
+      let ticket;
+      if (isHodUser) {
+        ticket = await applyHodLeave({
+          hodUserId: user?.userId || user?.name || 'HOD',
+          hodName: user?.name || 'Head of Department (HOD)',
+          department: facultyDept,
+          type: leaveType,
+          date: leaveDate || todayDate,
+          leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveType === 'FACULTY_OD' ? (leaveTime || 'On Duty (Full Day)') : leaveTime,
+          purpose: leavePurpose
+        });
+        setLeaveSuccess(`HOD permission request submitted! Ref ID: ${ticket.id}. Forwarded to Administrative Officer (AO) for approval.`);
+      } else {
+        ticket = await applyFacultyLeave({
+          facultyId: user?.id,
+          facultyUserId: user?.userId,
+          facultyName: user?.name,
+          department: facultyDept,
+          type: leaveType,
+          date: leaveDate || todayDate,
+          leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveType === 'FACULTY_OD' ? (leaveTime || 'On Duty (Full Day)') : leaveTime,
+          purpose: leavePurpose
+        });
+        setLeaveSuccess(`Permission request submitted successfully! Ref ID: ${ticket.id}. Forwarded to HOD for approval.`);
+      }
 
-      setLeaveSuccess(`Permission request submitted successfully! Ref ID: ${ticket.id}. Forwarded to HOD for approval.`);
       setShowApplyModal(false);
       setLeavePurpose('');
       setTimeout(() => setLeaveSuccess(''), 5000);
@@ -464,6 +482,10 @@ const FacultyDashboard = () => {
 
   // Submit Bulk Attendance
   const handleSaveAttendance = async () => {
+    if (isNonTeaching) {
+      setError('Non-teaching staff cannot submit student attendance.');
+      return;
+    }
     setSavingAttendance(true);
     setError('');
     setSuccess('');
@@ -524,6 +546,10 @@ const FacultyDashboard = () => {
 
   // Open Call Log Modal
   const openCallModal = (student) => {
+    if (isNonTeaching) {
+      setError('Non-teaching staff cannot access parent calling desk.');
+      return;
+    }
     setSelectedStudent(student);
     setAnsweredCall(true);
     setSelectedCategory('Medical');
@@ -539,6 +565,10 @@ const FacultyDashboard = () => {
   // Submit Call Log
   const handleSaveCallLog = async (e) => {
     e.preventDefault();
+    if (isNonTeaching) {
+      setHistoryError('Non-teaching staff cannot log parent calls.');
+      return;
+    }
     if (!selectedStudent) return;
 
     setSavingCallLog(true);
@@ -596,42 +626,48 @@ const FacultyDashboard = () => {
       {/* Top Header Card */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40 dark:bg-slate-900/40 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-800/40 backdrop-blur-md">
         <div>
-          <h2 className="text-2xl font-extrabold text-customText dark:text-customText-dark tracking-tight">
-            Faculty Attendance Portal
+          <h2 className="text-2xl font-black text-customText dark:text-customText-dark tracking-tight">
+            {isHodUser ? 'HOD Permissions & Gate Pass' : isNonTeaching ? 'Non-Teaching Permissions Portal' : 'Faculty Attendance Portal'}
           </h2>
           <p className="text-sm text-customText-muted dark:text-customText-mutedDark">
-            Manage attendance lists, view absentees, and document communication logs.
+            {isHodUser 
+              ? 'Apply for official permissions, track AO approvals, and download gate departure passes.' 
+              : isNonTeaching 
+              ? 'Apply for permissions, track approvals, and view official departure slips.' 
+              : 'Manage attendance lists, view absentees, and document communication logs.'}
           </p>
         </div>
 
-        {/* Section Selector Dropdown */}
-        <div className="flex items-center gap-2.5 w-full md:w-auto">
-          <label className="text-xs font-bold uppercase tracking-wider text-customText-muted dark:text-customText-mutedDark whitespace-nowrap">
-            Selected Section:
-          </label>
-          <div className="relative flex-1 md:flex-initial">
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="glass-input pr-10 text-sm font-semibold py-2.5"
-            >
-              {classrooms.map((c) => (
-                <option key={c.id} value={c.className}>
-                  {c.className} ({c.roomNumber})
-                </option>
-              ))}
-            </select>
+        {/* Section Selector Dropdown (only for teaching faculty) */}
+        {!isNonTeaching && !isHodUser && (
+          <div className="flex items-center gap-2.5 w-full md:w-auto">
+            <label className="text-xs font-bold uppercase tracking-wider text-customText-muted dark:text-customText-mutedDark whitespace-nowrap">
+              Selected Section:
+            </label>
+            <div className="relative flex-1 md:flex-initial">
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="glass-input pr-10 text-sm font-semibold py-2.5"
+              >
+                {classrooms.map((c) => (
+                  <option key={c.id} value={c.className}>
+                    {c.className} ({c.roomNumber})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Non-Teaching Faculty notice or Standard Sub-Nav Tabs */}
+      {/* Non-Teaching Faculty notice, HOD notice, or Standard Sub-Nav Tabs */}
       {isNonTeaching ? (
         <div className="space-y-3 mb-3 no-print">
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-300 flex items-center justify-between gap-3 text-xs font-bold animate-fade-in">
             <div className="flex items-center gap-2.5">
               <AlertCircle size={18} className="text-amber-600 shrink-0" />
-              <span>Non-Teaching Staff Portal • Attendance and Call Desk access are disabled. You can apply for permissions and gate departure passes below.</span>
+              <span>Non-Teaching Staff Portal • Attendance, Call Desk, and Class Mentorship access are disabled. You can apply for permissions and gate departure passes below.</span>
             </div>
             <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 text-[10px] font-black uppercase tracking-wider shrink-0 border border-amber-500/30">
               Non-Teaching
@@ -644,6 +680,27 @@ const FacultyDashboard = () => {
             >
               <Calendar size={15} />
               <span>Faculty Permissions</span>
+            </button>
+          </div>
+        </div>
+      ) : isHodUser ? (
+        <div className="space-y-3 mb-3 no-print">
+          <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-900 dark:text-indigo-300 flex items-center justify-between gap-3 text-xs font-bold animate-fade-in">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck size={18} className="text-indigo-600 shrink-0" />
+              <span>Head of Department (HOD) Permissions Portal • Apply for your official leaves & permissions here. Approvals route directly to the Administrative Officer (AO) and pass to Security.</span>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-800 dark:text-indigo-200 text-[10px] font-black uppercase tracking-wider shrink-0 border border-indigo-500/30">
+              HOD Login
+            </span>
+          </div>
+          <div className="flex items-center gap-2 pb-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-primary text-white shadow-md shadow-primary/20"
+            >
+              <Calendar size={15} />
+              <span>Faculty Permissions (HOD)</span>
             </button>
           </div>
         </div>
@@ -790,7 +847,7 @@ const FacultyDashboard = () => {
       )}
 
       {/* TAB 1: Attendance Registry */}
-      {activeTab === 'attendance' && (
+      {activeTab === 'attendance' && !isNonTeaching && !isHodUser && (
         <div className="space-y-6">
           {loadingStudents ? (
             <div className="flex items-center justify-center py-20">
@@ -1210,7 +1267,8 @@ const FacultyDashboard = () => {
         </div>
       )}
 
-      {activeTab === 'calls' && (
+      {/* TAB 2: Parent Call Logs */}
+      {activeTab === 'calls' && !isNonTeaching && !isHodUser && (
         <div className="space-y-6">
           <div className="glass-card p-6 border border-slate-200/50 dark:border-slate-800/45">
             <div className="flex justify-between items-center mb-6">
@@ -1516,30 +1574,24 @@ const FacultyDashboard = () => {
               </p>
             </div>
 
-            {/* Metric 3: OD (On Duty) Quota */}
+            {/* Metric 3: OD (On Duty) Permissions */}
             <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
-                  OD (On Duty) Quota
+                  OD (On Duty) Permissions
                 </span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                  (facultyMonthlyQuota.odCount || 0) >= 1 
-                    ? 'bg-rose-500/10 text-rose-600 border border-rose-500/30' 
-                    : 'bg-amber-500/10 text-amber-600 border border-amber-500/30'
-                }`}>
-                  {facultyMonthlyQuota.odRemaining > 0 ? '1 Avail' : '0 Avail'}
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                  Separate Quota
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-black text-amber-600 dark:text-amber-400">
                   {facultyMonthlyQuota.odCount || 0}
                 </span>
-                <span className="text-sm font-bold text-customText-muted">/ 1 OD Used</span>
+                <span className="text-sm font-bold text-customText-muted">Taken this month</span>
               </div>
               <p className="text-[10px] text-customText-muted">
-                {facultyMonthlyQuota.odRemaining > 0 
-                  ? '1 OD/month. Does not cut regular permission count.' 
-                  : "Your OD's for this month has been completed."}
+                OD permissions do not cut your 2 monthly permission count.
               </p>
             </div>
 
@@ -1728,7 +1780,7 @@ const FacultyDashboard = () => {
       )}
 
       {/* TAB 4: CLASS MENTORSHIP & STUDENT OUTPASSES */}
-      {activeTab === 'mentor' && (
+      {activeTab === 'mentor' && !isNonTeaching && !isHodUser && (
         <div className="space-y-6 animate-fade-in">
 
           {/* Feedback Alerts for Mentor Actions */}
@@ -2103,10 +2155,12 @@ const FacultyDashboard = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-customText dark:text-customText-dark">
-                    Apply Faculty Permission / Early Out
+                    {isHodUser ? 'Apply HOD Permission / Leave' : 'Apply Faculty Permission / Early Out'}
                   </h3>
                   <p className="text-xs text-customText-muted">
-                    Narasaraopeta Engineering College • Faculty Portal
+                    {isHodUser 
+                      ? 'Routes directly to Administrative Officer (AO) • Once granted, passes to Security' 
+                      : 'Narasaraopeta Engineering College • Faculty Portal'}
                   </p>
                 </div>
               </div>
@@ -2122,26 +2176,14 @@ const FacultyDashboard = () => {
             {/* Form */}
             <form onSubmit={handleApplyLeave} className="p-6 space-y-4">
               
-              {/* Quota Exhaustion Alert inside Modal */}
+              {/* Quota Notice inside Modal */}
               {leaveType === 'FACULTY_OD' ? (
-                (facultyMonthlyQuota.isOdLimitExceeded || (facultyMonthlyQuota.odRemaining <= 0)) ? (
-                  <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-black space-y-1">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle size={16} className="text-rose-600 shrink-0" />
-                      <span>Your OD's for this month has been completed.</span>
-                    </div>
-                    <p className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
-                      You have already utilized your maximum allowance of 1 OD permission for this calendar month.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs flex items-center justify-between">
-                    <span className="text-amber-800 dark:text-amber-300 font-bold">OD Monthly Quota:</span>
-                    <span className="font-black text-amber-700 dark:text-amber-300">
-                      {facultyMonthlyQuota.odCount || 0} / 1 OD used (1 Available, will not cut regular count)
-                    </span>
-                  </div>
-                )
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs flex items-center justify-between">
+                  <span className="text-amber-800 dark:text-amber-300 font-bold">On Duty (OD) Permission:</span>
+                  <span className="font-bold text-amber-700 dark:text-amber-300">
+                    Does not deduct from your 2 regular monthly permissions
+                  </span>
+                </div>
               ) : (
                 (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0) ? (
                   <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-black space-y-1">
@@ -2227,7 +2269,7 @@ const FacultyDashboard = () => {
                       <span className="font-black">On Duty (OD)</span>
                     </div>
                     <span className={`text-[10px] ${leaveType === 'FACULTY_OD' ? 'text-white/80' : 'text-slate-400'}`}>
-                      Max 1/mo (No count cut)
+                      Official Duty (No count cut)
                     </span>
                   </button>
                 </div>
@@ -2299,7 +2341,7 @@ const FacultyDashboard = () => {
                   </div>
                 ) : (
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
-                    <strong>On Duty (OD):</strong> Allowed 1 per month. OD does not cut into your 2 regular permissions. Sent out by Security on duty clearance. Once completed, your monthly OD quota becomes 0.
+                    <strong>On Duty (OD):</strong> Does not deduct from your 2 regular monthly permissions. Gate clearance is granted by Security upon approval.
                   </div>
                 )}
               </div>
@@ -2332,14 +2374,10 @@ const FacultyDashboard = () => {
                   type="submit"
                   disabled={
                     applyingLeave ||
-                    (leaveType === 'FACULTY_OD'
-                      ? (facultyMonthlyQuota.isOdLimitExceeded || (facultyMonthlyQuota.odRemaining <= 0))
-                      : (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0))
+                    (leaveType !== 'FACULTY_OD' && (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0))
                   }
                   className={`py-2.5 px-5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    (leaveType === 'FACULTY_OD'
-                      ? (facultyMonthlyQuota.isOdLimitExceeded || (facultyMonthlyQuota.odRemaining <= 0))
-                      : (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0))
+                    (leaveType !== 'FACULTY_OD' && (facultyMonthlyQuota.isLimitExceeded || facultyMonthlyQuota.remaining <= 0))
                       ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                       : 'bg-primary hover:bg-primary-dark text-white shadow-md shadow-primary/20 active:scale-95'
                   }`}
@@ -2348,7 +2386,7 @@ const FacultyDashboard = () => {
                     <span>Submitting...</span>
                   ) : (
                     <>
-                      <span>Submit to HOD</span>
+                      <span>{isHodUser ? 'Submit to AO' : 'Submit to HOD'}</span>
                       <ArrowRight size={14} />
                     </>
                   )}
