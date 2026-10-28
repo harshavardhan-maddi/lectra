@@ -34,6 +34,7 @@ import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
   lookupStudentByRollAndName, 
   submitOutpassApplication, 
+  submitBlockMovementApplication,
   getAllOutpasses,
   getStudentOutpassHistory,
   syncOutpassesFromBackend,
@@ -80,8 +81,20 @@ const Login = () => {
   // Active ticket for Ticket Modal viewer
   const [activeTicket, setActiveTicket] = useState(null);
 
-  // Student Service Tab: 'outpass' (Leave/Outpass) | 'certificate' (Certificate Request)
+  // Student Service Tab: 'outpass' (Leave/Outpass) | 'block' (Out of Block Permission) | 'certificate' (Certificate Request)
   const [studentServiceTab, setStudentServiceTab] = useState('outpass');
+
+  // Out of Block Permission states
+  const [blockStep, setBlockStep] = useState(1);
+  const [blockRollInput, setBlockRollInput] = useState('');
+  const [blockVerifyError, setBlockVerifyError] = useState('');
+  const [blockMatchedStudent, setBlockMatchedStudent] = useState(null);
+  const [isVerifyingBlock, setIsVerifyingBlock] = useState(false);
+  const [presentBlock, setPresentBlock] = useState('');
+  const [destinationArea, setDestinationArea] = useState('');
+  const [blockReason, setBlockReason] = useState('');
+  const [isSubmittingBlock, setIsSubmittingBlock] = useState(false);
+  const [submittedBlockTicket, setSubmittedBlockTicket] = useState(null);
 
   // Certificate Request states
   const [certStep, setCertStep] = useState(1);
@@ -400,6 +413,81 @@ const Login = () => {
     setSubmittedCert(null);
   };
 
+  // Out of Block Permission Handlers
+  const handleVerifyBlockStudent = async (e) => {
+    e.preventDefault();
+    setBlockVerifyError('');
+    const clean = blockRollInput.trim().toUpperCase();
+    if (!clean) {
+      setBlockVerifyError('Please enter your College Roll Number.');
+      return;
+    }
+    setIsVerifyingBlock(true);
+    try {
+      const result = await lookupStudentByRollAndName(clean);
+      if (!result.success) {
+        setBlockVerifyError(result.error);
+        return;
+      }
+      setBlockMatchedStudent(result.student);
+      setBlockStep(2);
+    } catch (err) {
+      setBlockVerifyError(err.message || 'Error verifying student with registry.');
+    } finally {
+      setIsVerifyingBlock(false);
+    }
+  };
+
+  const handleSubmitBlockMovement = async (e) => {
+    e.preventDefault();
+    if (!presentBlock.trim()) {
+      setBlockVerifyError('Please enter your present block number / building.');
+      return;
+    }
+    if (!destinationArea.trim()) {
+      setBlockVerifyError('Please enter the area / block you want to go to.');
+      return;
+    }
+    if (!blockReason.trim()) {
+      setBlockVerifyError('Please provide your reason for leaving the block.');
+      return;
+    }
+
+    setIsSubmittingBlock(true);
+    try {
+      const newTicket = await submitBlockMovementApplication({
+        rollNumber: blockMatchedStudent.rollNumber,
+        studentName: blockMatchedStudent.name,
+        section: blockMatchedStudent.section,
+        department: blockMatchedStudent.department || 'Engineering',
+        presentBlock: presentBlock.trim(),
+        destinationArea: destinationArea.trim(),
+        reason: blockReason.trim(),
+        studentMobile: blockMatchedStudent.studentMobile,
+        parentMobile: blockMatchedStudent.parentMobile
+      });
+
+      setSubmittedBlockTicket(newTicket);
+      setBlockStep(3);
+      setActiveTicket(newTicket);
+    } catch (err) {
+      setBlockVerifyError(err.message || 'Failed to submit block movement application.');
+    } finally {
+      setIsSubmittingBlock(false);
+    }
+  };
+
+  const handleResetBlockApplication = () => {
+    setBlockMatchedStudent(null);
+    setBlockRollInput('');
+    setPresentBlock('');
+    setDestinationArea('');
+    setBlockReason('');
+    setBlockVerifyError('');
+    setBlockStep(1);
+    setSubmittedBlockTicket(null);
+  };
+
   // Check live application status and view student leave + certificate history
   const handleCheckApplicationStatus = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -541,31 +629,46 @@ const Login = () => {
               {/* DIRECT APPLY LEAVE / REQUEST CERTIFICATE BOX ON LANDING PAGE */}
               <div className="w-full bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-8 animate-fade-in space-y-5 sm:space-y-6 my-auto relative">
               
-              {/* Service Tab Switcher: Apply Leave (Outpass) vs Request Certificate */}
-              <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+              {/* Service Tab Switcher: 3 Modules - Leave Application, Out of Block Movement, and Certificates */}
+              <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/60 gap-1 overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => setStudentServiceTab('outpass')}
-                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
                     studentServiceTab === 'outpass'
                       ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
                       : 'text-customText-muted hover:text-customText'
                   }`}
                 >
                   <FileText size={16} />
-                  <span>Apply Leave (Outpass)</span>
+                  <span>Leave Application</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudentServiceTab('block')}
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                    studentServiceTab === 'block'
+                      ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                      : 'text-customText-muted hover:text-customText'
+                  }`}
+                >
+                  <Building2 size={16} />
+                  <span>Out of Block</span>
+                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    HOD
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setStudentServiceTab('certificate')}
-                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
                     studentServiceTab === 'certificate'
                       ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
                       : 'text-customText-muted hover:text-customText'
                   }`}
                 >
                   <Award size={16} />
-                  <span>Request Certificate</span>
+                  <span>Certificates</span>
                   <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
                     Office
                   </span>
@@ -856,6 +959,351 @@ const Login = () => {
                           className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
                         >
                           Apply Another Leave
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : studentServiceTab === 'block' ? (
+                <>
+                  {/* Out of Block Movement Header */}
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-sm">
+                        <Building2 size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-black text-customText dark:text-customText-dark tracking-tight">
+                          Out of Block Permission
+                        </h2>
+                        <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                          {blockStep === 1 && 'Enter your roll number to fetch student particulars.'}
+                          {blockStep === 2 && 'Enter present block, destination area, and reason for HOD approval.'}
+                          {blockStep === 3 && 'Out of block permission request submitted to HOD.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {blockStep > 1 && (
+                      <button
+                        type="button"
+                        onClick={handleResetBlockApplication}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-customText-muted transition-colors cursor-pointer"
+                        title="Start fresh"
+                      >
+                        <RotateCcw size={14} />
+                        <span>Reset</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Error banner */}
+                  {blockVerifyError && (
+                    <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl flex items-center gap-2 animate-pulse">
+                      <AlertCircle size={16} className="shrink-0" />
+                      <span>{blockVerifyError}</span>
+                    </div>
+                  )}
+
+                  {/* BLOCK STEP 1: Enter Roll Number */}
+                  {blockStep === 1 && (
+                    <form onSubmit={handleVerifyBlockStudent} className="space-y-5">
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                            Student Roll Number *
+                          </label>
+                          <input
+                            type="text"
+                            value={blockRollInput}
+                            onChange={(e) => {
+                              setBlockRollInput(e.target.value.toUpperCase());
+                              if (blockVerifyError) setBlockVerifyError('');
+                            }}
+                            placeholder="e.g. 21NE1A0501"
+                            className="glass-input text-sm font-mono uppercase tracking-wider py-3"
+                            autoFocus
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isVerifyingBlock}
+                        className="w-full btn-primary py-3.5 text-sm font-black flex items-center justify-center gap-2 shadow-lg shadow-primary/20 cursor-pointer"
+                      >
+                        {isVerifyingBlock ? (
+                          <div className="flex items-center gap-2">
+                            <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+                            <span>Fetching Student Details...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <span>Fetch Student Details</span>
+                            <ArrowRight size={17} />
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  )}
+
+                  {/* BLOCK STEP 2: Show Verified Student & Enter Present Block, Wanted Area, and Reason */}
+                  {blockStep === 2 && blockMatchedStudent && (
+                    <form onSubmit={handleSubmitBlockMovement} className="space-y-5">
+                      
+                      {/* Verified Student Details Card */}
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 space-y-3">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                            Student Particulars (Verified Record)
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/20 flex items-center gap-1">
+                            <Check size={12} />
+                            <span>Verified</span>
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block mb-0.5">
+                              Student Name
+                            </span>
+                            <p className="font-black text-sm text-customText dark:text-customText-dark">
+                              {blockMatchedStudent.name}
+                            </p>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block mb-0.5">
+                              Roll Number
+                            </span>
+                            <p className="font-mono font-black text-sm text-primary">
+                              {blockMatchedStudent.rollNumber}
+                            </p>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block mb-0.5">
+                              Department & Section
+                            </span>
+                            <p className="font-extrabold text-customText dark:text-customText-dark">
+                              {blockMatchedStudent.department || 'Engineering'} • {blockMatchedStudent.section}
+                            </p>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block mb-0.5">
+                              Contact Mobile
+                            </span>
+                            <p className="font-mono font-bold text-customText dark:text-customText-dark">
+                              {blockMatchedStudent.maskedStudentMobile || blockMatchedStudent.studentMobile || 'Registered'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Present Block Input */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                          Student Present Block Number / Building *
+                        </label>
+                        <input
+                          type="text"
+                          value={presentBlock}
+                          onChange={(e) => setPresentBlock(e.target.value)}
+                          placeholder="e.g. Block 1, Mechanical Block, Main Building 2nd Floor, R&D Block Room 102..."
+                          className="glass-input text-xs sm:text-sm font-semibold py-2.5 w-full"
+                          required
+                        />
+
+                        {/* Quick Present Block Chips */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {[
+                            'Block 1',
+                            'Block 2',
+                            'Block 3',
+                            'Main Block',
+                            'R&D Block',
+                            'Mechanical Block',
+                            'Civil Block',
+                            'Diploma Block'
+                          ].map((chip) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => setPresentBlock(chip)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/10 hover:text-emerald-600 text-[11px] font-semibold text-customText-muted transition-colors cursor-pointer"
+                            >
+                              + {chip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Wanted to Go Area (Custom Text as requested) */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                          Wanted to Go Area / Destination (Custom Text) *
+                        </label>
+                        <input
+                          type="text"
+                          value={destinationArea}
+                          onChange={(e) => setDestinationArea(e.target.value)}
+                          placeholder="e.g. Central Library 2nd Floor, Workshop, Admin Office, Exam Cell, CSE Lab..."
+                          className="glass-input text-xs sm:text-sm font-semibold py-2.5 w-full"
+                          required
+                        />
+
+                        {/* Quick Wanted Area Chips */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {[
+                            'Central Library',
+                            'Admin Office',
+                            'Exam Cell',
+                            'Mechanical Workshop',
+                            'Computer Center',
+                            'Department HOD Office',
+                            'Seminar Hall'
+                          ].map((chip) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => setDestinationArea(chip)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/10 hover:text-emerald-600 text-[11px] font-semibold text-customText-muted transition-colors cursor-pointer"
+                            >
+                              + {chip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Reason for that (Custom Text as requested) */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                          Reason for Going Out of Block *
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={blockReason}
+                          onChange={(e) => setBlockReason(e.target.value)}
+                          placeholder="State reason for going out of block (e.g. To submit lab observation record, borrow library reference text, clarify exam fee dues...)"
+                          className="glass-input text-xs py-2.5 resize-none w-full"
+                          required
+                        />
+
+                        {/* Quick Reason Chips */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {[
+                            'Lab Record Verification',
+                            'Library Book Reference',
+                            'Exam Section Submission',
+                            'Faculty / HOD Consultation',
+                            'Workshop Practical Work'
+                          ].map((chip) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => setBlockReason(chip)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/10 hover:text-emerald-600 text-[11px] font-semibold text-customText-muted transition-colors cursor-pointer"
+                            >
+                              + {chip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* HOD Direct Approval Notice */}
+                      <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 text-xs font-semibold">
+                        ℹ️ This intra-campus movement permission goes directly to your <strong>Head of Department (HOD)</strong> for approval. Once approved by HOD, you are permitted to move out of your block.
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setBlockStep(1)}
+                          className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
+                          disabled={isSubmittingBlock}
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn-primary flex-1 py-3 text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-lg shadow-primary/25 cursor-pointer bg-gradient-to-r from-emerald-600 to-teal-700 hover:opacity-95"
+                          disabled={isSubmittingBlock}
+                        >
+                          {isSubmittingBlock ? (
+                            <span>Submitting to HOD...</span>
+                          ) : (
+                            <>
+                              <Building2 size={18} />
+                              <span>Submit Permission Request to HOD</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* BLOCK STEP 3: Request Confirmation */}
+                  {blockStep === 3 && submittedBlockTicket && (
+                    <div className="space-y-5 animate-fade-in text-center py-2">
+                      <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                        <CheckCircle2 size={36} />
+                      </div>
+
+                      <div>
+                        <h3 className="text-xl font-black text-customText dark:text-customText-dark">
+                          Out of Block Permission Submitted!
+                        </h3>
+                        <p className="text-xs text-customText-muted mt-1">
+                          Ticket Reference ID: <span className="font-mono font-bold text-primary">{submittedBlockTicket.id}</span>
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 text-xs font-semibold text-left">
+                        ✓ Your application has been forwarded directly to the <strong>Head of Department (HOD)</strong>. When approved, you can move out of your block and show this official movement pass on request.
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 text-left text-xs space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-customText-muted font-bold">Student:</span>
+                          <span className="font-black">{submittedBlockTicket.studentName} ({submittedBlockTicket.rollNumber})</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-customText-muted font-bold">Movement Route:</span>
+                          <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                            {submittedBlockTicket.presentBlock} ➔ {submittedBlockTicket.destinationArea}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-customText-muted font-bold">Reason:</span>
+                          <span className="font-medium italic">"{submittedBlockTicket.reason}"</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-customText-muted font-bold">Live Status:</span>
+                          <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 font-bold border border-blue-500/20 text-[11px]">
+                            Forwarded to HOD (Pending Approval)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTicket(submittedBlockTicket)}
+                          className="btn-primary flex-1 py-3 text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                        >
+                          <Building2 size={16} />
+                          <span>View / Download Movement Pass (PDF)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetBlockApplication}
+                          className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
+                        >
+                          Apply Another Permission
                         </button>
                       </div>
                     </div>
@@ -1254,28 +1702,56 @@ const Login = () => {
                             </div>
 
                             <div className="p-3.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800/70 text-xs space-y-1">
-                              <span className="text-[10px] font-bold text-customText-muted uppercase block">Stated Reason:</span>
-                              <p className="font-semibold italic text-slate-800 dark:text-slate-200">"{todayTicket.reason}"</p>
-                              <span className="text-[11px] text-customText-muted block pt-1">
-                                <strong>Destination:</strong> {todayTicket.destination}
+                              <span className="text-[10px] font-bold text-customText-muted uppercase block">
+                                {todayTicket.type === 'BLOCK_MOVEMENT' ? 'Movement Route & Area:' : 'Stated Reason:'}
                               </span>
+                              {todayTicket.type === 'BLOCK_MOVEMENT' ? (
+                                <>
+                                  <p className="font-black text-emerald-700 dark:text-emerald-400 text-sm">
+                                    {todayTicket.presentBlock} ➔ {todayTicket.destinationArea || todayTicket.destination}
+                                  </p>
+                                  <p className="font-medium italic text-slate-800 dark:text-slate-200 pt-0.5">
+                                    Reason: "{todayTicket.reason}"
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="font-semibold italic text-slate-800 dark:text-slate-200">"{todayTicket.reason}"</p>
+                                  <span className="text-[11px] text-customText-muted block pt-1">
+                                    <strong>Destination:</strong> {todayTicket.destination}
+                                  </span>
+                                </>
+                              )}
                             </div>
 
                             {/* Approval Stage Progress */}
-                            <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
-                              <div className={`p-2.5 rounded-xl border ${todayTicket.absentControllerAction?.confirmed ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400'}`}>
-                                <span className="block font-black">1. Parent Call</span>
-                                <span>{todayTicket.absentControllerAction?.confirmed ? '✓ Confirmed' : (todayTicket.status === 'REJECTED' ? '✕ Denied' : 'Pending')}</span>
+                            {todayTicket.type === 'BLOCK_MOVEMENT' ? (
+                              <div className="grid grid-cols-2 gap-2 text-center text-[10px]">
+                                <div className="p-2.5 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold">
+                                  <span className="block font-black">1. Student Request</span>
+                                  <span>✓ Submitted Online</span>
+                                </div>
+                                <div className={`p-2.5 rounded-xl border ${todayTicket.hodAction?.granted ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400'}`}>
+                                  <span className="block font-black">2. HOD Permission</span>
+                                  <span>{todayTicket.hodAction?.granted ? '✓ Approved by HOD' : (todayTicket.status === 'REJECTED' ? '✕ Denied by HOD' : 'Pending HOD Approval')}</span>
+                                </div>
                               </div>
-                              <div className={`p-2.5 rounded-xl border ${todayTicket.hodAction?.granted ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400'}`}>
-                                <span className="block font-black">2. HOD Permission</span>
-                                <span>{todayTicket.hodAction?.granted ? '✓ Granted' : (todayTicket.status === 'REJECTED' ? '✕ Denied' : 'Pending')}</span>
+                            ) : (
+                              <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                                <div className={`p-2.5 rounded-xl border ${todayTicket.absentControllerAction?.confirmed ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400'}`}>
+                                  <span className="block font-black">1. Parent Call</span>
+                                  <span>{todayTicket.absentControllerAction?.confirmed ? '✓ Confirmed' : (todayTicket.status === 'REJECTED' ? '✕ Denied' : 'Pending')}</span>
+                                </div>
+                                <div className={`p-2.5 rounded-xl border ${todayTicket.hodAction?.granted ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400'}`}>
+                                  <span className="block font-black">2. HOD Permission</span>
+                                  <span>{todayTicket.hodAction?.granted ? '✓ Granted' : (todayTicket.status === 'REJECTED' ? '✕ Denied' : 'Pending')}</span>
+                                </div>
+                                <div className={`p-2.5 rounded-xl border ${todayTicket.watchmanAction?.sentOut ? 'bg-purple-500/10 border-purple-500/30 text-purple-700 dark:text-purple-300 font-bold' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400'}`}>
+                                  <span className="block font-black">3. Gate Release</span>
+                                  <span>{todayTicket.watchmanAction?.sentOut ? '✓ Exited Campus' : 'At Campus'}</span>
+                                </div>
                               </div>
-                              <div className={`p-2.5 rounded-xl border ${todayTicket.watchmanAction?.sentOut ? 'bg-purple-500/10 border-purple-500/30 text-purple-700 dark:text-purple-300 font-bold' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400'}`}>
-                                <span className="block font-black">3. Gate Release</span>
-                                <span>{todayTicket.watchmanAction?.sentOut ? '✓ Exited Campus' : 'At Campus'}</span>
-                              </div>
-                            </div>
+                            )}
 
                             {/* Download Official PDF Slip Button */}
                             <button
@@ -1284,12 +1760,12 @@ const Login = () => {
                               className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer active:scale-98"
                             >
                               <Download size={17} />
-                              <span>Download / Print Official Leave Granted Slip (PDF)</span>
+                              <span>{todayTicket.type === 'BLOCK_MOVEMENT' ? 'Download / Print Out of Block Pass (PDF)' : 'Download / Print Official Leave Granted Slip (PDF)'}</span>
                             </button>
                           </div>
                         ) : (
                           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 text-center text-xs text-customText-muted">
-                            No active leave application submitted for today ({todayDateString}). Previous applications are listed below.
+                            No active leave or block movement application submitted for today ({todayDateString}). Previous applications are listed below.
                           </div>
                         )}
 
@@ -1298,7 +1774,7 @@ const Login = () => {
                           <div className="space-y-2.5 pt-2">
                             <h4 className="text-xs font-black uppercase tracking-wider text-customText-muted flex items-center gap-1.5">
                               <History size={13} />
-                              <span>Previous Leave Applications ({previousTickets.length})</span>
+                              <span>Previous Applications ({previousTickets.length})</span>
                             </h4>
                             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                               {previousTickets.map((t) => (
@@ -1314,9 +1790,18 @@ const Login = () => {
                                       <span className="font-mono text-[10px] text-customText-muted">
                                         {t.id}
                                       </span>
+                                      {t.type === 'BLOCK_MOVEMENT' && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                          Out of Block
+                                        </span>
+                                      )}
                                     </div>
                                     <p className="font-medium text-customText-muted truncate mt-0.5">
-                                      "{t.reason}" • <span className="font-semibold text-customText">{t.destination}</span>
+                                      {t.type === 'BLOCK_MOVEMENT' ? (
+                                        <>"{t.reason}" • <span className="font-semibold text-emerald-600">{t.presentBlock} ➔ {t.destinationArea || t.destination}</span></>
+                                      ) : (
+                                        <>"{t.reason}" • <span className="font-semibold text-customText">{t.destination}</span></>
+                                      )}
                                     </p>
                                   </div>
 
@@ -1336,7 +1821,7 @@ const Login = () => {
                                       type="button"
                                       onClick={() => setActiveTicket(t)}
                                       className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                                      title="View and download official leave slip"
+                                      title="View and download pass slip"
                                     >
                                       <FileText size={13} />
                                       <span>Slip (PDF)</span>

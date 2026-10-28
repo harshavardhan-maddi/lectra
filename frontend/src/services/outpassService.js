@@ -545,6 +545,88 @@ export const submitOutpassApplication = async ({
   return newTicket;
 };
 
+// Create a new Out of Block Movement Permission request (Submitted by Student at landing page)
+export const submitBlockMovementApplication = async ({
+  rollNumber,
+  studentName,
+  section,
+  department,
+  presentBlock,
+  destinationArea,
+  reason,
+  studentMobile,
+  parentMobile
+}) => {
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  
+  const newTicket = {
+    id: `NEC-BLK-${dateStr}-${randomNum}`,
+    type: 'BLOCK_MOVEMENT',
+    applicantType: 'STUDENT',
+    permissionType: 'OUT_OF_BLOCK',
+    rollNumber: rollNumber.trim().toUpperCase(),
+    studentName,
+    section,
+    department: department || 'Engineering',
+    presentBlock: presentBlock?.trim() || 'Current Block',
+    destinationArea: destinationArea?.trim() || 'Campus Area',
+    destination: destinationArea?.trim() || 'Campus Area',
+    reason: reason?.trim() || 'Academic work out of block',
+    studentMobile: studentMobile || '',
+    parentMobile: parentMobile || '',
+    maskedStudentMobile: maskPhoneNumber(studentMobile),
+    maskedParentMobile: maskPhoneNumber(parentMobile),
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    
+    // Status Flow: Directly forwarded to HOD for approval (no parent call needed for intra-campus movement)
+    status: 'FORWARDED_TO_HOD',
+    absentControllerAction: {
+      confirmed: true,
+      calledAt: now.toISOString(),
+      displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      displayDate: now.toLocaleDateString('en-GB'),
+      remarks: 'Direct student request for intra-campus block movement. Routed to HOD for permission.',
+      controllerName: 'System (Direct)',
+      role: 'Direct'
+    },
+    hodAction: null,
+    watchmanAction: null
+  };
+
+  // 1. Instantly save to local storage
+  const currentTickets = getAllOutpasses();
+  const updatedLocal = [newTicket, ...currentTickets.filter(t => t.id !== newTicket.id)];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLocal));
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: updatedLocal }));
+
+  // 2. Directly sync to central database so HOD receives it instantly
+  try {
+    const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({ tickets: [newTicket] })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
+      }
+    }
+  } catch (e) {
+    console.warn('Network sync note on block movement:', e);
+  }
+
+  return newTicket;
+};
+
 // Absent Controller or Faculty Mentor makes call to parent & takes confirmation
 export const confirmParentAndForwardToHOD = (ticketId, { controllerName = 'Absent Controller', remarks = 'Parent confirmed permission over phone call.', role = null, section = null } = {}) => {
   const tickets = getAllOutpasses();

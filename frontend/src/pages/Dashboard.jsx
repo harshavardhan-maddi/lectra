@@ -45,7 +45,8 @@ import {
   LogIn,
   GraduationCap,
   Briefcase,
-  Clock
+  Clock,
+  Building2
 } from 'lucide-react';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
@@ -386,11 +387,18 @@ const Dashboard = ({ initialTab }) => {
   const handleGrantOutpass = (ticket) => {
     try {
       setOutpassActionError('');
+      const isBlockMovement = ticket.type === 'BLOCK_MOVEMENT';
       hodGrantOutpass(ticket.id, {
         hodName: user?.name || 'Head of Department (HOD)',
-        remarks: 'Permission Granted by HOD.'
+        remarks: isBlockMovement
+          ? `Out of Block Movement Permission approved by HOD for ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
+          : 'Permission Granted by HOD.'
       });
-      setOutpassActionSuccess(`Permission granted! Outpass for ${ticket.studentName} (${ticket.rollNumber}) has been sent to the Gate Watchman login.`);
+      setOutpassActionSuccess(
+        isBlockMovement
+          ? `Out of Block Permission approved! ${ticket.studentName} (${ticket.rollNumber}) is permitted to move from ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
+          : `Permission granted! Outpass for ${ticket.studentName} (${ticket.rollNumber}) has been sent to the Gate Watchman login.`
+      );
       setTimeout(() => setOutpassActionSuccess(''), 4500);
     } catch (err) {
       setOutpassActionError(err.message || 'Failed to grant permission');
@@ -2248,9 +2256,16 @@ const Dashboard = ({ initialTab }) => {
                     {/* Header */}
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <span className="text-[10px] font-mono font-bold text-primary block">
-                          {ticket.id}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono font-bold text-primary block">
+                            {ticket.id}
+                          </span>
+                          {ticket.type === 'BLOCK_MOVEMENT' && (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase border border-emerald-500/30">
+                              Out of Block Movement
+                            </span>
+                          )}
+                        </div>
                         <h4 className="text-lg font-black text-customText dark:text-customText-dark mt-0.5">
                           {ticket.studentName}
                         </h4>
@@ -2278,7 +2293,7 @@ const Dashboard = ({ initialTab }) => {
                           type="button"
                           onClick={() => setSelectedOutpassModalTicket(ticket)}
                           className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 hover:text-primary text-xs font-bold text-customText-muted flex items-center gap-1.5 transition-colors cursor-pointer"
-                          title="View Official Outpass Ticket"
+                          title="View Official Ticket"
                         >
                           <FileText size={15} />
                           <span>Ticket</span>
@@ -2297,7 +2312,7 @@ const Dashboard = ({ initialTab }) => {
                             type="button"
                             disabled
                             className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60"
-                            title="Locked: Permission granted and student sent out. Only Super Admin can delete."
+                            title="Locked"
                           >
                             <Lock size={15} />
                           </button>
@@ -2305,55 +2320,88 @@ const Dashboard = ({ initialTab }) => {
                       </div>
                     </div>
 
-                    {/* Stated Reason */}
-                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80 space-y-1 text-xs">
-                      <span className="text-[10px] font-bold text-customText-muted uppercase block">
-                        Reason to Go Out:
-                      </span>
-                      <p className="font-semibold text-customText dark:text-customText-dark italic">
-                        "{ticket.reason}"
-                      </p>
-                      <div className="flex flex-wrap gap-4 pt-1.5 text-[11px] text-customText-muted">
-                        <span><strong>Destination:</strong> {ticket.destination}</span>
-                        {ticket.expectedReturnTime && <span><strong>Expected Return:</strong> {ticket.expectedReturnTime}</span>}
-                      </div>
-                    </div>
-
-                    {/* Parent Verification Stamp by Absent Controller or Faculty Mentor */}
-                    {(() => {
-                      const isMentor = ticket.forwardedByRole === 'Mentor' || ticket.absentControllerAction?.role === 'Mentor';
-                      const forwarderName = ticket.forwardedByName || ticket.absentControllerAction?.controllerName || (isMentor ? 'Faculty Mentor' : 'Absent Controller');
-                      return (
-                        <div className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
-                          isMentor 
-                            ? 'bg-purple-500/10 border-purple-500/25' 
-                            : 'bg-blue-500/5 border-blue-500/20'
-                        }`}>
-                          <div className="flex items-center justify-between">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                              isMentor ? 'text-purple-700 dark:text-purple-300' : 'text-blue-600 dark:text-blue-400'
-                            }`}>
-                              {isMentor ? <GraduationCap size={13} /> : <PhoneCall size={13} />}
-                              {isMentor ? 'Forwarded by Faculty Mentor' : 'Forwarded by Absent Controller'}
-                            </span>
-                            <span className="text-[10px] text-customText-muted font-mono">
-                              {ticket.absentControllerAction?.displayTime}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-black text-customText dark:text-customText-dark">
-                              Verified by: {forwarderName} {isMentor ? `(Section ${ticket.section} Mentor)` : ''}
-                            </span>
-                          </div>
-                          <p className="font-medium text-customText dark:text-customText-dark">
-                            ✓ {ticket.absentControllerAction?.remarks || 'Parent confirmed permission over phone call.'}
-                          </p>
-                          <span className="text-[10px] text-customText-muted block">
-                            Parent Mobile: +91 {ticket.parentMobile}
+                    {/* Stated Reason & Route */}
+                    {ticket.type === 'BLOCK_MOVEMENT' ? (
+                      <div className="p-3.5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 space-y-2 text-xs">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-emerald-500/20">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                            <Building2 size={13} />
+                            <span>Requested Movement Route</span>
                           </span>
+                          <span className="text-[10px] font-mono text-customText-muted">{ticket.appliedTime}</span>
                         </div>
-                      );
-                    })()}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block">Present Block</span>
+                            <p className="font-black text-slate-800 dark:text-slate-100">{ticket.presentBlock}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block">Wanted To Go Area</span>
+                            <p className="font-black text-emerald-600 dark:text-emerald-400">{ticket.destinationArea || ticket.destination}</p>
+                          </div>
+                        </div>
+                        <div className="pt-1 border-t border-emerald-500/20">
+                          <span className="text-[10px] font-bold text-customText-muted uppercase block">Reason for that:</span>
+                          <p className="font-semibold italic text-slate-900 dark:text-slate-100">"{ticket.reason}"</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80 space-y-1 text-xs">
+                        <span className="text-[10px] font-bold text-customText-muted uppercase block">
+                          Reason to Go Out:
+                        </span>
+                        <p className="font-semibold text-customText dark:text-customText-dark italic">
+                          "{ticket.reason}"
+                        </p>
+                        <div className="flex flex-wrap gap-4 pt-1.5 text-[11px] text-customText-muted">
+                          <span><strong>Destination:</strong> {ticket.destination}</span>
+                          {ticket.expectedReturnTime && <span><strong>Expected Return:</strong> {ticket.expectedReturnTime}</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Verification info */}
+                    {ticket.type === 'BLOCK_MOVEMENT' ? (
+                      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 text-xs flex items-center gap-2 text-customText-muted">
+                        <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                        <span>Direct intra-campus block movement. No parent call required. Approving grants immediate student permission.</span>
+                      </div>
+                    ) : (
+                      (() => {
+                        const isMentor = ticket.forwardedByRole === 'Mentor' || ticket.absentControllerAction?.role === 'Mentor';
+                        const forwarderName = ticket.forwardedByName || ticket.absentControllerAction?.controllerName || (isMentor ? 'Faculty Mentor' : 'Absent Controller');
+                        return (
+                          <div className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
+                            isMentor 
+                              ? 'bg-purple-500/10 border-purple-500/25' 
+                              : 'bg-blue-500/5 border-blue-500/20'
+                          }`}>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                                isMentor ? 'text-purple-700 dark:text-purple-300' : 'text-blue-600 dark:text-blue-400'
+                              }`}>
+                                {isMentor ? <GraduationCap size={13} /> : <PhoneCall size={13} />}
+                                {isMentor ? 'Forwarded by Faculty Mentor' : 'Forwarded by Absent Controller'}
+                              </span>
+                              <span className="text-[10px] text-customText-muted font-mono">
+                                {ticket.absentControllerAction?.displayTime}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-black text-customText dark:text-customText-dark">
+                                Verified by: {forwarderName} {isMentor ? `(Section ${ticket.section} Mentor)` : ''}
+                              </span>
+                            </div>
+                            <p className="font-medium text-customText dark:text-customText-dark">
+                              ✓ {ticket.absentControllerAction?.remarks || 'Parent confirmed permission over phone call.'}
+                            </p>
+                            <span className="text-[10px] text-customText-muted block">
+                              Parent Mobile: +91 {ticket.parentMobile}
+                            </span>
+                          </div>
+                        );
+                      })()
+                    )}
 
                     {/* HOD Action Buttons for Students */}
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
@@ -2363,12 +2411,12 @@ const Dashboard = ({ initialTab }) => {
                         className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
                       >
                         <BadgeCheck size={16} />
-                        <span>Grant Permission (Send to Security Head)</span>
+                        <span>{ticket.type === 'BLOCK_MOVEMENT' ? 'Approve Out of Block Movement' : 'Grant Permission (Send to Security Head)'}</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => handleRejectOutpassHOD(ticket, 'Permission denied by Head of Department.')}
+                        onClick={() => handleRejectOutpassHOD(ticket, ticket.type === 'BLOCK_MOVEMENT' ? 'Block movement permission denied by Head of Department.' : 'Permission denied by Head of Department.')}
                         className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors cursor-pointer"
                       >
                         Reject
@@ -2471,13 +2519,17 @@ const Dashboard = ({ initialTab }) => {
                                   ? `1-Hour Permission (${t.leaveTime})` 
                                   : t.type === 'FACULTY_EARLY_OUT' 
                                     ? `Early Out (${t.leaveTime})` 
-                                    : (isFac ? 'Full-Day Leave' : 'Outpass')}
+                                    : t.type === 'BLOCK_MOVEMENT'
+                                      ? `Block Movement (${t.presentBlock} ➔ ${t.destinationArea || t.destination})`
+                                      : (isFac ? 'Full-Day Leave' : 'Outpass')}
                             </span>
                             "{t.purpose || t.reason}"
                           </td>
                           <td className="p-3">
                             {isFac ? (
                               <span className="text-slate-500 text-[11px] font-semibold">Direct to HOD</span>
+                            ) : t.type === 'BLOCK_MOVEMENT' ? (
+                              <span className="text-emerald-600 text-[11px] font-bold">Direct (Block Move)</span>
                             ) : t.absentControllerAction?.confirmed ? (
                               <span className="text-emerald-600 font-bold">✓ Confirmed</span>
                             ) : (
@@ -2494,7 +2546,11 @@ const Dashboard = ({ initialTab }) => {
                           )}
                         </td>
                         <td className="p-3">
-                          {t.status === 'FACULTY_OUT' ? (
+                          {t.type === 'BLOCK_MOVEMENT' ? (
+                            <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                              <CheckCircle2 size={13} /> {t.status === 'PERMISSION_GRANTED' ? 'Approved (In Campus)' : 'Pending HOD'}
+                            </span>
+                          ) : t.status === 'FACULTY_OUT' ? (
                             <span className="text-amber-600 font-extrabold flex items-center gap-1">
                               <Clock size={13} /> Out (Return Pending)
                             </span>

@@ -88,6 +88,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
 
   const isFaculty = ticket.applicantType === 'FACULTY' || ticket.applicantType === 'HOD';
   const isHod = ticket.applicantType === 'HOD';
+  const isBlockMovement = ticket.type === 'BLOCK_MOVEMENT';
   const facultyDeptName = (ticket.department && ticket.department !== 'General')
     ? ticket.department
     : (ticket.section && ticket.section !== 'General' && ticket.section !== 'Faculty'
@@ -99,6 +100,35 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
 
   // Status visual mapping
   const getStatusBadge = (status) => {
+    if (isBlockMovement) {
+      switch (status) {
+        case 'FORWARDED_TO_HOD':
+          return {
+            label: 'Awaiting HOD Approval',
+            color: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30',
+            step: 1
+          };
+        case 'PERMISSION_GRANTED':
+          return {
+            label: 'PERMISSION GRANTED BY HOD • PERMITTED OUT OF BLOCK',
+            color: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/40 font-black',
+            step: 2
+          };
+        case 'REJECTED':
+          return {
+            label: 'MOVEMENT PERMISSION REJECTED BY HOD',
+            color: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold',
+            step: -1
+          };
+        default:
+          return {
+            label: status,
+            color: 'bg-slate-100 text-slate-700 border-slate-300',
+            step: 1
+          };
+      }
+    }
+
     if (isFaculty) {
       switch (status) {
         case 'FORWARDED_TO_AO':
@@ -215,7 +245,9 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       : ticket.type === 'FACULTY_OD'
                         ? (isApproved ? (isHod ? 'HOD Official Duty (OD) Departure Slip (Approved)' : 'Faculty Official Duty (OD) Departure Slip (Approved)') : (isHod ? 'HOD Official Duty (OD) Request (Pending AO Approval)' : 'Faculty Official Duty (OD) Request (Pending HOD Approval)'))
                         : (isApproved ? (isHod ? 'HOD Official Permission Slip (Approved)' : 'Faculty Official Permission Slip (Approved)') : (isHod ? 'HOD Permission Application (Pending AO Approval)' : 'Faculty Permission Application (Pending HOD Approval)')))
-                  : (isApproved ? 'Official Leave Granted Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
+                  : isBlockMovement
+                    ? (isApproved ? 'Official Out of Block Movement Pass (Approved)' : 'Student Out of Block Movement Request (Pending HOD Approval)')
+                    : (isApproved ? 'Official Leave Granted Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
               </h3>
               <p className="text-[11px] text-customText-muted dark:text-customText-mutedDark">
                 Ref ID: <span className="font-mono font-bold text-primary">{ticket.id}</span>
@@ -263,7 +295,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             <div>
               <span className="uppercase tracking-wider block text-[10px] font-black">
                 {isApproved 
-                  ? (isHod ? 'Status: Approved by AO • Forwarded to Security Head' : 'Status: Approved by HOD • Forwarded to Security Head') 
+                  ? (isHod ? 'Status: Approved by AO • Forwarded to Security Head' : isBlockMovement ? 'Status: Approved by HOD • Permitted Out of Block' : 'Status: Approved by HOD • Forwarded to Security Head') 
                   : isRejected 
                     ? (isHod ? 'Status: Rejected by AO' : 'Status: Rejected by HOD') 
                     : (isHod ? 'Status: Pending AO Approval' : 'Status: Pending HOD Approval')}
@@ -272,11 +304,13 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                 {isApproved ? (
                   isFaculty 
                     ? (isHod ? 'Official Departure Slip. Approved by AO and forwarded to Security Head login. No student ID verification required.' : 'Official Departure Slip. Approved by HOD and forwarded to Security Head login. No student ID verification required.')
-                    : 'Official Gate Pass. Approved by HOD. Show this slip at the Main Security Gate for departure clearance.'
+                    : isBlockMovement
+                      ? `Official Movement Pass. Approved by Head of Department (${ticket.hodAction?.hodName || 'HOD'}). Student is authorized to move from ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
+                      : 'Official Gate Pass. Approved by HOD. Show this slip at the Main Security Gate for departure clearance.'
                 ) : isRejected ? (
-                  isHod ? 'This leave application has been rejected by the Administrative Officer (AO).' : 'This leave application has been rejected by the Head of Department.'
+                  isHod ? 'This leave application has been rejected by the Administrative Officer (AO).' : 'This application has been rejected by the Head of Department.'
                 ) : (
-                  isHod ? 'Application submitted and awaiting AO approval. Gate exit clearance is NOT authorized until approved by AO.' : 'Application submitted and awaiting HOD approval. Gate exit clearance is NOT authorized until approved by HOD.'
+                  isHod ? 'Application submitted and awaiting AO approval. Gate exit clearance is NOT authorized until approved by AO.' : isBlockMovement ? 'Intra-campus movement application submitted. Awaiting HOD approval.' : 'Application submitted and awaiting HOD approval. Gate exit clearance is NOT authorized until approved by HOD.'
                 )}
               </span>
             </div>
@@ -314,7 +348,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                   <span className={`p-1.5 rounded-lg border text-[9px] font-mono font-black uppercase text-center block leading-tight ${
                     isApproved ? 'border-emerald-500 bg-emerald-50 text-emerald-950' : 'border-slate-300 bg-slate-50 text-slate-700'
                   }`}>
-                    {isFaculty ? (isApproved ? <>Faculty<br />Approved</> : <>Faculty<br />Pass</>) : (isApproved ? <>Official<br />Gate Pass</> : <>Leave<br />Request</>)}
+                    {isFaculty ? (isApproved ? <>Faculty<br />Approved</> : <>Faculty<br />Pass</>) : isBlockMovement ? (isApproved ? <>Block Pass<br />Approved</> : <>Movement<br />Request</>) : (isApproved ? <>Official<br />Gate Pass</> : <>Leave<br />Request</>)}
                   </span>
                 </div>
               </div>
@@ -329,7 +363,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       : 'bg-amber-100 border-amber-500 text-amber-900 font-bold'
                 }`}>
                   {isApproved 
-                    ? 'APPROVED BY HOD • FORWARDED TO SECURITY HEAD' 
+                    ? (isBlockMovement ? 'APPROVED BY HOD • PERMITTED OUT OF BLOCK' : 'APPROVED BY HOD • FORWARDED TO SECURITY HEAD') 
                     : isRejected 
                       ? 'REJECTED BY HOD' 
                       : 'PENDING HOD APPROVAL'}
@@ -355,7 +389,9 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                         : ticket.type === 'FACULTY_OD'
                           ? (isApproved ? (isHod ? 'Official HOD Duty (OD) Departure Slip (Approved)' : 'Official Faculty Duty (OD) Departure Slip (Approved)') : (isHod ? 'HOD Official Duty (OD) Application (Pending AO Approval)' : 'Faculty Official Duty (OD) Application (Pending HOD Approval)'))
                           : (isApproved ? (isHod ? 'Official HOD Permission & Gate Clearance Slip (Approved)' : 'Official Faculty Permission & Gate Clearance Slip (Approved)') : (isHod ? 'HOD Permission Application (Pending AO Approval)' : 'Faculty Permission Application (Pending HOD Approval)')))
-                  : (isApproved ? 'Official Student Leave & Campus Gate Pass Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
+                  : isBlockMovement
+                    ? (isApproved ? 'Official Student Intra-Campus Block Movement Pass (Approved)' : 'Student Out of Block Movement Application (Pending HOD Approval)')
+                    : (isApproved ? 'Official Student Leave & Campus Gate Pass Slip (Approved)' : 'Student Leave Application (Pending HOD Approval)')}
               </h2>
             </div>
 
@@ -430,6 +466,61 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                       </td>
                       <td colSpan={3} className="p-2 font-semibold italic text-slate-950">
                         "{ticket.purpose || ticket.reason}"
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              ) : isBlockMovement ? (
+                <table className="w-full border-collapse border border-slate-300 text-xs">
+                  <tbody>
+                    <tr className="border-b border-slate-300">
+                      <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Student Full Name
+                      </td>
+                      <td className="w-1/4 p-2 font-black text-slate-950 border-r border-slate-300">
+                        {ticket.studentName}
+                      </td>
+                      <td className="w-1/4 p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        College Roll Number
+                      </td>
+                      <td className="w-1/4 p-2 font-mono font-black text-slate-950">
+                        {ticket.rollNumber}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-300">
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Department & Section
+                      </td>
+                      <td className="p-2 font-extrabold text-slate-950 border-r border-slate-300">
+                        {ticket.department || 'Engineering'} • {ticket.section}
+                      </td>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Student Contact No.
+                      </td>
+                      <td className="p-2 font-mono font-black text-slate-950">
+                        +91 {maskPhoneNumber(ticket.studentMobile || ticket.maskedStudentMobile)}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-300">
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Present Block Number
+                      </td>
+                      <td className="p-2 font-black text-slate-950 border-r border-slate-300">
+                        {ticket.presentBlock}
+                      </td>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Permitted Area Wanted
+                      </td>
+                      <td className="p-2 font-black text-emerald-800">
+                        {ticket.destinationArea || ticket.destination}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 bg-slate-50 font-bold text-slate-600 border-r border-slate-300 text-[11px]">
+                        Reason for that
+                      </td>
+                      <td colSpan={3} className="p-2 font-semibold italic text-slate-950">
+                        "{ticket.reason}"
                       </td>
                     </tr>
                   </tbody>
@@ -593,6 +684,49 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                         </td>
                       </tr>
                     )}
+                  </tbody>
+                </table>
+              ) : isBlockMovement ? (
+                <table className="w-full border-collapse border border-slate-300 text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold text-slate-700 uppercase">
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Stage</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Authorized Officer</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-1/4">Timestamp</th>
+                      <th className="p-2 text-left w-1/4">Status & Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-300 text-[11px]">
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">1. Student Movement Application</td>
+                      <td className="p-2 border-r border-slate-300">{ticket.studentName}</td>
+                      <td className="p-2 font-mono border-r border-slate-300">{ticket.appliedDate} {ticket.appliedTime}</td>
+                      <td className="p-2 font-semibold text-emerald-700">Submitted Online (Intra-Campus Movement)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">2. Department Head (HOD)</td>
+                      <td className="p-2 border-r border-slate-300 font-bold">
+                        {isApproved 
+                          ? (ticket.hodAction?.hodName || 'Head of Department (HOD)') 
+                          : isRejected 
+                            ? (ticket.hodAction?.hodName || 'Head of Department (HOD)') 
+                            : '— (Awaiting HOD Decision)'}
+                      </td>
+                      <td className="p-2 font-mono border-r border-slate-300">
+                        {isApproved ? (ticket.hodAction?.approvedAt 
+                          ? new Date(ticket.hodAction.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : (ticket.hodAction?.displayTime || '—')) : '—'}
+                      </td>
+                      <td className="p-2 font-black">
+                        {isApproved ? (
+                          <span className="text-emerald-700">✓ PERMITTED TO MOVE OUT OF BLOCK ({ticket.presentBlock} ➔ {ticket.destinationArea || ticket.destination})</span>
+                        ) : isRejected ? (
+                          <span className="text-rose-700">✕ MOVEMENT DENIED BY HOD</span>
+                        ) : (
+                          <span className="text-amber-700">⏳ Pending HOD Review & Decision</span>
+                        )}
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               ) : (
