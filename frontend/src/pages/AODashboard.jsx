@@ -47,14 +47,19 @@ const AODashboard = () => {
     return () => unsub();
   }, []);
 
-  // Filter tickets for HOD applicants
-  const hodTickets = tickets.filter(t => t.applicantType === 'HOD');
+  // Filter tickets for HOD and Office Staff applicants (routes to AO Login)
+  const aoTickets = tickets.filter(t => 
+    t.applicantType === 'HOD' || 
+    t.applicantType === 'OFFICE' || 
+    t.facultyType === 'OFFICE' || 
+    t.status === 'FORWARDED_TO_AO'
+  );
 
-  const pendingTickets = hodTickets.filter(t => t.status === 'FORWARDED_TO_AO');
-  const grantedTickets = hodTickets.filter(t => t.status === 'PERMISSION_GRANTED' || t.status === 'FACULTY_OUT');
-  const completedTickets = hodTickets.filter(t => t.status === 'SENT_OUT');
+  const pendingTickets = aoTickets.filter(t => t.status === 'FORWARDED_TO_AO');
+  const grantedTickets = aoTickets.filter(t => t.status === 'PERMISSION_GRANTED' || t.status === 'FACULTY_OUT');
+  const completedTickets = aoTickets.filter(t => t.status === 'SENT_OUT');
 
-  const filteredTickets = hodTickets.filter(t => {
+  const filteredTickets = aoTickets.filter(t => {
     // Tab filter
     if (filterTab === 'PENDING' && t.status !== 'FORWARDED_TO_AO') return false;
     if (filterTab === 'GRANTED' && (t.status !== 'PERMISSION_GRANTED' && t.status !== 'FACULTY_OUT')) return false;
@@ -74,14 +79,15 @@ const AODashboard = () => {
   const handleApprove = (ticket) => {
     try {
       setActionError('');
+      const applicantRole = (ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE') ? 'Office Staff' : 'HOD';
       aoApproveHodLeave(ticket.id, {
         aoName: user?.name || 'Administrative Officer (AO)',
-        remarks: 'Leave approved by AO. Forwarded to Campus Security at main gate.'
+        remarks: `Leave approved by AO for ${applicantRole}. Forwarded to Campus Security at main gate.`
       });
-      setActionSuccess(`Permission granted for ${ticket.facultyName || 'HOD'}! Forwarded to Campus Security.`);
+      setActionSuccess(`Permission granted for ${ticket.facultyName || applicantRole}! Forwarded to Campus Security.`);
       setTimeout(() => setActionSuccess(''), 4000);
     } catch (err) {
-      setActionError(err.message || 'Failed to approve HOD leave');
+      setActionError(err.message || 'Failed to approve leave application');
     }
   };
 
@@ -95,16 +101,17 @@ const AODashboard = () => {
 
     try {
       setActionError('');
+      const applicantRole = (rejectingTicket.applicantType === 'OFFICE' || rejectingTicket.facultyType === 'OFFICE') ? 'Office Staff' : 'HOD';
       aoRejectHodLeave(rejectingTicket.id, {
         aoName: user?.name || 'Administrative Officer (AO)',
         reason: rejectReason.trim()
       });
-      setActionSuccess(`Application for ${rejectingTicket.facultyName || 'HOD'} rejected.`);
+      setActionSuccess(`Application for ${rejectingTicket.facultyName || applicantRole} rejected.`);
       setRejectingTicket(null);
       setRejectReason('');
       setTimeout(() => setActionSuccess(''), 4000);
     } catch (err) {
-      setActionError(err.message || 'Failed to reject HOD leave');
+      setActionError(err.message || 'Failed to reject leave application');
     }
   };
 
@@ -169,7 +176,7 @@ const AODashboard = () => {
                   Administrative Officer (AO) Portal
                 </h1>
                 <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
-                  Authorizing & Granting HOD Leaves, Permissions (1-Hour / 4 PM) & On Duty (OD) Applications
+                  Authorizing & Granting HOD & Office Staff Leaves, Permissions & On Duty (OD) Applications
                 </p>
               </div>
             </div>
@@ -217,10 +224,10 @@ const AODashboard = () => {
 
           <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
             <span className="text-[10px] font-black uppercase tracking-wider text-customText-muted block mb-1">
-              Total HOD Leaves
+              Total Applications
             </span>
             <span className="text-2xl font-black text-customText dark:text-customText-dark">
-              {hodTickets.length}
+              {aoTickets.length}
             </span>
           </div>
         </div>
@@ -268,7 +275,7 @@ const AODashboard = () => {
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-customText-muted" />
           <input
             type="text"
-            placeholder="Search by HOD Name, Dept, ID..."
+            placeholder="Search by Name, Dept, ID, Category..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -284,10 +291,10 @@ const AODashboard = () => {
               <CheckCircle2 size={32} />
             </div>
             <h3 className="text-base font-black text-customText dark:text-customText-dark">
-              No HOD applications in this category
+              No applications in this category
             </h3>
             <p className="text-xs text-customText-muted max-w-md mx-auto">
-              There are currently no HOD permissions or leave applications matching your selected filter.
+              There are currently no HOD or Office Staff permissions or leave applications matching your selected filter.
             </p>
           </div>
         ) : (
@@ -296,6 +303,7 @@ const AODashboard = () => {
             const isOd = ticket.type === 'FACULTY_OD' || ticket.permissionType === 'FACULTY_OD';
             const isOneHour = ticket.type === 'FACULTY_ONE_HOUR' || ticket.permissionType === 'FACULTY_ONE_HOUR';
             const is4Pm = ticket.type === 'FACULTY_4PM' || ticket.permissionType === 'FACULTY_4PM';
+            const isOfficeStaff = ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE';
 
             return (
               <div
@@ -312,6 +320,15 @@ const AODashboard = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-md border border-indigo-500/20">
                         {ticket.id}
+                      </span>
+
+                      {/* Applicant Category Badge: HOD or Office Staff */}
+                      <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-black border flex items-center gap-1 ${
+                        isOfficeStaff
+                          ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30'
+                          : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
+                      }`}>
+                        {isOfficeStaff ? '🏢 Office Staff' : '🏛️ HOD'}
                       </span>
 
                       {/* Type Badge */}
@@ -333,9 +350,11 @@ const AODashboard = () => {
                       <div className="flex items-center gap-2">
                         <User size={16} className="text-customText-muted shrink-0" />
                         <div>
-                          <span className="text-[10px] text-customText-muted uppercase font-bold block">Applicant (HOD)</span>
+                          <span className="text-[10px] text-customText-muted uppercase font-bold block">
+                            {isOfficeStaff ? 'Applicant (Office Staff)' : 'Applicant (HOD)'}
+                          </span>
                           <span className="text-sm font-black text-customText dark:text-customText-dark">
-                            {ticket.facultyName || ticket.studentName || 'Head of Department'}
+                            {ticket.facultyName || ticket.studentName || (isOfficeStaff ? 'Office Staff Member' : 'Head of Department')}
                           </span>
                         </div>
                       </div>

@@ -37,7 +37,7 @@ const ManageFaculty = () => {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newDesignation, setNewDesignation] = useState('Assistant Professor');
-  const [newFacultyType, setNewFacultyType] = useState('TEACHING'); // 'TEACHING' | 'NON_TEACHING'
+  const [newFacultyType, setNewFacultyType] = useState('TEACHING'); // 'TEACHING' | 'NON_TEACHING' | 'OFFICE'
   const [newDepartment, setNewDepartment] = useState(defaultDept);
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
@@ -201,12 +201,14 @@ const ManageFaculty = () => {
       ? [
           "EMP1001,Dr. K. Srinivas,9876543210,Professor,TEACHING",
           "EMP1002,Mrs. M. Lakshmi,9848022334,Assistant Professor,NON_TEACHING",
-          "EMP1003,Mr. P. Rajesh,9988776655,Associate Professor,TEACHING"
+          "EMP1003,Mr. P. Rajesh,9988776655,Associate Professor,TEACHING",
+          "OFF2001,Mr. V. Suresh,9812345678,Senior Assistant,OFFICE"
         ]
       : [
           "EMP1001,Dr. K. Srinivas,9876543210,Professor,Department of CSE(emerging Technologies),TEACHING",
           "EMP1002,Mrs. M. Lakshmi,9848022334,Assistant Professor,Department of Information Technology,NON_TEACHING",
-          "EMP1003,Mr. P. Rajesh,9988776655,Associate Professor,Department of Computer Science and Engineering,TEACHING"
+          "EMP1003,Mr. P. Rajesh,9988776655,Associate Professor,Department of Computer Science and Engineering,TEACHING",
+          "OFF2001,Mr. V. Suresh,9812345678,Senior Assistant,Administrative Office,OFFICE"
         ];
 
     const csvText = [headers, ...rows].join('\n');
@@ -284,7 +286,7 @@ const ManageFaculty = () => {
         if (headerMap.department !== undefined && parts[headerMap.department] && !isHOD) department = parts[headerMap.department];
         if (headerMap.facultyType !== undefined && parts[headerMap.facultyType]) {
           const t = parts[headerMap.facultyType].toUpperCase();
-          facultyType = t.includes('NON') ? 'NON_TEACHING' : 'TEACHING';
+          facultyType = t.includes('OFFICE') ? 'OFFICE' : t.includes('NON') ? 'NON_TEACHING' : 'TEACHING';
         }
       } else {
         // Positional parsing fallback
@@ -295,7 +297,8 @@ const ManageFaculty = () => {
           designation = parts[3] || 'Assistant Professor';
           if (parts[4] && !isHOD) department = parts[4];
           if (parts[5]) {
-            facultyType = parts[5].toUpperCase().includes('NON') ? 'NON_TEACHING' : 'TEACHING';
+            const t = parts[5].toUpperCase();
+            facultyType = t.includes('OFFICE') ? 'OFFICE' : t.includes('NON') ? 'NON_TEACHING' : 'TEACHING';
           }
         } else if (parts.length === 3) {
           if (/^[A-Za-z0-9_-]+$/.test(parts[0]) && parts[0].length < 15) {
@@ -513,15 +516,43 @@ const ManageFaculty = () => {
   };
 
   const filteredFaculty = faculty.filter(f => {
+    const meta = facultyMetadata.find(m => 
+      (m.name && m.name.toLowerCase() === f.facultyName.toLowerCase()) ||
+      (m.mobileNumber && f.phoneNumber && m.mobileNumber === f.phoneNumber)
+    );
     if (activeTab === 'missing' && f.phoneNumber && f.phoneNumber.trim() !== '') {
       return false;
     }
+    if (activeTab === 'teaching' && meta?.facultyType && meta.facultyType !== 'TEACHING') {
+      return false;
+    }
+    if (activeTab === 'non_teaching' && meta?.facultyType !== 'NON_TEACHING') {
+      return false;
+    }
+    if (activeTab === 'office' && meta?.facultyType !== 'OFFICE') {
+      return false;
+    }
     const matchesSearch = f.facultyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (f.phoneNumber && f.phoneNumber.includes(searchQuery));
+      (f.phoneNumber && f.phoneNumber.includes(searchQuery)) ||
+      (meta?.empid && meta.empid.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesSearch;
   });
 
   const missingCount = faculty.filter(f => !f.phoneNumber || f.phoneNumber.trim() === '').length;
+  const officeCount = faculty.filter(f => {
+    const meta = facultyMetadata.find(m => 
+      (m.name && m.name.toLowerCase() === f.facultyName.toLowerCase()) ||
+      (m.mobileNumber && f.phoneNumber && m.mobileNumber === f.phoneNumber)
+    );
+    return meta?.facultyType === 'OFFICE';
+  }).length;
+  const nonTeachingCount = faculty.filter(f => {
+    const meta = facultyMetadata.find(m => 
+      (m.name && m.name.toLowerCase() === f.facultyName.toLowerCase()) ||
+      (m.mobileNumber && f.phoneNumber && m.mobileNumber === f.phoneNumber)
+    );
+    return meta?.facultyType === 'NON_TEACHING';
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -576,7 +607,7 @@ const ManageFaculty = () => {
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex gap-2 border-b border-slate-200/60 dark:border-slate-800/60 pb-3">
+      <div className="flex flex-wrap gap-2 border-b border-slate-200/60 dark:border-slate-800/60 pb-3">
         <button
           onClick={() => setActiveTab('all')}
           className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
@@ -586,6 +617,38 @@ const ManageFaculty = () => {
           }`}
         >
           All Faculty ({faculty.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('teaching')}
+          className={`px-3 py-2 text-xs font-bold rounded-xl transition-all ${
+            activeTab === 'teaching'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-white/40 dark:bg-slate-900/40 text-customText-muted hover:text-customText hover:bg-white/80 dark:hover:bg-slate-900/80 border border-slate-200/40 dark:border-slate-800/40'
+          }`}
+        >
+          Teaching
+        </button>
+        <button
+          onClick={() => setActiveTab('non_teaching')}
+          className={`px-3 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+            activeTab === 'non_teaching'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+              : 'bg-white/40 dark:bg-slate-900/40 text-customText-muted hover:text-customText hover:bg-white/80 dark:hover:bg-slate-900/80 border border-slate-200/40 dark:border-slate-800/40'
+          }`}
+        >
+          <span>Non-Teaching</span>
+          {nonTeachingCount > 0 && <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20">{nonTeachingCount}</span>}
+        </button>
+        <button
+          onClick={() => setActiveTab('office')}
+          className={`px-3 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+            activeTab === 'office'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+              : 'bg-white/40 dark:bg-slate-900/40 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 border border-slate-200/40 dark:border-slate-800/40'
+          }`}
+        >
+          <span>🏢 Office Staff</span>
+          {officeCount > 0 && <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-500/20">{officeCount}</span>}
         </button>
         <button
           onClick={() => setActiveTab('missing')}
@@ -615,6 +678,7 @@ const ManageFaculty = () => {
               (m.mobileNumber && f.phoneNumber && m.mobileNumber === f.phoneNumber)
             );
             const isNonTeaching = meta?.facultyType === 'NON_TEACHING';
+            const isOffice = meta?.facultyType === 'OFFICE';
 
             return (
               <div key={f.id} className="glass-card p-4 flex flex-col justify-between hover:border-primary/30 transition-all group relative">
@@ -624,11 +688,13 @@ const ManageFaculty = () => {
                       {f.facultyName}
                     </h3>
                     <span className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide border shrink-0 ${
-                      isNonTeaching
+                      isOffice
+                        ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20'
+                        : isNonTeaching
                         ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
                         : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
                     }`}>
-                      {isNonTeaching ? 'Non-Teaching' : 'Teaching'}
+                      {isOffice ? 'Office Staff' : isNonTeaching ? 'Non-Teaching' : 'Teaching'}
                     </span>
                   </div>
 
@@ -833,7 +899,7 @@ const ManageFaculty = () => {
                 <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
                   Faculty Category *
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <label className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
                     newFacultyType === 'TEACHING'
                       ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200'
@@ -871,7 +937,28 @@ const ManageFaculty = () => {
                     <div>
                       <span className="font-bold text-xs block">Non-Teaching Staff</span>
                       <span className="text-[10px] text-customText-muted block">
-                        Unable to take attendance to students, just apply permissions
+                        Unable to take student attendance, just apply permissions
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                    newFacultyType === 'OFFICE'
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-900 dark:text-blue-200'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-customText'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="facultyType"
+                      value="OFFICE"
+                      checked={newFacultyType === 'OFFICE'}
+                      onChange={() => setNewFacultyType('OFFICE')}
+                      className="mt-1 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="font-bold text-xs block">🏢 Office Staff</span>
+                      <span className="text-[10px] text-customText-muted block">
+                        No student attendance; leaves route directly to AO login & Security
                       </span>
                     </div>
                   </label>
@@ -1112,11 +1199,13 @@ const ManageFaculty = () => {
                             <td className="py-1 px-2 text-slate-500">{item.designation || 'Assistant Professor'}</td>
                             <td className="py-1 px-2">
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                item.facultyType === 'NON_TEACHING'
+                                item.facultyType === 'OFFICE'
+                                  ? 'bg-blue-500/10 text-blue-600'
+                                  : item.facultyType === 'NON_TEACHING'
                                   ? 'bg-amber-500/10 text-amber-600'
                                   : 'bg-emerald-500/10 text-emerald-600'
                               }`}>
-                                {item.facultyType === 'NON_TEACHING' ? 'Non-Teaching' : 'Teaching'}
+                                {item.facultyType === 'OFFICE' ? 'Office Staff' : item.facultyType === 'NON_TEACHING' ? 'Non-Teaching' : 'Teaching'}
                               </span>
                             </td>
                             {!isHOD && <td className="py-1 px-2 text-[11px] text-slate-500 truncate max-w-[130px]">{item.department}</td>}

@@ -27,13 +27,15 @@ import {
   Lock,
   CheckCircle,
   Send,
-  Briefcase
+  Briefcase,
+  Building2
 } from 'lucide-react';
 import Loading from '../components/Loading';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
   applyFacultyLeave, 
   applyHodLeave,
+  applyOfficeLeave,
   getFacultyMonthlyLeaveUsage, 
   getFacultyLeaveHistory, 
   subscribeToOutpasses,
@@ -81,15 +83,33 @@ const FacultyDashboard = () => {
     }
   }, [user]);
 
+  // Office staff detection: As like non teaching (unable to take attendance, leaves route directly to AO)
+  const isOfficeStaff = React.useMemo(() => {
+    if (user?.facultyType === 'OFFICE' || user?.role === 'OFFICE_STAFF') return true;
+    try {
+      const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+      const meta = metaList.find(m => 
+        (m.empid && String(m.empid).toLowerCase() === String(user?.userId).toLowerCase()) ||
+        (m.name && String(m.name).trim().toLowerCase() === String(user?.name).trim().toLowerCase())
+      );
+      return meta?.facultyType === 'OFFICE';
+    } catch (e) {
+      return false;
+    }
+  }, [user]);
+
   // HOD user detection: HOD applies permissions here with routing to AO -> Security
   const isHodUser = user?.role === 'HOD' || user?.role === 'SUB_ADMIN';
 
+  // All roles bypassed from student classroom attendance
+  const isBypassedAttendance = isNonTeaching || isOfficeStaff || isHodUser;
+
   const [activeTab, setActiveTab] = useState(
-    (isNonTeaching || isHodUser) ? 'leaves' : (searchParams.get('tab') || 'attendance')
+    isBypassedAttendance ? 'leaves' : (searchParams.get('tab') || 'attendance')
   );
 
   useEffect(() => {
-    if (isNonTeaching || isHodUser) {
+    if (isBypassedAttendance) {
       setActiveTab('leaves');
       return;
     }
@@ -99,7 +119,7 @@ const FacultyDashboard = () => {
     } else {
       setActiveTab('attendance');
     }
-  }, [searchParams, isNonTeaching, isHodUser]);
+  }, [searchParams, isBypassedAttendance]);
   
   // Data States
   const [students, setStudents] = useState([]);
@@ -107,7 +127,7 @@ const FacultyDashboard = () => {
   const [absentees, setAbsentees] = useState([]); // Today's absentees fetched from DB
   
   // Loading & Feedback States
-  const [loadingClassrooms, setLoadingClassrooms] = useState(!(isNonTeaching || isHodUser));
+  const [loadingClassrooms, setLoadingClassrooms] = useState(!isBypassedAttendance);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [loadingAbsentees, setLoadingAbsentees] = useState(false);
   const [error, setError] = useState('');
@@ -210,8 +230,8 @@ const FacultyDashboard = () => {
   const handleAssignSelfAsMentor = async () => {
     setMentorAssignError('');
     setMentorAssignSuccess('');
-    if (isNonTeaching) {
-      setMentorAssignError('Non-teaching staff cannot be assigned as class mentors.');
+    if (isNonTeaching || isOfficeStaff) {
+      setMentorAssignError('Non-teaching and office staff cannot be assigned as class mentors.');
       return;
     }
     if (!selectedSectionToAssign) {
@@ -321,11 +341,23 @@ const FacultyDashboard = () => {
           purpose: leavePurpose
         });
         setLeaveSuccess(`HOD permission request submitted! Ref ID: ${ticket.id}. Forwarded to Administrative Officer (AO) for approval.`);
+      } else if (isOfficeStaff) {
+        ticket = await applyOfficeLeave({
+          staffUserId: user?.userId || user?.name || 'OFFICE',
+          staffName: user?.name || 'Office Staff',
+          department: facultyDept || 'Administrative Office',
+          type: leaveType,
+          date: leaveDate || todayDate,
+          leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveType === 'FACULTY_OD' ? (leaveTime || 'On Duty (Full Day)') : leaveTime,
+          purpose: leavePurpose
+        });
+        setLeaveSuccess(`Office permission request submitted! Ref ID: ${ticket.id}. Forwarded to Administrative Officer (AO) for approval.`);
       } else {
         ticket = await applyFacultyLeave({
           facultyId: user?.id,
           facultyUserId: user?.userId,
           facultyName: user?.name,
+          facultyType: isNonTeaching ? 'NON_TEACHING' : 'TEACHING',
           department: facultyDept,
           type: leaveType,
           date: leaveDate || todayDate,
@@ -347,7 +379,7 @@ const FacultyDashboard = () => {
 
   // 1. Fetch all classrooms on mount (only for teaching faculty)
   useEffect(() => {
-    if (isNonTeaching || isHodUser) {
+    if (isBypassedAttendance) {
       setLoadingClassrooms(false);
       return;
     }
@@ -379,11 +411,11 @@ const FacultyDashboard = () => {
     };
 
     fetchClassrooms();
-  }, [token, isNonTeaching, isHodUser]);
+  }, [token, isBypassedAttendance]);
 
   // 2. Fetch students and today's attendance for the selected classroom
   const loadClassroomData = async () => {
-    if (isNonTeaching || isHodUser) {
+    if (isBypassedAttendance) {
       setLoadingStudents(false);
       return;
     }
@@ -441,11 +473,11 @@ const FacultyDashboard = () => {
 
   useEffect(() => {
     loadClassroomData();
-  }, [selectedSection, token, isNonTeaching, isHodUser]);
+  }, [selectedSection, token, isBypassedAttendance]);
 
   // Reload absentees when switching to calls tab or after submission
   const loadAbsenteesOnly = async () => {
-    if (isNonTeaching || isHodUser) {
+    if (isBypassedAttendance) {
       setLoadingAbsentees(false);
       return;
     }
@@ -501,8 +533,8 @@ const FacultyDashboard = () => {
 
   // Submit Bulk Attendance
   const handleSaveAttendance = async () => {
-    if (isNonTeaching) {
-      setError('Non-teaching staff cannot submit student attendance.');
+    if (isNonTeaching || isOfficeStaff) {
+      setError('Non-teaching and office staff cannot submit student attendance.');
       return;
     }
     setSavingAttendance(true);
@@ -565,8 +597,8 @@ const FacultyDashboard = () => {
 
   // Open Call Log Modal
   const openCallModal = (student) => {
-    if (isNonTeaching) {
-      setError('Non-teaching staff cannot access parent calling desk.');
+    if (isNonTeaching || isOfficeStaff) {
+      setError('Non-teaching and office staff cannot access parent calling desk.');
       return;
     }
     setSelectedStudent(student);
@@ -584,8 +616,8 @@ const FacultyDashboard = () => {
   // Submit Call Log
   const handleSaveCallLog = async (e) => {
     e.preventDefault();
-    if (isNonTeaching) {
-      setHistoryError('Non-teaching staff cannot log parent calls.');
+    if (isNonTeaching || isOfficeStaff) {
+      setHistoryError('Non-teaching and office staff cannot log parent calls.');
       return;
     }
     if (!selectedStudent) return;
@@ -646,11 +678,13 @@ const FacultyDashboard = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40 dark:bg-slate-900/40 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-800/40 backdrop-blur-md">
         <div>
           <h2 className="text-2xl font-black text-customText dark:text-customText-dark tracking-tight">
-            {isHodUser ? 'HOD Permissions & Gate Pass' : isNonTeaching ? 'Non-Teaching Permissions Portal' : 'Faculty Attendance Portal'}
+            {isHodUser ? 'HOD Permissions & Gate Pass' : isOfficeStaff ? 'Office Staff Permissions & Gate Pass' : isNonTeaching ? 'Non-Teaching Permissions Portal' : 'Faculty Attendance Portal'}
           </h2>
           <p className="text-sm text-customText-muted dark:text-customText-mutedDark">
             {isHodUser 
               ? 'Apply for official permissions, track AO approvals, and download gate departure passes.' 
+              : isOfficeStaff
+              ? 'Apply for permissions, track Administrative Officer (AO) approvals, and view official gate passes.'
               : isNonTeaching 
               ? 'Apply for permissions, track approvals, and view official departure slips.' 
               : 'Manage attendance lists, view absentees, and document communication logs.'}
@@ -658,7 +692,7 @@ const FacultyDashboard = () => {
         </div>
 
         {/* Section Selector Dropdown (only for teaching faculty) */}
-        {!isNonTeaching && !isHodUser && (
+        {!isBypassedAttendance && (
           <div className="flex items-center gap-2.5 w-full md:w-auto">
             <label className="text-xs font-bold uppercase tracking-wider text-customText-muted dark:text-customText-mutedDark whitespace-nowrap">
               Selected Section:
@@ -680,8 +714,29 @@ const FacultyDashboard = () => {
         )}
       </div>
 
-      {/* Non-Teaching Faculty notice, HOD notice, or Standard Sub-Nav Tabs */}
-      {isNonTeaching ? (
+      {/* Office notice, Non-Teaching notice, HOD notice, or Standard Sub-Nav Tabs */}
+      {isOfficeStaff ? (
+        <div className="space-y-3 mb-3 no-print">
+          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-blue-900 dark:text-blue-300 flex items-center justify-between gap-3 text-xs font-bold animate-fade-in">
+            <div className="flex items-center gap-2.5">
+              <Building2 size={18} className="text-blue-600 shrink-0" />
+              <span>Office Staff Portal • Classroom Attendance & Student Mentorship are disabled. Leaves & permissions applied here route directly to Administrative Officer (AO) for approval and forward to Security for gate clearance.</span>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-800 dark:text-blue-200 text-[10px] font-black uppercase tracking-wider shrink-0 border border-blue-500/30">
+              Office Staff
+            </span>
+          </div>
+          <div className="flex items-center gap-2 pb-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-primary text-white shadow-md shadow-primary/20"
+            >
+              <Calendar size={15} />
+              <span>Office Permissions</span>
+            </button>
+          </div>
+        </div>
+      ) : isNonTeaching ? (
         <div className="space-y-3 mb-3 no-print">
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-300 flex items-center justify-between gap-3 text-xs font-bold animate-fade-in">
             <div className="flex items-center gap-2.5">
@@ -866,7 +921,7 @@ const FacultyDashboard = () => {
       )}
 
       {/* TAB 1: Attendance Registry */}
-      {activeTab === 'attendance' && !isNonTeaching && !isHodUser && (
+      {activeTab === 'attendance' && !isBypassedAttendance && (
         <div className="space-y-6">
           {loadingStudents ? (
             <div className="flex items-center justify-center py-20">
@@ -1287,7 +1342,7 @@ const FacultyDashboard = () => {
       )}
 
       {/* TAB 2: Parent Call Logs */}
-      {activeTab === 'calls' && !isNonTeaching && !isHodUser && (
+      {activeTab === 'calls' && !isBypassedAttendance && (
         <div className="space-y-6">
           <div className="glass-card p-6 border border-slate-200/50 dark:border-slate-800/45">
             <div className="flex justify-between items-center mb-6">
@@ -1726,6 +1781,12 @@ const FacultyDashboard = () => {
                             </span>
                           )}
 
+                          {ticket.status === 'FORWARDED_TO_AO' && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-extrabold border border-amber-500/20">
+                              Awaiting Administrative Officer (AO) Approval
+                            </span>
+                          )}
+
                           {ticket.status === 'FORWARDED_TO_HOD' && (
                             <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-extrabold">
                               Awaiting HOD Approval
@@ -1734,7 +1795,9 @@ const FacultyDashboard = () => {
 
                           {ticket.status === 'PERMISSION_GRANTED' && (
                             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/30">
-                              Accepted by HOD • Forwarded to Security Head
+                              {(ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE' || ticket.aoAction) 
+                                ? 'Accepted by AO • Forwarded to Security Head' 
+                                : 'Accepted by HOD • Forwarded to Security Head'}
                             </span>
                           )}
 
@@ -1758,7 +1821,7 @@ const FacultyDashboard = () => {
 
                           {ticket.status === 'REJECTED' && (
                             <span className="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 text-[10px] font-black">
-                              Rejected by HOD
+                              {(ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE' || ticket.aoAction) ? 'Rejected by AO' : 'Rejected by HOD'}
                             </span>
                           )}
                         </div>
@@ -1766,6 +1829,9 @@ const FacultyDashboard = () => {
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-customText-muted">
                           <span><strong>Date:</strong> {ticket.date || ticket.appliedDate}</span>
                           <span><strong>Applied:</strong> {ticket.appliedDate} {ticket.appliedTime}</span>
+                          {ticket.aoAction?.aoName && (
+                            <span><strong>AO:</strong> {ticket.aoAction.aoName}</span>
+                          )}
                           {ticket.hodAction?.hodName && (
                             <span><strong>HOD:</strong> {ticket.hodAction.hodName}</span>
                           )}
@@ -1799,7 +1865,7 @@ const FacultyDashboard = () => {
       )}
 
       {/* TAB 4: CLASS MENTORSHIP & STUDENT OUTPASSES */}
-      {activeTab === 'mentor' && !isNonTeaching && !isHodUser && (
+      {activeTab === 'mentor' && !isBypassedAttendance && (
         <div className="space-y-6 animate-fade-in">
 
           {/* Feedback Alerts for Mentor Actions */}

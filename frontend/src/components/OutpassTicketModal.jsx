@@ -86,14 +86,16 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
     }, 1200);
   };
 
-  const isFaculty = ticket.applicantType === 'FACULTY' || ticket.applicantType === 'HOD';
+  const isFaculty = ticket.applicantType === 'FACULTY' || ticket.applicantType === 'HOD' || ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE';
   const isHod = ticket.applicantType === 'HOD';
+  const isOffice = ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE';
+  const isAoRoute = isHod || isOffice;
   const isBlockMovement = ticket.type === 'BLOCK_MOVEMENT';
   const facultyDeptName = (ticket.department && ticket.department !== 'General')
     ? ticket.department
     : (ticket.section && ticket.section !== 'General' && ticket.section !== 'Faculty'
         ? ticket.section
-        : 'Department of CSE(emerging Technologies)');
+        : (isOffice ? 'Administrative Office' : 'Department of CSE(emerging Technologies)'));
 
   const isApproved = ticket.hodAction?.granted === true || ticket.aoAction?.granted === true || ticket.status === 'PERMISSION_GRANTED' || ticket.status === 'SENT_OUT';
   const isRejected = ticket.status === 'REJECTED' || ticket.hodAction?.granted === false || ticket.aoAction?.granted === false;
@@ -145,7 +147,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
           };
         case 'PERMISSION_GRANTED':
           return {
-            label: isHod 
+            label: isAoRoute 
               ? 'PERMISSION ACCEPTED BY AO • FORWARDED TO WATCHMAN'
               : 'PERMISSION ACCEPTED BY HOD • FORWARDED TO WATCHMAN',
             color: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/40 font-black',
@@ -167,7 +169,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
           };
         case 'REJECTED':
           return {
-            label: isHod ? 'PERMISSION REQUEST REJECTED BY AO' : 'PERMISSION REQUEST REJECTED BY HOD',
+            label: isAoRoute ? 'PERMISSION REQUEST REJECTED BY AO' : 'PERMISSION REQUEST REJECTED BY HOD',
             color: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold',
             step: -1
           };
@@ -295,22 +297,22 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
             <div>
               <span className="uppercase tracking-wider block text-[10px] font-black">
                 {isApproved 
-                  ? (isHod ? 'Status: Approved by AO • Forwarded to Security Head' : isBlockMovement ? 'Status: Approved by HOD • Permitted Out of Block' : 'Status: Approved by HOD • Forwarded to Security Head') 
+                  ? (isAoRoute ? 'Status: Approved by AO • Forwarded to Security Head' : isBlockMovement ? 'Status: Approved by HOD • Permitted Out of Block' : 'Status: Approved by HOD • Forwarded to Security Head') 
                   : isRejected 
-                    ? (isHod ? 'Status: Rejected by AO' : 'Status: Rejected by HOD') 
-                    : (isHod ? 'Status: Pending AO Approval' : 'Status: Pending HOD Approval')}
+                    ? (isAoRoute ? 'Status: Rejected by AO' : 'Status: Rejected by HOD') 
+                    : (isAoRoute ? 'Status: Pending AO Approval' : 'Status: Pending HOD Approval')}
               </span>
               <span>
                 {isApproved ? (
                   isFaculty 
-                    ? (isHod ? 'Official Departure Slip. Approved by AO and forwarded to Security Head login. No student ID verification required.' : 'Official Departure Slip. Approved by HOD and forwarded to Security Head login. No student ID verification required.')
+                    ? (isAoRoute ? 'Official Departure Slip. Approved by AO and forwarded to Security Head login. No student ID verification required.' : 'Official Departure Slip. Approved by HOD and forwarded to Security Head login. No student ID verification required.')
                     : isBlockMovement
                       ? `Official Movement Pass. Approved by Head of Department (${ticket.hodAction?.hodName || 'HOD'}). Student is authorized to move from ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
                       : 'Official Gate Pass. Approved by HOD. Show this slip at the Main Security Gate for departure clearance.'
                 ) : isRejected ? (
-                  isHod ? 'This leave application has been rejected by the Administrative Officer (AO).' : 'This application has been rejected by the Head of Department.'
+                  isAoRoute ? 'This leave application has been rejected by the Administrative Officer (AO).' : 'This application has been rejected by the Head of Department.'
                 ) : (
-                  isHod ? 'Application submitted and awaiting AO approval. Gate exit clearance is NOT authorized until approved by AO.' : isBlockMovement ? 'Intra-campus movement application submitted. Awaiting HOD approval.' : 'Application submitted and awaiting HOD approval. Gate exit clearance is NOT authorized until approved by HOD.'
+                  isAoRoute ? 'Application submitted and awaiting AO approval. Gate exit clearance is NOT authorized until approved by AO.' : isBlockMovement ? 'Intra-campus movement application submitted. Awaiting HOD approval.' : 'Application submitted and awaiting HOD approval. Gate exit clearance is NOT authorized until approved by HOD.'
                 )}
               </span>
             </div>
@@ -596,7 +598,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                   <tbody className="divide-y divide-slate-300 text-[11px]">
                     <tr>
                       <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">
-                        {isHod ? '1. HOD Application' : '1. Faculty Application'}
+                        {isHod ? '1. HOD Application' : isOffice ? '1. Office Staff Application' : '1. Faculty Application'}
                       </td>
                       <td className="p-2 border-r border-slate-300">{ticket.facultyName || ticket.studentName}</td>
                       <td className="p-2 font-mono border-r border-slate-300">{ticket.appliedDate} {ticket.appliedTime}</td>
@@ -604,10 +606,10 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                     </tr>
                     <tr>
                       <td className="p-2 font-bold border-r border-slate-300 bg-slate-50">
-                        {isHod ? '2. Administrative Officer (AO)' : '2. Department Head (HOD)'}
+                        {isAoRoute ? '2. Administrative Officer (AO)' : '2. Department Head (HOD)'}
                       </td>
                       <td className="p-2 border-r border-slate-300 font-bold">
-                        {isHod 
+                        {isAoRoute 
                           ? (ticket.aoAction?.aoName || 'Administrative Officer (AO)')
                           : (isApproved 
                               ? (ticket.hodAction?.hodName || 'Head of Department (HOD)') 
@@ -616,12 +618,12 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                                 : '— (Awaiting HOD Decision)')}
                       </td>
                       <td className="p-2 font-mono border-r border-slate-300">
-                        {isHod 
+                        {isAoRoute 
                           ? (ticket.aoAction?.approvedAt ? `${ticket.aoAction?.displayDate || ticket.appliedDate} ${ticket.aoAction?.displayTime || ''}` : '—')
                           : (isApproved ? `${ticket.hodAction?.displayDate || ticket.appliedDate} ${ticket.hodAction?.displayTime || ''}` : '—')}
                       </td>
                       <td className="p-2 font-black">
-                        {isHod ? (
+                        {isAoRoute ? (
                           ticket.aoAction?.granted ? (
                             <span className="text-emerald-700">✓ ACCEPTED & FORWARDED TO SECURITY HEAD</span>
                           ) : isRejected ? (
@@ -815,7 +817,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
               {/* Signature 1 */}
               <div className="flex flex-col justify-between h-20 border border-slate-300 rounded-xl p-2 bg-slate-50/60">
                 <div className="text-[9px] font-bold text-slate-500 uppercase">
-                  {isFaculty ? (isHod ? 'HOD Applicant' : 'Faculty Applicant') : 'Parent Verification'}
+                  {isFaculty ? (isHod ? 'HOD Applicant' : isOffice ? 'Office Staff Applicant' : 'Faculty Applicant') : 'Parent Verification'}
                 </div>
                 <div className="font-serif italic font-bold text-slate-800 text-xs truncate">
                   {isFaculty 
@@ -823,7 +825,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                     : (ticket.absentControllerAction?.controllerName || 'Absent Controller')}
                 </div>
                 <div className="border-t border-slate-400 pt-0.5 text-[8px] font-black uppercase text-slate-700">
-                  {isFaculty ? (isHod ? 'HOD Signature' : 'Faculty Signature') : 'Signature of Absent Controller'}
+                  {isFaculty ? (isHod ? 'HOD Signature' : isOffice ? 'Office Staff Signature' : 'Faculty Signature') : 'Signature of Absent Controller'}
                 </div>
               </div>
 
@@ -862,7 +864,7 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                 <div className="text-xs truncate">
                   {isApproved ? (
                     <div className="font-serif italic font-bold text-slate-900 leading-tight">
-                      {isHod 
+                      {isAoRoute 
                         ? (ticket.aoAction?.aoName || 'Administrative Officer (AO)')
                         : (ticket.hodAction?.hodName || 'Head of Department (HOD)')}
                     </div>
@@ -872,15 +874,15 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
                     </div>
                   ) : (
                     <div className="text-amber-600 font-sans font-extrabold text-[11px]">
-                      {isHod ? 'Pending AO Approval' : 'Pending HOD Approval'}
+                      {isAoRoute ? 'Pending AO Approval' : 'Pending HOD Approval'}
                     </div>
                   )}
                 </div>
                 <div className="border-t border-slate-400 pt-0.5 text-[8px] font-black uppercase text-slate-700">
                   {isApproved ? (
-                    <span className="text-emerald-800">{isHod ? '✓ Administrative Officer (AO)' : '✓ Head of Department (HOD)'}</span>
+                    <span className="text-emerald-800">{isAoRoute ? '✓ Administrative Officer (AO)' : '✓ Head of Department (HOD)'}</span>
                   ) : (
-                    <span>{isHod ? 'Administrative Officer (AO)' : 'Head of Department (HOD)'}</span>
+                    <span>{isAoRoute ? 'Administrative Officer (AO)' : 'Head of Department (HOD)'}</span>
                   )}
                 </div>
               </div>

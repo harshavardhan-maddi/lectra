@@ -226,9 +226,10 @@ const Layout = ({ children }) => {
       { name: 'Attendance Overrides', path: '/settings?tab=overrides', icon: ShieldCheck }
     );
   } else if (user?.role === 'FACULTY') {
-    // Check if faculty is non-teaching
+    // Check if faculty is non-teaching or office
     let isNonTeaching = user?.facultyType === 'NON_TEACHING';
-    if (!isNonTeaching) {
+    let isOfficeStaff = user?.facultyType === 'OFFICE' || user?.role === 'OFFICE_STAFF';
+    if (!isNonTeaching && !isOfficeStaff) {
       try {
         const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
         const meta = metaList.find(m => 
@@ -238,10 +239,18 @@ const Layout = ({ children }) => {
         if (meta && meta.facultyType === 'NON_TEACHING') {
           isNonTeaching = true;
         }
+        if (meta && meta.facultyType === 'OFFICE') {
+          isOfficeStaff = true;
+        }
       } catch (e) {}
     }
 
-    if (isNonTeaching) {
+    if (isOfficeStaff) {
+      // Office staff can ONLY apply permissions (routes to AO), cannot take attendance or make calls
+      navLinks.push(
+        { name: 'Office Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
+      );
+    } else if (isNonTeaching) {
       // Non-teaching faculty can ONLY apply permissions, cannot take attendance or make calls
       navLinks.push(
         { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
@@ -292,7 +301,8 @@ const Layout = ({ children }) => {
       );
     } else if (user?.role === 'FACULTY') {
       let isNonTeaching = user?.facultyType === 'NON_TEACHING';
-      if (!isNonTeaching) {
+      let isOfficeStaff = user?.facultyType === 'OFFICE' || user?.role === 'OFFICE_STAFF';
+      if (!isNonTeaching && !isOfficeStaff) {
         try {
           const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
           const meta = metaList.find(m => 
@@ -300,10 +310,16 @@ const Layout = ({ children }) => {
             (m.name && String(m.name).trim().toLowerCase() === String(user?.name).trim().toLowerCase())
           );
           if (meta && meta.facultyType === 'NON_TEACHING') isNonTeaching = true;
+          if (meta && meta.facultyType === 'OFFICE') isOfficeStaff = true;
         } catch (e) {}
       }
 
-      if (isNonTeaching) {
+      if (isOfficeStaff) {
+        items.push(
+          { name: 'Office Permissions', shortName: 'Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
+          { name: 'Edit Profile', shortName: 'Profile', isProfile: true, icon: Settings }
+        );
+      } else if (isNonTeaching) {
         items.push(
           { name: 'Faculty Permissions', shortName: 'Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
           { name: 'Edit Profile', shortName: 'Profile', isProfile: true, icon: Settings }
@@ -434,7 +450,13 @@ const Layout = ({ children }) => {
               ) : (
                 <>
                   <p className="text-[11px] text-customText-muted dark:text-customText-mutedDark truncate">
-                    {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') ? 'Security Head' : user?.role} {user?.className ? `(${user.className})` : ''}
+                    {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') 
+                      ? 'Security Head' 
+                      : (user?.facultyType === 'OFFICE' || user?.role === 'OFFICE_STAFF')
+                      ? 'Office Staff'
+                      : user?.facultyType === 'NON_TEACHING'
+                      ? 'Non-Teaching'
+                      : user?.role} {user?.className ? `(${user.className})` : ''}
                   </p>
                   {user?.department && user?.role !== 'WATCHMAN' && user?.role !== 'SECURITY_HEAD' && (
                     <p className="text-[10px] text-primary-dark dark:text-primary font-bold truncate mt-0.5" title={user.department}>
@@ -512,7 +534,13 @@ const Layout = ({ children }) => {
                   ) : (
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary-dark font-bold">
-                        {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') ? 'Security' : user?.role}
+                        {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') 
+                          ? 'Security' 
+                          : (user?.facultyType === 'OFFICE' || user?.role === 'OFFICE_STAFF')
+                          ? 'Office Staff'
+                          : user?.facultyType === 'NON_TEACHING'
+                          ? 'Non-Teaching'
+                          : user?.role}
                       </span>
                       {user?.department && user?.role !== 'WATCHMAN' && user?.role !== 'SECURITY_HEAD' && (
                         <span className="text-[9px] text-primary-dark dark:text-primary font-bold truncate">

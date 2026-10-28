@@ -100,8 +100,8 @@ const login = async (req, res) => {
       where: { userId },
     });
 
-    // Support faculty login with Emp ID and password nrtec@nec
-    if (!user && (userId.toUpperCase().startsWith('EMP') || userId.toUpperCase().startsWith('FAC')) && password === 'nrtec@nec') {
+    // Support faculty and office staff login with Emp ID and password nrtec@nec
+    if (!user && (userId.toUpperCase().startsWith('EMP') || userId.toUpperCase().startsWith('FAC') || userId.toUpperCase().startsWith('OFF')) && password === 'nrtec@nec') {
       try {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);

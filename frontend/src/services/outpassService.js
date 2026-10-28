@@ -869,12 +869,13 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
   };
 };
 
-// Apply for Faculty Permission (One Hour, 4:00 PM, or OD Permission)
+// Apply for Faculty / Staff Permission (One Hour, 4:00 PM, or OD Permission)
 export const applyFacultyLeave = async ({
   facultyId,
   facultyUserId,
   facultyName,
   department = 'Department of CSE(emerging Technologies)',
+  facultyType = 'TEACHING', // 'TEACHING' | 'NON_TEACHING' | 'OFFICE'
   type = 'FACULTY_ONE_HOUR', // 'FACULTY_ONE_HOUR' | 'FACULTY_4PM' | 'FACULTY_OD'
   date,
   leaveTime,
@@ -884,8 +885,9 @@ export const applyFacultyLeave = async ({
     throw new Error('Please specify a valid and proper purpose for your request.');
   }
 
+  const isOffice = facultyType === 'OFFICE';
   const selectedDate = date || new Date().toISOString().slice(0, 10);
-  const cleanDepartment = (department && department !== 'General') ? department : 'Department of CSE(emerging Technologies)';
+  const cleanDepartment = (department && department !== 'General') ? department : (isOffice ? 'Administrative Office' : 'Department of CSE(emerging Technologies)');
 
   // Quota validation: only regular permissions (1-Hour & 4PM) are capped at 2 per month
   if (type !== 'FACULTY_OD') {
@@ -914,17 +916,20 @@ export const applyFacultyLeave = async ({
   const now = new Date();
   const dateCompact = selectedDate.replace(/-/g, '');
   const randomNum = Math.floor(1000 + Math.random() * 9000);
-  const prefix = type === 'FACULTY_4PM' ? 'NEC-FAC-4PM' : type === 'FACULTY_OD' ? 'NEC-FAC-OD' : 'NEC-FAC-1HR';
+  const prefix = isOffice 
+    ? (type === 'FACULTY_4PM' ? 'NEC-OFF-4PM' : type === 'FACULTY_OD' ? 'NEC-OFF-OD' : 'NEC-OFF-1HR')
+    : (type === 'FACULTY_4PM' ? 'NEC-FAC-4PM' : type === 'FACULTY_OD' ? 'NEC-FAC-OD' : 'NEC-FAC-1HR');
   const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
 
   const newTicket = {
     id: ticketId,
-    applicantType: 'FACULTY',
+    applicantType: isOffice ? 'OFFICE' : 'FACULTY',
+    facultyType: isOffice ? 'OFFICE' : (facultyType || 'TEACHING'),
     type,
     permissionType: type,
     facultyId,
     facultyUserId: facultyUserId || '',
-    facultyName: facultyName || 'Faculty Member',
+    facultyName: facultyName || (isOffice ? 'Office Staff' : 'Faculty Member'),
     department: cleanDepartment,
     date: selectedDate,
     leaveTime: finalLeaveTime,
@@ -932,20 +937,23 @@ export const applyFacultyLeave = async ({
     purpose: purpose.trim(),
     reason: purpose.trim(),
     destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : type === 'FACULTY_OD' ? 'On Duty (OD)' : '1-Hour Permission',
-    rollNumber: facultyUserId || 'FACULTY',
-    studentName: facultyName || 'Faculty Member',
+    rollNumber: facultyUserId || (isOffice ? 'OFFICE' : 'FACULTY'),
+    studentName: facultyName || (isOffice ? 'Office Staff' : 'Faculty Member'),
     section: cleanDepartment,
     appliedAt: now.toISOString(),
     appliedDate: now.toLocaleDateString('en-GB'),
     appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     
-    // Status Flow: Faculty submitted -> Goes directly to HOD
-    status: 'FORWARDED_TO_HOD',
+    // Status Flow: 
+    // If Office staff: Goes directly to AO login (FORWARDED_TO_AO)
+    // If Faculty / Non-Teaching: Goes to HOD (FORWARDED_TO_HOD)
+    status: isOffice ? 'FORWARDED_TO_AO' : 'FORWARDED_TO_HOD',
     pendingReturn: false,
     returned: false,
     closed: false,
     inTime: null,
     hodAction: null,
+    aoAction: null,
     watchmanAction: null
   };
 
@@ -1081,6 +1089,116 @@ export const applyHodLeave = async ({
     }
   } catch (e) {
     console.warn('Network sync note on HOD leave submit:', e);
+  }
+
+  return newTicket;
+};
+
+// Office Staff applies for Leave / Permission (One Hour, 4:00 PM, or OD Permission)
+// Routes directly to AO (Administrative Officer), who accepts and forwards to Security
+export const applyOfficeLeave = async ({
+  officeUserId,
+  officeName,
+  department = 'Administrative Office',
+  type = 'FACULTY_ONE_HOUR', // 'FACULTY_ONE_HOUR' | 'FACULTY_4PM' | 'FACULTY_OD'
+  date,
+  leaveTime,
+  purpose
+}) => {
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Please specify a valid and proper purpose for your request.');
+  }
+
+  const selectedDate = date || new Date().toISOString().slice(0, 10);
+  const cleanDepartment = (department && department !== 'General') ? department : 'Administrative Office';
+
+  // Quota validation: only regular permissions (1-Hour & 4PM) are capped at 2 per month
+  if (type !== 'FACULTY_OD') {
+    const quota = getFacultyMonthlyLeaveUsage(officeUserId || officeName || 'OFFICE', selectedDate);
+    if (quota.isLimitExceeded) {
+      throw new Error("your limit for leaves has been completed , consult principal.");
+    }
+  }
+
+  let finalLeaveTime = leaveTime;
+  if (type === 'FACULTY_4PM') {
+    finalLeaveTime = '04:00 PM';
+  } else if (type === 'FACULTY_OD') {
+    finalLeaveTime = leaveTime && leaveTime.trim() ? leaveTime.trim() : 'On Duty (Full Day)';
+  } else if (type === 'FACULTY_ONE_HOUR') {
+    if (!leaveTime || !leaveTime.trim()) {
+      throw new Error('Please specify what time you need to be out for the 1-hour permission.');
+    }
+    finalLeaveTime = leaveTime.trim();
+  } else if (!finalLeaveTime || !finalLeaveTime.trim()) {
+    finalLeaveTime = '04:00 PM';
+  }
+
+  const now = new Date();
+  const dateCompact = selectedDate.replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const prefix = type === 'FACULTY_4PM' ? 'NEC-OFF-4PM' : type === 'FACULTY_OD' ? 'NEC-OFF-OD' : 'NEC-OFF-1HR';
+  const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
+
+  const newTicket = {
+    id: ticketId,
+    applicantType: 'OFFICE',
+    facultyType: 'OFFICE',
+    type,
+    permissionType: type,
+    facultyId: officeUserId || 'OFFICE',
+    facultyUserId: officeUserId || 'OFFICE',
+    facultyName: officeName || 'Office Staff Member',
+    department: cleanDepartment,
+    date: selectedDate,
+    leaveTime: finalLeaveTime,
+    outTime: finalLeaveTime,
+    purpose: purpose.trim(),
+    reason: purpose.trim(),
+    destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : type === 'FACULTY_OD' ? 'On Duty (OD)' : '1-Hour Permission',
+    rollNumber: officeUserId || 'OFFICE',
+    studentName: officeName || 'Office Staff Member',
+    section: cleanDepartment,
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    
+    // Status Flow for Office Staff:
+    // 1. FORWARDED_TO_AO: Submitted -> Routes directly to AO login
+    // 2. PERMISSION_GRANTED: AO accepted & forwarded to Security/Watchman
+    status: 'FORWARDED_TO_AO',
+    pendingReturn: false,
+    returned: false,
+    closed: false,
+    inTime: null,
+    hodAction: null,
+    aoAction: null,
+    watchmanAction: null
+  };
+
+  const currentTickets = getAllOutpasses();
+  const updatedLocal = [newTicket, ...currentTickets.filter(t => t.id !== newTicket.id)];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLocal));
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: updatedLocal }));
+
+  try {
+    const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({ tickets: [newTicket] })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
+      }
+    }
+  } catch (e) {
+    console.warn('Network sync note on Office staff leave submit:', e);
   }
 
   return newTicket;
