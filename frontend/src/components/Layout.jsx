@@ -281,14 +281,14 @@ const Layout = ({ children }) => {
         { name: 'Dashboard', shortName: 'Home', path: '/dashboard', icon: LayoutDashboard },
         { name: 'Students', shortName: 'Students', path: '/students', icon: GraduationCap },
         { name: 'Absentees', shortName: 'Absentees', path: '/absentees', icon: AlertCircle },
-        { name: 'Permissions', shortName: 'Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
+        { name: 'Outpass Approvals', shortName: 'Approvals', path: '/outpasses', icon: FileText }
       );
     } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN') {
       items.push(
         { name: 'Dashboard', shortName: 'Home', path: '/dashboard', icon: LayoutDashboard },
         { name: 'Students', shortName: 'Students', path: '/students', icon: GraduationCap },
         { name: 'Absentees', shortName: 'Absentees', path: '/absentees', icon: AlertCircle },
-        { name: 'Permissions', shortName: 'Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
+        { name: 'Outpass Approvals', shortName: 'Approvals', path: '/outpasses', icon: FileText }
       );
     } else if (user?.role === 'FACULTY') {
       let isNonTeaching = user?.facultyType === 'NON_TEACHING';
