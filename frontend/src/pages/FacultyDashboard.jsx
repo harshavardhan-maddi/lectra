@@ -716,16 +716,7 @@ const FacultyDashboard = () => {
 
       {/* Office notice, Non-Teaching notice, HOD notice, or Standard Sub-Nav Tabs */}
       {isOfficeStaff ? (
-        <div className="space-y-3 mb-3 no-print">
-          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-blue-900 dark:text-blue-300 flex items-center justify-between gap-3 text-xs font-bold animate-fade-in">
-            <div className="flex items-center gap-2.5">
-              <Building2 size={18} className="text-blue-600 shrink-0" />
-              <span>Office Staff Portal • Classroom Attendance & Student Mentorship are disabled. Leaves & permissions applied here route directly to Administrative Officer (AO) for approval and forward to Security for gate clearance.</span>
-            </div>
-            <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-800 dark:text-blue-200 text-[10px] font-black uppercase tracking-wider shrink-0 border border-blue-500/30">
-              Office Staff
-            </span>
-          </div>
+        <div className="mb-3 no-print">
           <div className="flex items-center gap-2 pb-2">
             <button
               type="button"
