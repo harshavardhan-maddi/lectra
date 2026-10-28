@@ -342,7 +342,8 @@ const Layout = ({ children }) => {
       items.push(
         { name: 'Section', shortName: 'Section', path: '/absent-controller', icon: Users },
         { name: 'All Sections', shortName: 'All', path: '/absent-controller?tab=allSections', icon: AlertCircle },
-        { name: 'Outpasses', shortName: 'Outpasses', path: '/absent-controller?tab=outpassRequests', icon: FileText }
+        { name: 'Outpass Requests', shortName: 'Outpasses', path: '/absent-controller?tab=outpassRequests', icon: FileText },
+        { name: 'Attendance Reports', shortName: 'Reports', path: '/reports', icon: FileSpreadsheet }
       );
     }
     return items;

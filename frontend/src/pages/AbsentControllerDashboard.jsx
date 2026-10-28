@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   Users, 
@@ -23,7 +23,8 @@ import {
   UserPlus,
   Edit,
   Plus,
-  Save
+  Save,
+  FileSpreadsheet
 } from 'lucide-react';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
@@ -604,11 +605,65 @@ const AbsentControllerDashboard = () => {
         )}
       </div>
 
-      {/* Real-time Alert Banner for Incoming Outpasses */}
-      {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
-        <div 
+      {/* Absent Controller Modules Switcher Tabs */}
+      <div className="flex items-center gap-2 pb-1 overflow-x-auto sm:flex-wrap no-print -mx-1 px-1">
+        <button
+          type="button"
+          onClick={() => setActiveBoardTab('sectionWise')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+            activeBoardTab === 'sectionWise'
+              ? 'bg-primary text-white shadow-md shadow-primary/20'
+              : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
+          }`}
+        >
+          <Users size={15} />
+          <span>Section Absentees</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveBoardTab('allSections')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+            activeBoardTab === 'allSections'
+              ? 'bg-primary text-white shadow-md shadow-primary/20'
+              : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
+          }`}
+        >
+          <AlertCircle size={15} />
+          <span>All Absentees</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveBoardTab('outpassRequests')}
-          className="p-4 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:bg-amber-500/25 transition-all no-print shadow-md"
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 relative cursor-pointer ${
+            activeBoardTab === 'outpassRequests'
+              ? 'bg-primary text-white shadow-md shadow-primary/20'
+              : 'bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50'
+          }`}
+        >
+          <FileText size={15} />
+          <span>Outpass Requests</span>
+          {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-black animate-pulse">
+              {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length}
+            </span>
+          )}
+        </button>
+
+        <Link
+          to="/reports"
+          className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 bg-white/60 dark:bg-slate-800/60 text-customText-muted hover:text-customText border border-slate-200/50 dark:border-slate-800/50 cursor-pointer"
+        >
+          <FileSpreadsheet size={15} />
+          <span>Reports</span>
+        </Link>
+      </div>
+
+      {/* Real-time Alert Banner for Incoming Outpasses - Visible ONLY in Outpasses module */}
+      {activeBoardTab === 'outpassRequests' && outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
+        <div 
+          className="p-4 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 no-print shadow-md"
         >
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 rounded-xl bg-amber-500 text-white font-black text-xs animate-bounce">
@@ -619,16 +674,10 @@ const AbsentControllerDashboard = () => {
                 🔔 {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length} Student Outpass Request(s) Awaiting Parent Call!
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                Student submitted outpass on campus. Click here to verify parent phone & forward to HOD.
+                Student submitted outpass on campus. Review and call parent to confirm and forward to HOD.
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shadow-md shadow-amber-600/20 shrink-0"
-          >
-            Review & Call Parent →
-          </button>
         </div>
       )}
 
@@ -726,35 +775,8 @@ const AbsentControllerDashboard = () => {
             </select>
           </div>
 
-          {/* Download Report Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => handleDownloadReport(sessionFilter)}
-              className="flex items-center gap-1.5 py-2 px-3 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-[0.98] transition-all"
-              title="Download Daily Absentees Excel"
-            >
-              <span>Excel Absentees</span>
-              <span className="text-[10px] bg-emerald-800/40 px-1 py-0.5 rounded uppercase">
-                {sessionFilter}
-              </span>
-            </button>
-
-            <button
-              onClick={() => handleDownloadMonthlyReport('excel')}
-              className="flex items-center gap-1.5 py-2 px-3 rounded-xl text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 active:scale-[0.98] transition-all"
-              title="Download Section Monthly Attendance Excel"
-            >
-              <span>Monthly Excel</span>
-            </button>
-
-            <button
-              onClick={() => handleDownloadMonthlyReport('pdf')}
-              className="flex items-center gap-1.5 py-2 px-3 rounded-xl text-xs font-extrabold bg-slate-800 hover:bg-slate-900 text-white shadow-md active:scale-[0.98] transition-all"
-              title="Download Section Monthly Attendance PDF"
-            >
-              <span>Monthly PDF</span>
-            </button>
-
+          {/* Add Student Button (available in Section view) */}
+          {activeBoardTab === 'sectionWise' && (
             <button
               type="button"
               onClick={() => {
@@ -767,13 +789,13 @@ const AbsentControllerDashboard = () => {
                 setStudentSubmitSuccess('');
                 setShowAddStudentModal(true);
               }}
-              className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-black bg-primary hover:bg-primary-dark text-white shadow-md shadow-primary/20 active:scale-[0.98] transition-all cursor-pointer"
+              className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-black bg-primary hover:bg-primary-dark text-white shadow-md shadow-primary/20 active:scale-[0.98] transition-all cursor-pointer shrink-0"
               title="Add a new student to this section"
             >
               <UserPlus size={14} />
               <span>Add Student</span>
             </button>
-          </div>
+          )}
 
         </div>
       </div>
