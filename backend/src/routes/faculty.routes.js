@@ -8,15 +8,15 @@ const roleMiddleware = require('../middleware/role.middleware');
 router.use(authMiddleware);
 
 // GET /api/faculty
-router.get('/', roleMiddleware(['HOD', 'SUB_ADMIN']), getAllFaculty);
+router.get('/', roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN', 'AO']), getAllFaculty);
 
 // POST /api/faculty
-router.post('/', roleMiddleware(['HOD', 'SUB_ADMIN']), upsertFaculty);
+router.post('/', roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN', 'AO']), upsertFaculty);
 
 // POST /api/faculty/bulk
-router.post('/bulk', roleMiddleware(['HOD', 'SUB_ADMIN']), bulkUpsertFaculty);
+router.post('/bulk', roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN', 'AO']), bulkUpsertFaculty);
 
 // DELETE /api/faculty/:id
-router.delete('/:id', roleMiddleware(['HOD', 'SUB_ADMIN']), deleteFaculty);
+router.delete('/:id', roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN', 'AO']), deleteFaculty);
 
 module.exports = router;

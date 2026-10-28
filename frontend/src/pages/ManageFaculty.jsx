@@ -5,12 +5,15 @@ import { Search, Edit, UploadCloud, Users, Phone, Loader, Plus, X, Trash2, KeyRo
 const ManageFaculty = () => {
   const { token, user, registerUser } = useAuth();
   const isHOD = user?.role === 'HOD';
-  const defaultDept = user?.department || 'Department of CSE(emerging Technologies)';
+  const isAO = user?.role === 'AO';
+  const defaultDept = isAO 
+    ? (user?.department || 'Administrative Office') 
+    : (user?.department || 'Department of CSE(emerging Technologies)');
 
   const [faculty, setFaculty] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' or 'missing'
+  const [activeTab, setActiveTab] = useState(isAO ? 'office' : 'all'); // 'all', 'teaching', 'non_teaching', 'office', 'missing'
   
   // Single edit state
   const [editingFaculty, setEditingFaculty] = useState(null);
@@ -19,6 +22,7 @@ const ManageFaculty = () => {
 
   // Departments list state
   const [departmentsList, setDepartmentsList] = useState([
+    'Administrative Office',
     'Department of CSE(emerging Technologies)',
     'Department of Computer Science and Engineering',
     'Department of Information Technology',
@@ -36,8 +40,8 @@ const ManageFaculty = () => {
   const [newEmpId, setNewEmpId] = useState('');
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [newDesignation, setNewDesignation] = useState('Assistant Professor');
-  const [newFacultyType, setNewFacultyType] = useState('TEACHING'); // 'TEACHING' | 'NON_TEACHING' | 'OFFICE'
+  const [newDesignation, setNewDesignation] = useState(isAO ? 'Senior Assistant' : 'Assistant Professor');
+  const [newFacultyType, setNewFacultyType] = useState(isAO ? 'OFFICE' : 'TEACHING'); // 'TEACHING' | 'NON_TEACHING' | 'OFFICE'
   const [newDepartment, setNewDepartment] = useState(defaultDept);
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
@@ -100,10 +104,12 @@ const ManageFaculty = () => {
     setAddSuccess('');
 
     try {
-      // In HOD login, department is strictly fixed to HOD's department
+      // In HOD login, department is strictly fixed to HOD's department; in AO login, fixed to Administrative Office
       const assignedDept = isHOD
         ? (user?.department || 'Department of CSE(emerging Technologies)')
-        : (newDepartment || user?.department || 'Department of CSE(emerging Technologies)');
+        : isAO
+          ? (user?.department || 'Administrative Office')
+          : (newDepartment || user?.department || 'Department of CSE(emerging Technologies)');
 
       // 1. Post to backend faculty table
       const res = await fetch('/api/faculty', {
@@ -561,10 +567,12 @@ const ManageFaculty = () => {
         <div>
           <h2 className="text-2xl font-extrabold text-customText dark:text-customText-dark flex items-center gap-2">
             <Users size={24} className="text-primary-dark" />
-            Faculty Contacts Management
+            {isAO ? 'Office Staff & Directory Management' : 'Faculty Contacts Management'}
           </h2>
           <p className="text-xs text-customText-muted dark:text-customText-mutedDark mt-1">
-            Manage faculty phone numbers and batch import contacts or logins via CSV
+            {isAO 
+              ? 'Manage Administrative Office staff members, phone contacts, designations and default logins'
+              : 'Manage faculty phone numbers and batch import contacts or logins via CSV'}
           </p>
         </div>
         
@@ -575,7 +583,7 @@ const ManageFaculty = () => {
             </span>
             <input
               type="text"
-              placeholder="Search faculty..."
+              placeholder={isAO ? "Search office staff..." : "Search faculty..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-white/70 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary text-sm"
@@ -590,7 +598,7 @@ const ManageFaculty = () => {
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow transition-all active:scale-[0.98] cursor-pointer"
           >
             <Plus size={16} />
-            <span className="hidden sm:inline">Add Faculty</span>
+            <span className="hidden sm:inline">{isAO ? 'Add Office Staff' : 'Add Faculty'}</span>
           </button>
           <button
             onClick={() => {

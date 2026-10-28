@@ -8,6 +8,8 @@ const getAllFaculty = async (req, res) => {
       if (req.query.department && req.query.department !== 'ALL') {
         where.department = req.query.department;
       }
+    } else if (req.user && req.user.role === 'AO') {
+      where.department = req.user.department || 'Administrative Office';
     } else if (req.user && req.user.role !== 'WATCHMAN') {
       where.department = req.user.department || 'Department of CSE(emerging Technologies)';
     }
@@ -33,7 +35,9 @@ const upsertFaculty = async (req, res) => {
 
   const assignedDept = (req.user && req.user.role === 'SUPER_ADMIN' && department)
     ? department.trim()
-    : ((req.user && req.user.department) || 'Department of CSE(emerging Technologies)');
+    : ((req.user && req.user.role === 'AO')
+      ? (req.user.department || 'Administrative Office')
+      : ((req.user && req.user.department) || 'Department of CSE(emerging Technologies)'));
 
   try {
     const faculty = await prisma.faculty.upsert({
@@ -59,7 +63,9 @@ const bulkUpsertFaculty = async (req, res) => {
 
   const assignedDept = (req.user && req.user.role === 'SUPER_ADMIN' && department)
     ? department.trim()
-    : ((req.user && req.user.department) || 'Department of CSE(emerging Technologies)');
+    : ((req.user && req.user.role === 'AO')
+      ? (req.user.department || 'Administrative Office')
+      : ((req.user && req.user.department) || 'Department of CSE(emerging Technologies)'));
 
   try {
     const results = [];
@@ -99,6 +105,10 @@ const deleteFaculty = async (req, res) => {
 
     if (!faculty) {
       return res.status(404).json({ message: 'Faculty not found' });
+    }
+
+    if (req.user.role !== 'SUPER_ADMIN' && faculty.department !== req.user.department && !(req.user.role === 'AO' && (faculty.department === 'Administrative Office' || !faculty.department))) {
+      return res.status(403).json({ message: 'You can only delete faculty within your own department' });
     }
 
     await prisma.faculty.delete({

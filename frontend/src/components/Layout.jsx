@@ -267,6 +267,7 @@ const Layout = ({ children }) => {
     navLinks.push(
       { name: 'AO Portal', path: '/ao-dashboard', icon: ShieldCheck },
       { name: 'Pending Leaves', path: '/ao-dashboard?tab=PENDING', icon: Clock },
+      { name: 'Office Staff Directory', path: '/ao-dashboard?tab=staff', icon: Users },
       { name: 'Security Cleared', path: '/ao-dashboard?tab=GRANTED', icon: DoorOpen }
     );
   } else if (user?.role === 'OFFICE') {
@@ -336,6 +337,7 @@ const Layout = ({ children }) => {
       items.push(
         { name: 'AO Portal', shortName: 'Portal', path: '/ao-dashboard', icon: ShieldCheck },
         { name: 'Pending Leaves', shortName: 'Pending', path: '/ao-dashboard?tab=PENDING', icon: Clock },
+        { name: 'Office Staff', shortName: 'Staff', path: '/ao-dashboard?tab=staff', icon: Users },
         { name: 'Security Cleared', shortName: 'Cleared', path: '/ao-dashboard?tab=GRANTED', icon: DoorOpen }
       );
     } else if (user?.role === 'OFFICE') {

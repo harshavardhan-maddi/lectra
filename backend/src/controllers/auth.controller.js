@@ -170,6 +170,11 @@ const register = async (req, res) => {
     return res.status(403).json({ message: 'You do not have permission to register this role' });
   }
 
+  // AO can only register Office Staff
+  if (req.user.role === 'AO' && role !== 'FACULTY') {
+    return res.status(403).json({ message: 'Administrative Officer can only register Office Staff members' });
+  }
+
   // Determine user department based on creator authority
   let userDepartment = null;
   if (role === 'WATCHMAN' || role === 'SECURITY_HEAD') {
@@ -193,6 +198,9 @@ const register = async (req, res) => {
         }
       } catch (e) {}
     }
+  } else if (req.user.role === 'AO') {
+    // AO can register office staff assigned to Administrative Office
+    userDepartment = department && department.trim() ? department.trim() : (req.user.department || 'Administrative Office');
   } else {
     // HOD or Sub-Admin can ONLY create users bound to their own department
     userDepartment = req.user.department || 'Department of CSE(emerging Technologies)';
@@ -304,8 +312,10 @@ const deleteUser = async (req, res) => {
       return res.status(403).json({ message: 'Only a Super Admin can delete HOD or Super Admin accounts' });
     }
 
-    // Protection: HOD can only delete users in their own department
-    if (req.user.role !== 'SUPER_ADMIN' && user.department !== req.user.department) {
+    // Protection: HOD / AO can only delete users in their own department
+    const isAO = req.user.role === 'AO';
+    const isAoStaff = isAO && (user.department === 'Administrative Office' || !user.department);
+    if (req.user.role !== 'SUPER_ADMIN' && user.department !== req.user.department && !isAoStaff) {
       return res.status(403).json({ message: 'You can only manage users within your own department' });
     }
 
@@ -355,8 +365,10 @@ const updateUser = async (req, res) => {
       return res.status(403).json({ message: 'Only a Super Admin can modify other HOD or Super Admin accounts' });
     }
 
-    // Protection: HOD can only modify users in their own department
-    if (req.user.role !== 'SUPER_ADMIN' && existingUser.department !== req.user.department) {
+    // Protection: HOD / AO can only modify users in their own department
+    const isUserAO = req.user.role === 'AO';
+    const isTargetAoStaff = isUserAO && (existingUser.department === 'Administrative Office' || !existingUser.department);
+    if (req.user.role !== 'SUPER_ADMIN' && existingUser.department !== req.user.department && !isTargetAoStaff) {
       return res.status(403).json({ message: 'You can only manage users within your own department' });
     }
 
@@ -408,6 +420,8 @@ const getUsers = async (req, res) => {
       if (req.query.department && req.query.department !== 'ALL') {
         where.department = req.query.department;
       }
+    } else if (req.user.role === 'AO') {
+      where.department = req.user.department || 'Administrative Office';
     } else {
       // HOD and Sub-Admins only see users in their own department
       where.department = req.user.department || 'Department of CSE(emerging Technologies)';

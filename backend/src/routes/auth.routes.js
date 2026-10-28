@@ -29,10 +29,10 @@ router.post('/fingerprint/register-verify', authMiddleware, roleMiddleware(['HOD
 router.post('/fingerprint/remove', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN']), removeFingerprint);
 router.put('/fingerprint/toggle', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'SUPER_ADMIN']), toggleFingerprint);
 
-// Management operations (HOD & Super Admin)
-router.post('/register', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), register);
-router.put('/users/:id', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), updateUser);
-router.delete('/users/:id', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), deleteUser);
-router.get('/users', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN']), getUsers);
+// Management operations (HOD, Super Admin & AO)
+router.post('/register', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN', 'AO']), register);
+router.put('/users/:id', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN', 'AO']), updateUser);
+router.delete('/users/:id', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN', 'AO']), deleteUser);
+router.get('/users', authMiddleware, roleMiddleware(['HOD', 'SUPER_ADMIN', 'AO']), getUsers);
 
 module.exports = router;
