@@ -489,13 +489,14 @@ const Login = () => {
   };
 
   // Check live application status and view student leave + certificate history
-  const handleCheckApplicationStatus = async (e) => {
+  const handleCheckApplicationStatus = async (e, rollOverride) => {
     if (e && e.preventDefault) e.preventDefault();
-    const clean = statusRollInput.trim().toUpperCase();
+    const clean = (rollOverride || statusRollInput).trim().toUpperCase();
     if (!clean) {
       setStatusError('Please enter your College Roll Number to check status.');
       return;
     }
+    if (rollOverride) setStatusRollInput(clean);
     setStatusError('');
     setIsSearchingStatus(true);
     try {
@@ -621,59 +622,96 @@ const Login = () => {
         </header>
 
         {/* 3. Main Body: Switch between Landing Box and Staff Login Card */}
-        <main className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 pb-12 sm:pb-8 z-10 w-full max-w-4xl mx-auto my-auto">
+        <main className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 pb-20 sm:pb-8 z-10 w-full max-w-4xl mx-auto my-auto">
           
           {viewMode === 'landing' ? (
-            <div className="w-full max-w-2xl space-y-5 sm:space-y-6 flex flex-col items-center">
+            <div className="w-full max-w-3xl space-y-4 sm:space-y-5 flex flex-col items-center animate-fade-in">
               
-              {/* DIRECT APPLY LEAVE / REQUEST CERTIFICATE BOX ON LANDING PAGE */}
-              <div className="w-full bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-8 animate-fade-in space-y-5 sm:space-y-6 my-auto relative">
-              
-              {/* Service Tab Switcher: 3 Modules - Leave Application, Out of Block Movement, and Certificates */}
-              <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/60 gap-1 overflow-x-auto">
+              {/* Modules Switcher Tabs (Absent Controller / HOD Style) */}
+              <div className="w-full flex items-center gap-2 pb-1 overflow-x-auto sm:flex-wrap no-scrollbar -mx-1 px-1">
                 <button
                   type="button"
                   onClick={() => setStudentServiceTab('outpass')}
-                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                  className={`px-3.5 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     studentServiceTab === 'outpass'
-                      ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
-                      : 'text-customText-muted hover:text-customText'
+                      ? 'bg-primary text-white shadow-md shadow-primary/20 scale-[1.02]'
+                      : 'bg-white/80 dark:bg-slate-800/80 text-customText-muted hover:text-customText border border-slate-200/80 dark:border-slate-800/80'
                   }`}
                 >
                   <FileText size={16} />
                   <span>Leave Application</span>
+                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                    studentServiceTab === 'outpass' 
+                      ? 'bg-white/20 text-white' 
+                      : 'bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400'
+                  }`}>
+                    Gate Pass
+                  </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setStudentServiceTab('block')}
-                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                  className={`px-3.5 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     studentServiceTab === 'block'
-                      ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
-                      : 'text-customText-muted hover:text-customText'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 scale-[1.02]'
+                      : 'bg-white/80 dark:bg-slate-800/80 text-customText-muted hover:text-customText border border-slate-200/80 dark:border-slate-800/80'
                   }`}
                 >
                   <Building2 size={16} />
                   <span>Out of Block</span>
-                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                    studentServiceTab === 'block' 
+                      ? 'bg-white/20 text-white' 
+                      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                  }`}>
                     HOD
                   </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setStudentServiceTab('certificate')}
-                  className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                  className={`px-3.5 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     studentServiceTab === 'certificate'
-                      ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
-                      : 'text-customText-muted hover:text-customText'
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 scale-[1.02]'
+                      : 'bg-white/80 dark:bg-slate-800/80 text-customText-muted hover:text-customText border border-slate-200/80 dark:border-slate-800/80'
                   }`}
                 >
                   <Award size={16} />
                   <span>Certificates</span>
-                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                    studentServiceTab === 'certificate' 
+                      ? 'bg-white/20 text-white' 
+                      : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                  }`}>
                     Office
                   </span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStudentServiceTab('status')}
+                  className={`px-3.5 py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                    studentServiceTab === 'status'
+                      ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20 scale-[1.02]'
+                      : 'bg-white/80 dark:bg-slate-800/80 text-customText-muted hover:text-customText border border-slate-200/80 dark:border-slate-800/80'
+                  }`}
+                >
+                  <Search size={16} />
+                  <span>Track Status</span>
+                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                    studentServiceTab === 'status' 
+                      ? 'bg-white/20 text-white' 
+                      : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                  }`}>
+                    Live
+                  </span>
+                </button>
               </div>
+
+              {/* ACTIVE MODULE CONTAINER CARD (Absent Controller / HOD Style) */}
+              <div className="w-full bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 p-4 sm:p-8 animate-fade-in space-y-5 sm:space-y-6 relative">
 
               {studentServiceTab === 'outpass' ? (
                 <>
@@ -955,10 +993,22 @@ const Login = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={handleResetApplication}
-                          className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
+                          onClick={() => {
+                            setStudentServiceTab('status');
+                            setStatusRollInput(submittedTicket.rollNumber);
+                            handleCheckApplicationStatus(null, submittedTicket.rollNumber);
+                          }}
+                          className="btn-secondary py-3 px-4 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          Apply Another Leave
+                          <Search size={14} />
+                          <span>Track Live Status</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetApplication}
+                          className="btn-secondary py-3 px-4 text-xs font-bold cursor-pointer"
+                        >
+                          Apply Another
                         </button>
                       </div>
                     </div>
@@ -1300,16 +1350,28 @@ const Login = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={handleResetBlockApplication}
-                          className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
+                          onClick={() => {
+                            setStudentServiceTab('status');
+                            setStatusRollInput(submittedBlockTicket.rollNumber);
+                            handleCheckApplicationStatus(null, submittedBlockTicket.rollNumber);
+                          }}
+                          className="btn-secondary py-3 px-4 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          Apply Another Permission
+                          <Search size={14} />
+                          <span>Track Live Status</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetBlockApplication}
+                          className="btn-secondary py-3 px-4 text-xs font-bold cursor-pointer"
+                        >
+                          Apply Another
                         </button>
                       </div>
                     </div>
                   )}
                 </>
-              ) : (
+              ) : studentServiceTab === 'certificate' ? (
                 <>
                   {/* Certificate Request Header */}
                   <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
@@ -1568,11 +1630,23 @@ const Login = () => {
                         </div>
                       </div>
 
-                      <div className="pt-2">
+                      <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStudentServiceTab('status');
+                            setStatusRollInput(submittedCert.rollNumber);
+                            handleCheckApplicationStatus(null, submittedCert.rollNumber);
+                          }}
+                          className="btn-primary flex-1 py-3 text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                        >
+                          <Search size={16} />
+                          <span>Track Certificate Status</span>
+                        </button>
                         <button
                           type="button"
                           onClick={handleResetCertApplication}
-                          className="btn-secondary py-3 px-6 text-xs font-bold cursor-pointer"
+                          className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
                         >
                           Request Another Certificate
                         </button>
@@ -1580,27 +1654,24 @@ const Login = () => {
                     </div>
                   )}
                 </>
-              )}
-
-            </div>
-
-            {/* 2. VIEW APPLICATION STATUS & LEAVE HISTORY CARD */}
-            <div className="w-full bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 animate-fade-in space-y-5 relative">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-sm">
-                    <Search size={20} />
+              ) : (
+                <>
+                  {/* Status & Leave History Module Header (Absent Controller / HOD Style) */}
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shadow-sm">
+                        <Search size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-black text-customText dark:text-customText-dark tracking-tight">
+                          Track Status & Leave History
+                        </h2>
+                        <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
+                          Enter your college roll number to track live outpass, block permission, or certificate requests.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-black text-customText dark:text-customText-dark tracking-tight">
-                      View Your Application Status & Leave History
-                    </h3>
-                    <p className="text-xs text-customText-muted">
-                      Enter your roll number to track today's live outpass or download your official pass slip.
-                    </p>
-                  </div>
-                </div>
-              </div>
 
               {/* Input Form */}
               <form onSubmit={handleCheckApplicationStatus} className="flex flex-col sm:flex-row gap-2.5">
@@ -1887,6 +1958,8 @@ const Login = () => {
                   )}
                 </div>
               )}
+                </>
+              )}
             </div>
 
           </div>
@@ -2022,12 +2095,115 @@ const Login = () => {
 
         </main>
 
-        {/* 4. Footer (Removed "NEC Narasaraopet Lectra Outpass System") */}
-        <footer className="w-full text-center py-4 border-t border-slate-200/40 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm z-10">
+        {/* 4. Footer */}
+        <footer className="w-full text-center py-4 pb-16 sm:pb-4 border-t border-slate-200/40 dark:border-slate-800/40 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm z-10">
           <p className="text-xs text-customText-muted dark:text-customText-mutedDark font-medium">
             © {new Date().getFullYear()} Narasaraopeta Engineering College (Autonomous)
           </p>
         </footer>
+
+        {/* NATIVE MOBILE APP BOTTOM NAVIGATION BAR (DOCK) FOR STUDENT PORTAL (Absent Controller / HOD Style) */}
+        {viewMode === 'landing' && (
+          <nav 
+            className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] pb-safe transition-all duration-300 print:hidden"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+          >
+            <div className="h-14 flex items-center justify-around px-1">
+              <button
+                type="button"
+                onClick={() => setStudentServiceTab('outpass')}
+                className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all active:scale-90 relative cursor-pointer ${
+                  studentServiceTab === 'outpass'
+                    ? 'text-primary font-bold'
+                    : 'text-customText-muted dark:text-customText-mutedDark hover:text-customText'
+                }`}
+              >
+                <div className="relative">
+                  <FileText size={19} className={studentServiceTab === 'outpass' ? 'scale-110 transition-transform' : ''} />
+                  {studentServiceTab === 'outpass' && (
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary shadow-xs" />
+                  )}
+                </div>
+                <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[64px]">
+                  Leave Pass
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStudentServiceTab('block')}
+                className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all active:scale-90 relative cursor-pointer ${
+                  studentServiceTab === 'block'
+                    ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                    : 'text-customText-muted dark:text-customText-mutedDark hover:text-customText'
+                }`}
+              >
+                <div className="relative">
+                  <Building2 size={19} className={studentServiceTab === 'block' ? 'scale-110 transition-transform' : ''} />
+                  {studentServiceTab === 'block' && (
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-600 shadow-xs" />
+                  )}
+                </div>
+                <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[64px]">
+                  Out of Block
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStudentServiceTab('certificate')}
+                className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all active:scale-90 relative cursor-pointer ${
+                  studentServiceTab === 'certificate'
+                    ? 'text-blue-600 dark:text-blue-400 font-bold'
+                    : 'text-customText-muted dark:text-customText-mutedDark hover:text-customText'
+                }`}
+              >
+                <div className="relative">
+                  <Award size={19} className={studentServiceTab === 'certificate' ? 'scale-110 transition-transform' : ''} />
+                  {studentServiceTab === 'certificate' && (
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-blue-600 shadow-xs" />
+                  )}
+                </div>
+                <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[64px]">
+                  Certificates
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStudentServiceTab('status')}
+                className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all active:scale-90 relative cursor-pointer ${
+                  studentServiceTab === 'status'
+                    ? 'text-purple-600 dark:text-purple-400 font-bold'
+                    : 'text-customText-muted dark:text-customText-mutedDark hover:text-customText'
+                }`}
+              >
+                <div className="relative">
+                  <Search size={19} className={studentServiceTab === 'status' ? 'scale-110 transition-transform' : ''} />
+                  {studentServiceTab === 'status' && (
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-purple-600 shadow-xs" />
+                  )}
+                </div>
+                <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[64px]">
+                  Status
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('login')}
+                className="flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all active:scale-90 relative cursor-pointer text-customText-muted dark:text-customText-mutedDark hover:text-primary"
+              >
+                <div className="relative">
+                  <LogIn size={19} />
+                </div>
+                <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[64px]">
+                  Staff Login
+                </span>
+              </button>
+            </div>
+          </nav>
+        )}
 
       </div>
 
