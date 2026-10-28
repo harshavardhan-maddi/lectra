@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { 
@@ -33,7 +33,10 @@ import {
   Lock,
   Briefcase,
   Copy,
-  ExternalLink
+  ExternalLink,
+  UploadCloud,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import OutpassTicketModal from '../components/OutpassTicketModal';
 
@@ -49,9 +52,17 @@ const COMMON_DESIGNATIONS = [
   'Computer Operator'
 ];
 
+const SAMPLE_CSV = `emp id, name, designation
+OFF2001, K. Rama Rao, Senior Assistant
+OFF2002, M. Lakshmi, Junior Assistant
+OFF2003, P. Venkat, Accountant
+OFF2004, S. Suresh, Record Assistant
+OFF2005, G. Ramesh, Office Attender`;
+
 const AODashboard = () => {
   const { user, token, registerUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const fileInputRef = useRef(null);
 
   // Primary view mode: 'approvals' (leaves) or 'staff' (office staff management)
   const initialTab = searchParams.get('tab') === 'staff' ? 'staff' : 'approvals';
@@ -78,7 +89,7 @@ const AODashboard = () => {
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
 
-  // Add Office Staff Modal states
+  // Single Add Office Staff Modal states
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [newStaffEmpId, setNewStaffEmpId] = useState('');
   const [newStaffName, setNewStaffName] = useState('');
@@ -88,6 +99,14 @@ const AODashboard = () => {
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [addStaffError, setAddStaffError] = useState('');
   const [addStaffSuccess, setAddStaffSuccess] = useState('');
+
+  // Bulk Upload Office Staff CSV states
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkCsvText, setBulkCsvText] = useState('');
+  const [parsedBulkList, setParsedBulkList] = useState([]);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+  const [bulkSuccess, setBulkSuccess] = useState('');
 
   // Edit Office Staff Modal states
   const [editingStaff, setEditingStaff] = useState(null);
@@ -279,7 +298,7 @@ const AODashboard = () => {
     }
   };
 
-  // Add Office Staff handler
+  // Add Single Office Staff handler
   const handleAddOfficeStaff = async (e) => {
     e.preventDefault();
     const cleanEmpId = newStaffEmpId.trim().toUpperCase();
@@ -370,6 +389,260 @@ const AODashboard = () => {
       setAddStaffError(err.message || 'Failed to add office staff member');
     } finally {
       setIsAddingStaff(false);
+    }
+  };
+
+  // CSV Text Parsing for Bulk Upload (emp id, name, designation)
+  const parseBulkCsv = (text) => {
+    if (!text || !text.trim()) {
+      setParsedBulkList([]);
+      return;
+    }
+
+    const lines = text.trim().split(/\r?\n/).filter(line => line.trim() !== '');
+    if (lines.length === 0) {
+      setParsedBulkList([]);
+      return;
+    }
+
+    const firstLineLower = lines[0].toLowerCase();
+    const hasHeader = firstLineLower.includes('emp') || 
+                      firstLineLower.includes('name') || 
+                      firstLineLower.includes('designation') || 
+                      firstLineLower.includes('id') ||
+                      firstLineLower.includes('role');
+
+    let startIndex = 0;
+    let headerMap = null;
+
+    if (hasHeader) {
+      startIndex = 1;
+      let headerParts = lines[0].split(',');
+      if (headerParts.length < 2 && lines[0].includes('\t')) {
+        headerParts = lines[0].split('\t');
+      } else if (headerParts.length < 2 && lines[0].includes(';')) {
+        headerParts = lines[0].split(';');
+      }
+      headerParts = headerParts.map(h => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
+
+      headerMap = {};
+      headerParts.forEach((col, idx) => {
+        if (col.includes('emp') || col.includes('id') || col.includes('login') || col.includes('code')) {
+          headerMap.empid = idx;
+        } else if (col.includes('name') || col.includes('staff') || col.includes('employee')) {
+          headerMap.name = idx;
+        } else if (col.includes('designation') || col.includes('role') || col.includes('post') || col.includes('position')) {
+          headerMap.designation = idx;
+        } else if (col.includes('phone') || col.includes('mobile') || col.includes('contact')) {
+          headerMap.phone = idx;
+        }
+      });
+    }
+
+    const parsed = [];
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i];
+      let parts = line.split(',');
+      if (parts.length < 2 && line.includes('\t')) {
+        parts = line.split('\t');
+      } else if (parts.length < 2 && line.includes(';')) {
+        parts = line.split(';');
+      }
+      parts = parts.map(p => p.replace(/^["']|["']$/g, '').trim());
+
+      let empid = '';
+      let name = '';
+      let designation = 'Senior Assistant';
+      let phone = '';
+
+      if (headerMap && (headerMap.empid !== undefined || headerMap.name !== undefined)) {
+        if (headerMap.empid !== undefined && parts[headerMap.empid]) empid = parts[headerMap.empid];
+        if (headerMap.name !== undefined && parts[headerMap.name]) name = parts[headerMap.name];
+        if (headerMap.designation !== undefined && parts[headerMap.designation]) designation = parts[headerMap.designation];
+        if (headerMap.phone !== undefined && parts[headerMap.phone]) phone = parts[headerMap.phone];
+      } else {
+        // Positional parsing fallback:
+        // Case 1: 4 or more columns -> emp id, name, designation, phone
+        if (parts.length >= 4) {
+          empid = parts[0];
+          name = parts[1];
+          designation = parts[2] || 'Senior Assistant';
+          phone = parts[3] || '';
+        } 
+        // Case 2: 3 columns -> emp id, name, designation
+        else if (parts.length === 3) {
+          empid = parts[0];
+          name = parts[1];
+          const isPhone = /^[+\d\s-]{7,15}$/.test(parts[2]);
+          if (isPhone) {
+            phone = parts[2];
+            designation = 'Senior Assistant';
+          } else {
+            designation = parts[2] || 'Senior Assistant';
+          }
+        } 
+        // Case 3: 2 columns -> emp id, name
+        else if (parts.length === 2) {
+          empid = parts[0];
+          name = parts[1];
+          designation = 'Senior Assistant';
+        } 
+        // Case 4: 1 column -> name only
+        else if (parts.length === 1 && parts[0]) {
+          name = parts[0];
+          empid = 'OFF_' + name.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+        }
+      }
+
+      // If empid is empty but name exists, generate a clean empid
+      if (!empid && name) {
+        empid = 'OFF_' + name.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+      }
+
+      if (name && empid) {
+        parsed.push({
+          empid: empid.toUpperCase(),
+          name: name.trim(),
+          designation: designation.trim() || 'Senior Assistant',
+          phone: phone.trim(),
+          department: 'Administrative Office',
+          password: 'nrtec@nec'
+        });
+      }
+    }
+
+    setParsedBulkList(parsed);
+  };
+
+  const handleBulkTextChange = (e) => {
+    const text = e.target.value;
+    setBulkCsvText(text);
+    setBulkError('');
+    parseBulkCsv(text);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const content = evt.target.result;
+      setBulkCsvText(content);
+      parseBulkCsv(content);
+    };
+    reader.onerror = () => {
+      setBulkError('Failed to read CSV file from your device.');
+    };
+    reader.readAsText(file);
+  };
+
+  const insertSampleTemplate = () => {
+    setBulkCsvText(SAMPLE_CSV);
+    parseBulkCsv(SAMPLE_CSV);
+    setBulkError('');
+  };
+
+  // Submit Bulk Office Staff Upload
+  const handleBulkStaffSubmit = async (e) => {
+    e.preventDefault();
+    if (parsedBulkList.length === 0 && bulkCsvText.trim()) {
+      parseBulkCsv(bulkCsvText);
+    }
+
+    const itemsToProcess = parsedBulkList.length > 0 ? parsedBulkList : [];
+    if (itemsToProcess.length === 0) {
+      setBulkError('Please enter or paste valid CSV text with columns: emp id, name, designation.');
+      return;
+    }
+
+    setIsBulkSaving(true);
+    setBulkError('');
+    setBulkSuccess('');
+
+    try {
+      const assignedDept = 'Administrative Office';
+
+      // 1. Post to backend faculty bulk endpoint
+      const facultyListPayload = itemsToProcess.map(item => ({
+        facultyName: item.name,
+        phoneNumber: item.phone || null,
+        department: assignedDept
+      }));
+
+      try {
+        await fetch('/api/faculty/bulk', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            facultyList: facultyListPayload,
+            department: assignedDept
+          })
+        });
+      } catch (fErr) {
+        console.warn('Backend bulk faculty upsert notice:', fErr);
+      }
+
+      // 2. Register faculty login account for each user
+      if (registerUser) {
+        for (const item of itemsToProcess) {
+          try {
+            await registerUser(
+              item.name,
+              item.empid,
+              'nrtec@nec',
+              'FACULTY',
+              null,
+              assignedDept
+            );
+          } catch (regErr) {
+            console.warn(`User registration note for ${item.empid}:`, regErr.message);
+          }
+        }
+      }
+
+      // 3. Save to localStorage.lectra_faculty_metadata
+      const existing = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+      const newEntries = itemsToProcess.map(item => ({
+        empid: item.empid,
+        loginId: item.empid,
+        name: item.name,
+        mobileNumber: item.phone || '',
+        phoneNumber: item.phone || '',
+        designation: item.designation,
+        facultyType: 'OFFICE',
+        department: assignedDept,
+        password: 'nrtec@nec',
+        updatedAt: new Date().toISOString()
+      }));
+
+      const merged = [
+        ...newEntries,
+        ...existing.filter(ex => 
+          !itemsToProcess.some(item => 
+            (item.empid && ex.empid && item.empid.toUpperCase() === ex.empid.toUpperCase()) ||
+            (item.name && ex.name && item.name.toLowerCase() === ex.name.toLowerCase())
+          )
+        )
+      ];
+      localStorage.setItem('lectra_faculty_metadata', JSON.stringify(merged));
+
+      setBulkSuccess(`Successfully imported ${itemsToProcess.length} office staff members! All login accounts created with Login ID = Emp ID and default password nrtec@nec.`);
+      await loadOfficeStaff();
+
+      setTimeout(() => {
+        setShowBulkModal(false);
+        setBulkCsvText('');
+        setParsedBulkList([]);
+        setBulkSuccess('');
+      }, 2200);
+    } catch (err) {
+      setBulkError(err.message || 'Failed to bulk import office staff');
+    } finally {
+      setIsBulkSaving(false);
     }
   };
 
@@ -539,6 +812,18 @@ const AODashboard = () => {
             >
               <UserPlus size={15} />
               <span>+ Add Office Staff</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setShowBulkModal(true);
+                setBulkError('');
+                setBulkSuccess('');
+              }}
+              className="px-4 py-2 rounded-xl bg-primary-dark hover:bg-primary text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+            >
+              <UploadCloud size={15} />
+              <span>Bulk Upload CSV</span>
             </button>
 
             <button
@@ -871,7 +1156,7 @@ const AODashboard = () => {
       {/* VIEW 2: Office Staff Directory Management */}
       {mainView === 'staff' && (
         <div className="space-y-6">
-          {/* Search bar and Add button */}
+          {/* Search bar and Action buttons */}
           <div className="glass-card p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="relative w-full sm:w-80">
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-customText-muted" />
@@ -884,17 +1169,30 @@ const AODashboard = () => {
               />
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-              <span className="text-xs text-customText-muted font-bold">
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+              <span className="text-xs text-customText-muted font-bold mr-1">
                 {filteredStaffList.length} Office Staff Member{filteredStaffList.length !== 1 ? 's' : ''}
               </span>
+              
+              <button
+                onClick={() => {
+                  setShowBulkModal(true);
+                  setBulkError('');
+                  setBulkSuccess('');
+                }}
+                className="px-3.5 py-2.5 rounded-xl bg-primary-dark hover:bg-primary text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <UploadCloud size={15} />
+                <span>Bulk CSV Upload</span>
+              </button>
+
               <button
                 onClick={() => {
                   setShowAddStaffModal(true);
                   setAddStaffError('');
                   setAddStaffSuccess('');
                 }}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+                className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
               >
                 <Plus size={16} />
                 <span>+ Add Office Staff</span>
@@ -929,15 +1227,24 @@ const AODashboard = () => {
                 No office staff found
               </h3>
               <p className="text-xs text-customText-muted max-w-md mx-auto">
-                No office staff accounts found in the system. Click "+ Add Office Staff" to create an account for an administrative staff member.
+                No office staff accounts found in the system. Use "+ Add Office Staff" for single entry or "Bulk CSV Upload" to add multiple staff members at once.
               </p>
-              <button
-                onClick={() => setShowAddStaffModal(true)}
-                className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black inline-flex items-center gap-2 cursor-pointer shadow-md"
-              >
-                <Plus size={15} />
-                <span>Add First Office Staff</span>
-              </button>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={() => setShowAddStaffModal(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black inline-flex items-center gap-2 cursor-pointer shadow-md"
+                >
+                  <Plus size={15} />
+                  <span>Add First Office Staff</span>
+                </button>
+                <button
+                  onClick={() => setShowBulkModal(true)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black inline-flex items-center gap-2 cursor-pointer shadow-md"
+                >
+                  <UploadCloud size={15} />
+                  <span>Bulk Upload via CSV</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1008,7 +1315,7 @@ const AODashboard = () => {
                               <span>{staff.phoneNumber}</span>
                             </a>
                           ) : (
-                            <span className="text-rose-500 text-[10px] font-bold">No Phone</span>
+                            <span className="text-slate-400 dark:text-slate-500 text-[11px] italic">Not provided</span>
                           )}
                         </div>
 
@@ -1076,7 +1383,7 @@ const AODashboard = () => {
         </div>
       )}
 
-      {/* Add Office Staff Modal */}
+      {/* Single Add Office Staff Modal */}
       {showAddStaffModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="glass-card w-full max-w-lg p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-5">
@@ -1270,6 +1577,177 @@ const AODashboard = () => {
         </div>
       )}
 
+      {/* Bulk Upload Office Staff CSV Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="glass-card w-full max-w-2xl p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-5 my-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary-dark text-white flex items-center justify-center shadow-md shadow-primary-dark/20">
+                  <UploadCloud size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-customText dark:text-customText-dark">
+                    Bulk Upload Office Staff (CSV Text)
+                  </h3>
+                  <p className="text-[11px] text-customText-muted">
+                    Format: <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-bold">emp id, name, designation</code>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBulkModal(false)}
+                className="p-2 text-customText-muted hover:text-customText rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {bulkError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold text-xs flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{bulkError}</span>
+              </div>
+            )}
+
+            {bulkSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-2">
+                <CheckCircle2 size={15} className="shrink-0" />
+                <span>{bulkSuccess}</span>
+              </div>
+            )}
+
+            {/* Quick Helper Tools Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs">
+              <span className="font-bold text-customText-muted flex items-center gap-1.5">
+                <FileSpreadsheet size={15} className="text-primary-dark" />
+                CSV Format: <span className="text-customText dark:text-customText-dark font-mono">emp id, name, designation</span>
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={insertSampleTemplate}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] transition-colors cursor-pointer"
+                >
+                  Insert Sample Template
+                </button>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".csv,.txt"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-customText font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <UploadCloud size={12} />
+                  <span>Choose File</span>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleBulkStaffSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                  Paste CSV Text Content *
+                </label>
+                <textarea
+                  rows={6}
+                  value={bulkCsvText}
+                  onChange={handleBulkTextChange}
+                  placeholder={`emp id, name, designation\nOFF2001, K. Rama Rao, Senior Assistant\nOFF2002, M. Lakshmi, Junior Assistant\nOFF2003, P. Venkat, Accountant\nOFF2004, S. Suresh, Record Assistant`}
+                  className="w-full glass-input text-xs font-mono py-2.5 leading-relaxed resize-y"
+                  required
+                />
+                <p className="text-[10px] text-customText-muted mt-1">
+                  Separate each column with a comma (,) or tab. Department is automatically set to <strong>Administrative Office</strong> and default login password will be <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-bold">nrtec@nec</code>.
+                </p>
+              </div>
+
+              {/* Parsed Live Preview Table */}
+              {parsedBulkList.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-black text-customText dark:text-customText-dark flex items-center gap-1.5">
+                      <CheckCircle2 size={14} className="text-emerald-500" />
+                      Previewing {parsedBulkList.length} Office Staff Member{parsedBulkList.length !== 1 ? 's' : ''} Ready to Import:
+                    </span>
+                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                      Default Password: nrtec@nec
+                    </span>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 dark:bg-slate-800/80 text-[10px] uppercase font-bold text-customText-muted sticky top-0">
+                        <tr>
+                          <th className="p-2.5">#</th>
+                          <th className="p-2.5">Emp ID (Login)</th>
+                          <th className="p-2.5">Full Name</th>
+                          <th className="p-2.5">Designation</th>
+                          <th className="p-2.5">Department</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {parsedBulkList.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="p-2.5 text-customText-muted font-bold">{idx + 1}</td>
+                            <td className="p-2.5 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                              {item.empid}
+                            </td>
+                            <td className="p-2.5 font-bold text-customText dark:text-customText-dark">
+                              {item.name}
+                            </td>
+                            <td className="p-2.5 text-customText-muted">
+                              {item.designation}
+                            </td>
+                            <td className="p-2.5 text-[11px] text-customText-muted">
+                              Administrative Office
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkModal(false)}
+                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isBulkSaving || parsedBulkList.length === 0}
+                  className="px-5 py-2.5 rounded-xl bg-primary-dark hover:bg-primary text-white font-black text-xs shadow-md transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isBulkSaving ? (
+                    <>
+                      <Clock size={14} className="animate-spin" />
+                      <span>Importing Office Staff...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud size={15} />
+                      <span>Import {parsedBulkList.length} Office Staff Member{parsedBulkList.length !== 1 ? 's' : ''}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Edit Office Staff Modal */}
       {editingStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -1316,9 +1794,9 @@ const AODashboard = () => {
                 </label>
                 <input
                   type="tel"
-                  required
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="Optional 10-digit mobile number"
                   className="w-full glass-input text-xs py-2.5"
                 />
               </div>

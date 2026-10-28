@@ -307,14 +307,23 @@ const ManageFaculty = () => {
             facultyType = t.includes('OFFICE') ? 'OFFICE' : t.includes('NON') ? 'NON_TEACHING' : 'TEACHING';
           }
         } else if (parts.length === 3) {
-          if (/^[A-Za-z0-9_-]+$/.test(parts[0]) && parts[0].length < 15) {
+          const isThirdColPhone = /^[+\d\s-]{7,15}$/.test(parts[2]);
+          if (/^[A-Za-z0-9_-]+$/.test(parts[0]) && parts[0].length < 25) {
             empid = parts[0];
             facultyName = parts[1];
-            phoneNumber = parts[2];
+            if (isThirdColPhone) {
+              phoneNumber = parts[2];
+            } else {
+              designation = parts[2];
+            }
           } else {
             facultyName = parts[0];
             empid = parts[1];
-            phoneNumber = parts[2];
+            if (isThirdColPhone) {
+              phoneNumber = parts[2];
+            } else {
+              designation = parts[2];
+            }
           }
         } else if (parts.length === 2) {
           facultyName = parts[0];
