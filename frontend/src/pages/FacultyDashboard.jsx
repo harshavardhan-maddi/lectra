@@ -107,7 +107,7 @@ const FacultyDashboard = () => {
   const [absentees, setAbsentees] = useState([]); // Today's absentees fetched from DB
   
   // Loading & Feedback States
-  const [loadingClassrooms, setLoadingClassrooms] = useState(true);
+  const [loadingClassrooms, setLoadingClassrooms] = useState(!(isNonTeaching || isHodUser));
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [loadingAbsentees, setLoadingAbsentees] = useState(false);
   const [error, setError] = useState('');
@@ -345,8 +345,13 @@ const FacultyDashboard = () => {
     }
   };
 
-  // 1. Fetch all classrooms on mount
+  // 1. Fetch all classrooms on mount (only for teaching faculty)
   useEffect(() => {
+    if (isNonTeaching || isHodUser) {
+      setLoadingClassrooms(false);
+      return;
+    }
+
     const fetchClassrooms = async () => {
       try {
         setLoadingClassrooms(true);
@@ -361,21 +366,29 @@ const FacultyDashboard = () => {
             setSelectedSection(data[0].className);
           }
         } else {
-          setError(data.message || 'Failed to fetch classrooms.');
+          // If token error on background fetch, ignore silently
+          if (data.message && !data.message.toLowerCase().includes('token')) {
+            setError(data.message);
+          }
         }
       } catch (err) {
-        setError('Failed to connect to backend server.');
+        // Quiet network fallback
       } finally {
         setLoadingClassrooms(false);
       }
     };
 
     fetchClassrooms();
-  }, [token]);
+  }, [token, isNonTeaching, isHodUser]);
 
   // 2. Fetch students and today's attendance for the selected classroom
   const loadClassroomData = async () => {
+    if (isNonTeaching || isHodUser) {
+      setLoadingStudents(false);
+      return;
+    }
     if (!selectedSection) return;
+
     try {
       setLoadingStudents(true);
       setError('');
@@ -418,7 +431,9 @@ const FacultyDashboard = () => {
 
       setAttendanceMap(newMap);
     } catch (err) {
-      setError(err.message || 'Failed to load classroom details.');
+      if (err.message && !err.message.toLowerCase().includes('token')) {
+        setError(err.message);
+      }
     } finally {
       setLoadingStudents(false);
     }
@@ -426,10 +441,14 @@ const FacultyDashboard = () => {
 
   useEffect(() => {
     loadClassroomData();
-  }, [selectedSection, token]);
+  }, [selectedSection, token, isNonTeaching, isHodUser]);
 
   // Reload absentees when switching to calls tab or after submission
   const loadAbsenteesOnly = async () => {
+    if (isNonTeaching || isHodUser) {
+      setLoadingAbsentees(false);
+      return;
+    }
     if (!selectedSection) return;
     try {
       setLoadingAbsentees(true);

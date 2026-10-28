@@ -96,9 +96,28 @@ const login = async (req, res) => {
     }
 
     // 3. Check regular users in database
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { userId },
     });
+
+    // Support faculty login with Emp ID and password nrtec@nec
+    if (!user && (userId.toUpperCase().startsWith('EMP') || userId.toUpperCase().startsWith('FAC')) && password === 'nrtec@nec') {
+      try {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        user = await prisma.user.create({
+          data: {
+            name: userId,
+            userId,
+            password: hashedPassword,
+            role: 'FACULTY',
+            department: 'Department of CSE(emerging Technologies)',
+          },
+        });
+      } catch (createErr) {
+        user = await prisma.user.findUnique({ where: { userId } });
+      }
+    }
 
     if (!user) {
       return res.status(401).json({ message: 'Invalid User ID or password' });
@@ -472,7 +491,19 @@ const me = async (req, res) => {
       });
     }
 
-    const user = await prisma.user.findUnique({
+    if (req.user.role === 'AO' || req.user.role === 'OFFICE') {
+      return res.json({
+        id: req.user.id || 8888,
+        name: req.user.name || (req.user.role === 'AO' ? 'Administrative Officer (AO)' : 'Administrative Office (Certificates)'),
+        userId: req.user.userId,
+        role: req.user.role,
+        className: null,
+        department: 'Administrative Office',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const user = req.user.id ? await prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
         id: true,
@@ -483,9 +514,31 @@ const me = async (req, res) => {
         department: true,
         createdAt: true,
       },
-    });
+    }) : (req.user.userId ? await prisma.user.findUnique({
+      where: { userId: req.user.userId },
+      select: {
+        id: true,
+        name: true,
+        userId: true,
+        role: true,
+        className: true,
+        department: true,
+        createdAt: true,
+      },
+    }) : null);
 
     if (!user) {
+      if (req.user.userId) {
+        return res.json({
+          id: req.user.id || 70001,
+          name: req.user.name || req.user.userId,
+          userId: req.user.userId,
+          role: req.user.role || 'FACULTY',
+          className: null,
+          department: req.user.department || 'Department of CSE(emerging Technologies)',
+          createdAt: new Date().toISOString(),
+        });
+      }
       return res.status(404).json({ message: 'User not found' });
     }
 

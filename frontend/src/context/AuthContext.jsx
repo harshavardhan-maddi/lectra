@@ -188,7 +188,54 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // 5. Custom Faculty Login credentials (Emp ID is login ID, pass is nrtec@nec)
+    // 5. Authenticate with backend API to obtain a real signed JWT token
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId, password }),
+      });
+
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (res.ok && data.token && data.user) {
+          // Enrich user with local faculty metadata if available
+          let meta = null;
+          try {
+            const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+            meta = metaList.find(m => 
+              (m.empid && m.empid.toLowerCase() === cleanUserId) ||
+              (m.loginId && m.loginId.toLowerCase() === cleanUserId)
+            );
+          } catch (e) {}
+
+          const finalUser = {
+            ...data.user,
+            facultyType: meta?.facultyType || data.user.facultyType || 'TEACHING',
+            designation: meta?.designation || data.user.designation || 'Assistant Professor',
+            mobileNumber: meta?.mobileNumber || data.user.mobileNumber || ''
+          };
+
+          // Store token, user profile, and session credentials on device
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(finalUser));
+          localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
+
+          setToken(data.token);
+          setUser(finalUser);
+          return finalUser;
+        } else if (!res.ok && data.message && !data.message.includes('Invalid')) {
+          throw new Error(data.message);
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Backend login attempt note:', apiErr.message);
+    }
+
+    // 6. Custom Faculty Login credentials fallback (e.g. offline or client-only record)
     try {
       const metaList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
       const matchedFaculty = metaList.find(m => 
@@ -218,41 +265,7 @@ export const AuthProvider = ({ children }) => {
       console.warn('Custom faculty auth check notice:', e);
     }
 
-    // 6. Authenticate with backend API
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ userId, password }),
-      });
-
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.message || 'Login failed');
-        }
-
-        // Store token, user profile, and session credentials on device
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
-
-        setToken(data.token);
-        setUser(data.user);
-        return data.user;
-      } else {
-        const text = await res.text();
-        const snippet = text.slice(0, 100).replace(/<[^>]*>/g, '').trim();
-        throw new Error(
-          `Server returned an invalid response (HTTP ${res.status}${snippet ? `: ${snippet}` : ''}). Verify your backend is running and the database is configured.`
-        );
-      }
-    } catch (error) {
-      throw new Error(error.message || 'Failed to connect to authentication server. Is the database running?');
-    }
+    throw new Error('Invalid User ID or password');
   };
 
   const logout = () => {
