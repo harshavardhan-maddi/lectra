@@ -779,8 +779,8 @@ const ManageFaculty = () => {
 
       {/* Add Single Faculty Member Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="glass-card w-full max-w-lg p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+          <div className="glass-card w-full max-w-lg p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4 modal-card-fullscreen">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
@@ -1020,9 +1020,9 @@ const ManageFaculty = () => {
 
       {/* Single Edit Modal */}
       {editingFaculty && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setEditingFaculty(null)} />
-          <form onSubmit={handleEditSubmit} className="relative glass-card bg-white dark:bg-slate-900 w-full max-w-sm p-6 shadow-2xl animate-fade-in z-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setEditingFaculty(null)} />
+          <form onSubmit={handleEditSubmit} className="relative glass-card bg-white dark:bg-slate-900 w-full max-w-sm p-6 shadow-2xl animate-fade-in z-10 modal-card-fullscreen">
             <div className="flex items-center justify-between mb-4 border-b pb-2">
               <h3 className="font-extrabold text-lg text-customText dark:text-customText-dark">Edit Contact</h3>
               <button type="button" onClick={() => setEditingFaculty(null)} className="p-1 hover:bg-slate-100 rounded">
@@ -1056,9 +1056,9 @@ const ManageFaculty = () => {
 
       {/* Bulk Upload CSV Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowBulkModal(false)} />
-          <div className="relative glass-card bg-white dark:bg-slate-900 w-full max-w-2xl p-6 shadow-2xl animate-fade-in z-10 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowBulkModal(false)} />
+          <div className="relative glass-card bg-white dark:bg-slate-900 w-full max-w-2xl p-6 shadow-2xl animate-fade-in z-10 max-h-[90vh] overflow-y-auto modal-card-fullscreen">
             <div className="flex items-center justify-between mb-4 border-b pb-2">
               <div className="flex items-center gap-2">
                 <UploadCloud size={22} className="text-primary-dark dark:text-primary" />

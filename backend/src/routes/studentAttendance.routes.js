@@ -215,8 +215,8 @@ router.post('/settings/timings', authMiddleware, roleMiddleware(['HOD']), async 
   }
 });
 
-// 1. POST /students - HOD/Sub-Admin registers a student
-router.post('/students', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), async (req, res) => {
+// 1. POST /students - HOD/Sub-Admin/Absent Controller registers a student
+router.post('/students', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'ABSENT_CONTROLLER']), async (req, res) => {
   const { rollNumber, name, section, studentMobile, parentMobile } = req.body;
   if (!rollNumber || !name || !section || !studentMobile || !parentMobile) {
     return res.status(400).json({ message: 'All fields are required' });
@@ -292,6 +292,7 @@ router.post('/verify-outpass-student', async (req, res) => {
         rollNumber: student.rollNumber,
         name: student.name,
         section: student.section,
+        department: student.department || 'Department of CSE(emerging Technologies)',
         studentMobile: student.studentMobile,
         parentMobile: student.parentMobile,
         maskedStudentMobile: mask(student.studentMobile),
@@ -1053,8 +1054,8 @@ router.post('/students/bulk', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN'
   }
 });
 
-// 10. PUT /students/:id - HOD/Sub-Admin updates student details
-router.put('/students/:id', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN']), async (req, res) => {
+// 10. PUT /students/:id - HOD/Sub-Admin/Absent Controller updates student details
+router.put('/students/:id', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN', 'ABSENT_CONTROLLER']), async (req, res) => {
   const { id } = req.params;
   const { name, rollNumber, section, studentMobile, parentMobile } = req.body;
 
@@ -1065,6 +1066,15 @@ router.put('/students/:id', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN'])
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Absent Controller can only update and save students belonging to their own department
+    if (req.user.role === 'ABSENT_CONTROLLER') {
+      const userDept = (req.user.department || '').trim().toLowerCase();
+      const studentDept = (student.department || '').trim().toLowerCase();
+      if (userDept && studentDept && !userDept.includes(studentDept) && !studentDept.includes(userDept)) {
+        return res.status(403).json({ message: 'Absent Controller can only update students belonging to their own department' });
+      }
     }
 
     if (rollNumber && rollNumber !== student.rollNumber) {
@@ -1084,6 +1094,9 @@ router.put('/students/:id', authMiddleware, roleMiddleware(['HOD', 'SUB_ADMIN'])
         section: section !== undefined ? section : student.section,
         studentMobile: studentMobile !== undefined ? studentMobile : student.studentMobile,
         parentMobile: parentMobile !== undefined ? parentMobile : student.parentMobile,
+        department: (req.user.role === 'ABSENT_CONTROLLER' && req.user.department)
+          ? req.user.department
+          : (req.body.department !== undefined ? req.body.department : student.department)
       }
     });
 

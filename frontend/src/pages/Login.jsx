@@ -319,6 +319,7 @@ const Login = () => {
         rollNumber: matchedStudent.rollNumber,
         studentName: matchedStudent.name,
         section: matchedStudent.section,
+        department: matchedStudent.department,
         studentMobile: matchedStudent.studentMobile,
         parentMobile: matchedStudent.parentMobile,
         reason: outpassReason.trim(),
@@ -2217,13 +2218,13 @@ const Login = () => {
 
       {/* 6. Biometric Scan Modal */}
       {showBiometricsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
           <div 
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity duration-300" 
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity duration-300 modal-backdrop-responsive" 
             onClick={() => !biometricsLoading && setShowBiometricsModal(false)} 
           />
           
-          <div className="relative w-full max-w-sm glass-card p-8 border border-white/20 dark:border-slate-800/40 shadow-2xl z-10 animate-fade-in space-y-6">
+          <div className="relative w-full max-w-sm glass-card p-8 border border-white/20 dark:border-slate-800/40 shadow-2xl z-10 animate-fade-in space-y-6 modal-card-fullscreen">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200/50 dark:border-slate-800/50">
               <h3 className="font-extrabold text-lg text-customText dark:text-customText-dark flex items-center gap-2">
                 <Fingerprint className="text-primary" size={22} />

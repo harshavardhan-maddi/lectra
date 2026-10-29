@@ -443,8 +443,8 @@ const OfficeDashboard = () => {
 
       {/* Status Modification Modal */}
       {updatingRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="glass-card w-full max-w-md p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+          <div className="glass-card w-full max-w-md p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4 modal-card-fullscreen">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-black text-customText dark:text-customText-dark">
                 Update Certificate Request Status
@@ -515,8 +515,8 @@ const OfficeDashboard = () => {
 
       {/* Printable Certificate Request Slip Modal */}
       {selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="glass-card w-full max-w-xl p-8 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+          <div className="glass-card w-full max-w-xl p-8 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-6 modal-card-fullscreen">
             <div className="text-center border-b pb-4 border-slate-200 dark:border-slate-800 space-y-1">
               <h2 className="text-xl font-black text-primary uppercase tracking-tight">
                 Narasaraopeta Engineering College

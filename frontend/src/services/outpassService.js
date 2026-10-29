@@ -475,6 +475,7 @@ export const submitOutpassApplication = async ({
   rollNumber,
   studentName,
   section,
+  department,
   studentMobile,
   parentMobile,
   reason,
@@ -487,6 +488,7 @@ export const submitOutpassApplication = async ({
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName,
     section,
+    department: department || 'Department of CSE(emerging Technologies)',
     studentMobile,
     parentMobile,
     maskedStudentMobile: maskPhoneNumber(studentMobile),
@@ -680,16 +682,31 @@ export const rejectByAbsentController = (ticketId, { controllerName = 'Absent Co
   return ticket;
 };
 
-// HOD grants permission
-export const hodGrantOutpass = (ticketId, { hodName = 'Head of Department (HOD)', remarks = 'Permission Approved.' } = {}) => {
+// HOD or Sub-Admin grants permission (Sub Admin can approve directly without absent controller)
+export const hodGrantOutpass = (ticketId, { hodName = 'Head of Department (HOD)', remarks = 'Permission Approved.', role = 'HOD' } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Outpass application not found');
 
   const now = new Date();
   ticket.status = 'PERMISSION_GRANTED';
+
+  // If ticket was still in PENDING_PARENT_CALL, record that Sub Admin or HOD directly approved it
+  if (!ticket.absentControllerAction || !ticket.absentControllerAction.confirmed) {
+    ticket.absentControllerAction = {
+      confirmed: true,
+      calledAt: now.toISOString(),
+      displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      displayDate: now.toLocaleDateString('en-GB'),
+      remarks: `Directly approved by ${role === 'SUB_ADMIN' ? 'Sub Admin' : 'HOD'} (Absent Controller call step bypassed)`,
+      controllerName: hodName,
+      role: role === 'SUB_ADMIN' ? 'Sub Admin' : 'HOD'
+    };
+  }
+
   ticket.hodAction = {
     granted: true,
+    approverRole: role,
     approvedAt: now.toISOString(),
     displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     displayDate: now.toLocaleDateString('en-GB'),
@@ -699,6 +716,50 @@ export const hodGrantOutpass = (ticketId, { hodName = 'Head of Department (HOD)'
 
   saveOutpasses(tickets);
   return ticket;
+};
+
+// Sub-Admin directly approves student request and routes straight to Security (no absent controller required)
+export const subAdminGrantOutpass = (ticketId, { subAdminName = 'Sub Admin', remarks = 'Directly approved by Sub Admin and forwarded to Gate Security.' } = {}) => {
+  return hodGrantOutpass(ticketId, {
+    hodName: subAdminName,
+    remarks,
+    role: 'SUB_ADMIN'
+  });
+};
+
+// Helper: Filter permission requests strictly by user's department for HOD, Sub Admin, and Absent Controller
+export const isTicketInUserDepartment = (ticket, user) => {
+  if (!ticket) return false;
+  // Super Admin can view all department requests
+  if (user?.role === 'SUPER_ADMIN') return true;
+  if (!user || !user.department) return true;
+
+  const userDept = user.department.trim().toLowerCase();
+
+  // Match against ticket department
+  if (ticket.department) {
+    const tDept = ticket.department.trim().toLowerCase();
+    if (tDept === userDept || userDept.includes(tDept) || tDept.includes(userDept)) {
+      return true;
+    }
+  }
+
+  // Match against section
+  if (ticket.section) {
+    const tSec = ticket.section.trim().toLowerCase();
+    if (tSec.includes(userDept) || userDept.includes(tSec)) {
+      return true;
+    }
+    // Check known department abbreviations
+    const deptKeywords = ['cse', 'ece', 'eee', 'mech', 'civil', 'it', 'ai', 'ds', 'cyber'];
+    for (const kw of deptKeywords) {
+      if (userDept.includes(kw) && tSec.includes(kw)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 };
 
 // HOD rejects outpass

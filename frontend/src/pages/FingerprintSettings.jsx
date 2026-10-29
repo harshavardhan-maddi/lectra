@@ -614,12 +614,12 @@ const FingerprintSettings = () => {
 
       {/* Security Verification Modal */}
       {showVerifyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowVerifyModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowVerifyModal(false)} />
           
           <form 
             onSubmit={handleVerifySubmit}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-sm p-6 shadow-2xl z-10 space-y-4"
+            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-sm p-6 shadow-2xl z-10 space-y-4 modal-card-fullscreen"
           >
             <div className="flex items-center justify-between pb-3 border-b">
               <h3 className="font-extrabold text-base text-customText dark:text-customText-dark flex items-center gap-1.5">

@@ -225,13 +225,13 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
   const statusInfo = getStatusBadge(ticket.status);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto bg-slate-950/85 backdrop-blur-sm animate-fade-in print:p-0 print:bg-white print:static">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto bg-slate-950/85 backdrop-blur-sm animate-fade-in print:p-0 print:bg-white print:static modal-wrapper-fullscreen">
       
       {/* Backdrop for click away */}
-      <div className="fixed inset-0 print:hidden" onClick={onClose} />
+      <div className="fixed inset-0 print:hidden modal-backdrop-responsive" onClick={onClose} />
 
       {/* Main Ticket Container */}
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 z-10 overflow-hidden my-auto max-h-[95vh] flex flex-col print:max-w-none print:shadow-none print:border-0 print:rounded-none print:max-h-none print:overflow-visible print:static">
+      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 z-10 overflow-hidden my-auto max-h-[95vh] flex flex-col print:max-w-none print:shadow-none print:border-0 print:rounded-none print:max-h-none print:overflow-visible print:static modal-card-fullscreen">
         
         {/* Top Action Bar (hidden on print) */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 print:hidden shrink-0">

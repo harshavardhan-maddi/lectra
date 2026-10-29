@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -32,7 +32,8 @@ import {
   confirmParentAndForwardToHOD, 
   rejectByAbsentController, 
   subscribeToOutpasses,
-  syncOutpassesFromBackend
+  syncOutpassesFromBackend,
+  isTicketInUserDepartment
 } from '../services/outpassService';
 
 const ABSENCE_REASONS = {
@@ -99,6 +100,11 @@ const AbsentControllerDashboard = () => {
     const unsub = subscribeToOutpasses(setOutpassTickets);
     return () => unsub();
   }, []);
+
+  // Department-scoped outpass tickets for Absent Controller
+  const deptTickets = useMemo(() => {
+    return outpassTickets.filter(t => isTicketInUserDepartment(t, user));
+  }, [outpassTickets, user]);
 
   // Handlers for Absent Controller outpass actions
   const handleConfirmParentAndForward = (ticket) => {
@@ -644,9 +650,9 @@ const AbsentControllerDashboard = () => {
         >
           <FileText size={15} />
           <span>Outpass Requests</span>
-          {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
+          {deptTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-black animate-pulse">
-              {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length}
+              {deptTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length}
             </span>
           )}
         </button>
@@ -661,7 +667,7 @@ const AbsentControllerDashboard = () => {
       </div>
 
       {/* Real-time Alert Banner for Incoming Outpasses - Visible ONLY in Outpasses module */}
-      {activeBoardTab === 'outpassRequests' && outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
+      {activeBoardTab === 'outpassRequests' && deptTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length > 0 && (
         <div 
           className="p-4 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 no-print shadow-md"
         >
@@ -671,7 +677,7 @@ const AbsentControllerDashboard = () => {
             </span>
             <div>
               <p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">
-                🔔 {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length} Student Outpass Request(s) Awaiting Parent Call!
+                🔔 {deptTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length} Student Outpass Request(s) Awaiting Parent Call!
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-300">
                 Student submitted outpass on campus. Review and call parent to confirm and forward to HOD.
@@ -1847,23 +1853,23 @@ const AbsentControllerDashboard = () => {
             </div>
           )}
 
-          {/* Metric Summary Counters */}
+          {/* Metric Summary Counters (Scoped to Department) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Awaiting Parent Call</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length}</span>
+              <span className="text-2xl font-black">{deptTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length}</span>
             </div>
             <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Forwarded to HOD</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length}</span>
+              <span className="text-2xl font-black">{deptTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length}</span>
             </div>
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
               <span className="text-[10px] font-bold uppercase tracking-wider block">HOD Granted (Gate Ready)</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'PERMISSION_GRANTED').length}</span>
+              <span className="text-2xl font-black">{deptTickets.filter(t => t.status === 'PERMISSION_GRANTED').length}</span>
             </div>
             <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Student Sent Out</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'SENT_OUT').length}</span>
+              <span className="text-2xl font-black">{deptTickets.filter(t => t.status === 'SENT_OUT').length}</span>
             </div>
           </div>
 
@@ -1880,19 +1886,19 @@ const AbsentControllerDashboard = () => {
               </div>
             </div>
 
-            {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length === 0 ? (
+            {deptTickets.filter(t => t.status === 'PENDING_PARENT_CALL').length === 0 ? (
               <div className="p-10 text-center rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 space-y-2">
                 <CheckCircle size={32} className="mx-auto text-emerald-500" />
                 <h4 className="font-bold text-customText dark:text-customText-dark">
                   No Pending Outpass Calls
                 </h4>
                 <p className="text-xs text-customText-muted max-w-sm mx-auto">
-                  All student permission requests have been verified and forwarded to HOD.
+                  All student permission requests for your department have been verified and forwarded to HOD.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {outpassTickets.filter(t => t.status === 'PENDING_PARENT_CALL').map((ticket) => (
+                {deptTickets.filter(t => t.status === 'PENDING_PARENT_CALL').map((ticket) => (
                   <div
                     key={ticket.id}
                     className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 relative overflow-hidden"
@@ -1993,7 +1999,7 @@ const AbsentControllerDashboard = () => {
           {/* Outpass Clearance History Section */}
           <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-3">
             <h4 className="text-sm font-black text-customText dark:text-customText-dark uppercase tracking-wider">
-              Outpass Processing Log ({outpassTickets.length} Total)
+              Outpass Processing Log ({deptTickets.length} Total)
             </h4>
 
             <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -2009,7 +2015,7 @@ const AbsentControllerDashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {outpassTickets.slice(0, 10).map((t) => (
+                  {deptTickets.slice(0, 10).map((t) => (
                     <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
                       <td className="p-3 font-mono font-bold text-primary">{t.id}</td>
                       <td className="p-3">
@@ -2057,10 +2063,10 @@ const AbsentControllerDashboard = () => {
 
       {/* STUDENT ABSENT HISTORY MODAL */}
       {selectedHistoryStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setSelectedHistoryStudent(null)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setSelectedHistoryStudent(null)} />
           
-          <div className="relative glass-card border border-white/60 w-full max-w-md p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10">
+          <div className="relative glass-card border border-white/60 w-full max-w-md p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 modal-card-fullscreen">
             <div className="flex justify-between items-center pb-4 border-b border-slate-200/50 dark:border-slate-800/30">
               <div>
                 <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
@@ -2131,8 +2137,8 @@ const AbsentControllerDashboard = () => {
 
       {/* Add Student Modal */}
       {showAddStudentModal && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-center justify-center p-0 lg:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="w-full h-full lg:h-auto min-h-screen lg:min-h-0 max-w-none lg:max-w-md bg-white dark:bg-slate-900 border-0 lg:border border-slate-200 dark:border-slate-800 rounded-none lg:rounded-3xl shadow-2xl overflow-y-auto animate-scale-up flex flex-col justify-between">
+        <div className="fixed inset-0 z-50 flex items-stretch lg:items-center justify-center p-0 lg:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto modal-wrapper-fullscreen">
+          <div className="w-full h-full lg:h-auto min-h-screen lg:min-h-0 max-w-none lg:max-w-md bg-white dark:bg-slate-900 border-0 lg:border border-slate-200 dark:border-slate-800 rounded-none lg:rounded-3xl shadow-2xl overflow-y-auto animate-scale-up flex flex-col justify-between modal-card-fullscreen">
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
@@ -2262,8 +2268,8 @@ const AbsentControllerDashboard = () => {
 
       {/* Edit Student Modal */}
       {showEditStudentModal && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-center justify-center p-0 lg:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="w-full h-full lg:h-auto min-h-screen lg:min-h-0 max-w-none lg:max-w-md bg-white dark:bg-slate-900 border-0 lg:border border-slate-200 dark:border-slate-800 rounded-none lg:rounded-3xl shadow-2xl overflow-y-auto animate-scale-up flex flex-col justify-between">
+        <div className="fixed inset-0 z-50 flex items-stretch lg:items-center justify-center p-0 lg:p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto modal-wrapper-fullscreen">
+          <div className="w-full h-full lg:h-auto min-h-screen lg:min-h-0 max-w-none lg:max-w-md bg-white dark:bg-slate-900 border-0 lg:border border-slate-200 dark:border-slate-800 rounded-none lg:rounded-3xl shadow-2xl overflow-y-auto animate-scale-up flex flex-col justify-between modal-card-fullscreen">
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">

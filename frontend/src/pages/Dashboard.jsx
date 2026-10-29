@@ -52,6 +52,8 @@ import OutpassTicketModal from '../components/OutpassTicketModal';
 import { 
   getAllOutpasses, 
   hodGrantOutpass, 
+  subAdminGrantOutpass,
+  isTicketInUserDepartment,
   hodRejectOutpass, 
   hodApproveFacultyLeave,
   applyHodLeave,
@@ -376,6 +378,11 @@ const Dashboard = ({ initialTab }) => {
     return () => unsub();
   }, []);
 
+  // Department-scoped permission requests for HOD / Sub Admin
+  const deptTickets = useMemo(() => {
+    return outpassTickets.filter(t => isTicketInUserDepartment(t, user));
+  }, [outpassTickets, user]);
+
   const handleOpenStudentLeaveHistory = (rollNumber, studentName, section) => {
     setStudentHistoryModalStudent({
       rollNumber,
@@ -388,16 +395,29 @@ const Dashboard = ({ initialTab }) => {
     try {
       setOutpassActionError('');
       const isBlockMovement = ticket.type === 'BLOCK_MOVEMENT';
-      hodGrantOutpass(ticket.id, {
-        hodName: user?.name || 'Head of Department (HOD)',
-        remarks: isBlockMovement
-          ? `Out of Block Movement Permission approved by HOD for ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
-          : 'Permission Granted by HOD.'
-      });
+      const isSubAdmin = user?.role === 'SUB_ADMIN';
+
+      if (isSubAdmin) {
+        subAdminGrantOutpass(ticket.id, {
+          subAdminName: user?.name || 'Sub Admin',
+          remarks: isBlockMovement
+            ? `Out of Block Movement Permission approved by Sub Admin for ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
+            : 'Permission directly approved by Sub Admin and forwarded to Gate Security.'
+        });
+      } else {
+        hodGrantOutpass(ticket.id, {
+          hodName: user?.name || 'Head of Department (HOD)',
+          role: user?.role || 'HOD',
+          remarks: isBlockMovement
+            ? `Out of Block Movement Permission approved by HOD for ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
+            : 'Permission Granted by HOD.'
+        });
+      }
+
       setOutpassActionSuccess(
         isBlockMovement
           ? `Out of Block Permission approved! ${ticket.studentName} (${ticket.rollNumber}) is permitted to move from ${ticket.presentBlock} to ${ticket.destinationArea || ticket.destination}.`
-          : `Permission granted! Outpass for ${ticket.studentName} (${ticket.rollNumber}) has been sent to the Gate Watchman login.`
+          : `Permission granted! Outpass for ${ticket.studentName} (${ticket.rollNumber}) has been sent directly to the Gate Watchman login.`
       );
       setTimeout(() => setOutpassActionSuccess(''), 4500);
     } catch (err) {
@@ -1975,29 +1995,29 @@ const Dashboard = ({ initialTab }) => {
             </button>
           </div>
 
-          {/* Metric Cards */}
+          {/* Metric Cards (Department-Scoped for HOD / Sub Admin) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 text-primary-dark dark:text-primary">
-              <span className="text-[10px] font-bold uppercase tracking-wider block">Pending HOD Grant</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'FORWARDED_TO_HOD').length}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider block">Pending Approval</span>
+              <span className="text-2xl font-black">{deptTickets.filter(t => t.status === 'FORWARDED_TO_HOD' || t.status === 'PENDING_PARENT_CALL').length}</span>
             </div>
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Granted (At Gate)</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'PERMISSION_GRANTED').length}</span>
+              <span className="text-2xl font-black">{deptTickets.filter(t => t.status === 'PERMISSION_GRANTED').length}</span>
             </div>
             <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Sent Out by Watchman</span>
-              <span className="text-2xl font-black">{outpassTickets.filter(t => t.status === 'SENT_OUT' || t.status === 'FACULTY_OUT').length}</span>
+              <span className="text-2xl font-black">{deptTickets.filter(t => t.status === 'SENT_OUT' || t.status === 'FACULTY_OUT').length}</span>
             </div>
             <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-customText-muted">
               <span className="text-[10px] font-bold uppercase tracking-wider block">Total Applications</span>
-              <span className="text-2xl font-black">{outpassTickets.length}</span>
+              <span className="text-2xl font-black">{deptTickets.length}</span>
             </div>
           </div>
 
           {/* Faculty Campus Return Notification Banner (Notified to HOD when 1-hour permission faculty returns) */}
           {(() => {
-            const unreadReturnNotifs = outpassTickets.filter(t => t.hodNotification && t.hodNotification.unread);
+            const unreadReturnNotifs = deptTickets.filter(t => t.hodNotification && t.hodNotification.unread);
             if (unreadReturnNotifs.length === 0) return null;
             return (
               <div className="p-5 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 space-y-3 animate-fade-in">
@@ -2058,7 +2078,7 @@ const Dashboard = ({ initialTab }) => {
 
           {/* Section 1: Faculty Leave & Early Out Applications */}
           {(() => {
-            const pendingFacultyTickets = outpassTickets.filter(t => t.applicantType === 'FACULTY' && t.status === 'FORWARDED_TO_HOD');
+            const pendingFacultyTickets = deptTickets.filter(t => t.applicantType === 'FACULTY' && t.status === 'FORWARDED_TO_HOD');
             
             return (
               <div className="space-y-4">
@@ -2225,30 +2245,32 @@ const Dashboard = ({ initialTab }) => {
             );
           })()}
 
-          {/* Section 2: Student Outpass Applications Forwarded by Absent Controller */}
+          {/* Section 2: Student Outpass Applications */}
           <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
             <div>
               <h3 className="text-lg font-black text-customText dark:text-customText-dark tracking-tight">
-                Student Outpass Applications Forwarded by Absent Controller
+                Student Outpass & Permission Requests
               </h3>
               <p className="text-xs text-customText-muted">
-                Parent phone confirmation has been verified. Granting permission will dispatch the ticket to the Main Gate Watchman login for physical ID verification.
+                {user?.role === 'SUB_ADMIN' 
+                  ? 'Sub Admin can directly approve student requests received and send straight to Gate Security (no absent controller acceptance needed).'
+                  : 'Review student outpasses and grant permission to dispatch tickets directly to the Main Gate Security.'}
               </p>
             </div>
 
-            {outpassTickets.filter(t => t.applicantType !== 'FACULTY' && t.status === 'FORWARDED_TO_HOD').length === 0 ? (
+            {deptTickets.filter(t => t.applicantType !== 'FACULTY' && (t.status === 'FORWARDED_TO_HOD' || t.status === 'PENDING_PARENT_CALL')).length === 0 ? (
               <div className="p-8 text-center rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 space-y-2">
                 <CheckCircle2 size={28} className="mx-auto text-emerald-500" />
                 <h4 className="font-bold text-sm text-customText dark:text-customText-dark">
-                  No Student Outpasses Pending HOD Grant
+                  No Student Outpasses Pending Approval
                 </h4>
                 <p className="text-xs text-customText-muted max-w-sm mx-auto">
-                  All forwarded student outpass requests have been processed.
+                  All student outpass requests in your department have been processed.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {outpassTickets.filter(t => t.applicantType !== 'FACULTY' && t.status === 'FORWARDED_TO_HOD').map((ticket) => (
+                {deptTickets.filter(t => t.applicantType !== 'FACULTY' && (t.status === 'FORWARDED_TO_HOD' || t.status === 'PENDING_PARENT_CALL')).map((ticket) => (
                   <div
                     key={ticket.id}
                     className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 relative overflow-hidden"
@@ -2260,6 +2282,12 @@ const Dashboard = ({ initialTab }) => {
                           <span className="text-[10px] font-mono font-bold text-primary block">
                             {ticket.id}
                           </span>
+                          {ticket.status === 'PENDING_PARENT_CALL' && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 font-black text-[10px] uppercase border border-amber-500/30 flex items-center gap-1">
+                              <Clock size={11} />
+                              Direct Student Request
+                            </span>
+                          )}
                           {ticket.type === 'BLOCK_MOVEMENT' && (
                             <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase border border-emerald-500/30">
                               Out of Block Movement
@@ -2287,7 +2315,7 @@ const Dashboard = ({ initialTab }) => {
                           title="View Student's Previous Leave Applications"
                         >
                           <History size={15} />
-                          <span>Past Leaves ({outpassTickets.filter(t => t.rollNumber && t.rollNumber.trim().toUpperCase() === ticket.rollNumber.trim().toUpperCase()).length})</span>
+                          <span>Past Leaves ({deptTickets.filter(t => t.rollNumber && t.rollNumber.trim().toUpperCase() === ticket.rollNumber.trim().toUpperCase()).length})</span>
                         </button>
                         <button
                           type="button"
@@ -2361,7 +2389,27 @@ const Dashboard = ({ initialTab }) => {
                     )}
 
                     {/* Verification info */}
-                    {ticket.type === 'BLOCK_MOVEMENT' ? (
+                    {ticket.status === 'PENDING_PARENT_CALL' ? (
+                      <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                            <Clock size={13} />
+                            Direct Student Request (Pending Verification)
+                          </span>
+                          <span className="text-[10px] text-customText-muted font-mono">
+                            {ticket.appliedTime}
+                          </span>
+                        </div>
+                        <p className="font-medium text-customText dark:text-customText-dark">
+                          {user?.role === 'SUB_ADMIN' 
+                            ? '⚡ Sub Admin direct approval: You can approve this request directly and send it straight to Gate Security without waiting for Absent Controller.'
+                            : 'Direct student application awaiting parent call or direct HOD approval.'}
+                        </p>
+                        <span className="text-[10px] text-customText-muted block">
+                          Parent Mobile: +91 {ticket.parentMobile} | Student Mobile: +91 {ticket.studentMobile}
+                        </span>
+                      </div>
+                    ) : ticket.type === 'BLOCK_MOVEMENT' ? (
                       <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 text-xs flex items-center gap-2 text-customText-muted">
                         <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
                         <span>Direct intra-campus block movement. No parent call required. Approving grants immediate student permission.</span>
@@ -2403,7 +2451,7 @@ const Dashboard = ({ initialTab }) => {
                       })()
                     )}
 
-                    {/* HOD Action Buttons for Students */}
+                    {/* Action Buttons for Students */}
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
                       <button
                         type="button"
@@ -2411,7 +2459,11 @@ const Dashboard = ({ initialTab }) => {
                         className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
                       >
                         <BadgeCheck size={16} />
-                        <span>{ticket.type === 'BLOCK_MOVEMENT' ? 'Approve Out of Block Movement' : 'Grant Permission (Send to Security Head)'}</span>
+                        <span>
+                          {user?.role === 'SUB_ADMIN' 
+                            ? (ticket.status === 'PENDING_PARENT_CALL' ? 'Directly Approve & Send to Security' : 'Approve & Send to Security') 
+                            : (ticket.type === 'BLOCK_MOVEMENT' ? 'Approve Out of Block Movement' : 'Grant Permission (Send to Security Head)')}
+                        </span>
                       </button>
 
                       <button
@@ -2474,14 +2526,14 @@ const Dashboard = ({ initialTab }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {outpassTickets.length === 0 ? (
+                  {deptTickets.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-6 text-center text-customText-muted text-xs">
-                        No pass or leave tickets found in database.
+                        No pass or leave tickets found for your department.
                       </td>
                     </tr>
                   ) : (
-                    outpassTickets.map((t) => {
+                    deptTickets.map((t) => {
                       const isFac = t.applicantType === 'FACULTY';
                       return (
                         <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
@@ -2905,8 +2957,8 @@ const Dashboard = ({ initialTab }) => {
 
           {/* CONFIRMATION MODAL BEFORE IMPORT */}
           {showImportConfirmModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-              <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+              <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 modal-card-fullscreen">
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
                   <AlertCircle size={26} />
                 </div>
@@ -3097,8 +3149,8 @@ const Dashboard = ({ initialTab }) => {
 
       {/* HOD View: Student Leave History Modal */}
       {studentHistoryModalStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-wrapper-fullscreen">
+          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8 max-h-[90vh] flex flex-col modal-card-fullscreen">
             {/* Modal Header */}
             <div className="p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-primary text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -3316,10 +3368,10 @@ const Dashboard = ({ initialTab }) => {
 
       {/* REGISTRATION MODAL FOR STUDENTS (HOD ONLY / SUPER ADMIN) */}
       {showAddStudentModal && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block" onClick={() => setShowAddStudentModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block modal-backdrop-responsive" onClick={() => setShowAddStudentModal(false)} />
           
-          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto">
+          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto modal-card-fullscreen">
             <div>
               <div className="flex justify-between items-center pb-3 border-b mb-4 shrink-0">
                 <h3 className="font-extrabold text-base sm:text-lg text-customText dark:text-customText-dark">
@@ -3443,10 +3495,10 @@ const Dashboard = ({ initialTab }) => {
 
       {/* EDIT MODAL FOR STUDENTS (HOD ONLY / SUPER ADMIN) */}
       {showEditStudentModal && editingStudent && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block" onClick={() => setShowEditStudentModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block modal-backdrop-responsive" onClick={() => setShowEditStudentModal(false)} />
           
-          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto">
+          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto modal-card-fullscreen">
             <div>
               <div className="flex justify-between items-center pb-3 border-b mb-4 shrink-0">
                 <h3 className="font-extrabold text-base sm:text-lg text-customText dark:text-customText-dark">
@@ -3570,10 +3622,10 @@ const Dashboard = ({ initialTab }) => {
 
       {/* BULK UPLOAD MODAL FOR STUDENTS (HOD ONLY / SUPER ADMIN) */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block" onClick={() => setShowBulkModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block modal-backdrop-responsive" onClick={() => setShowBulkModal(false)} />
           
-          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto">
+          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto modal-card-fullscreen">
             <div className="flex justify-between items-center pb-3 border-b mb-4">
               <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
                 Bulk Student Import (CSV/Text)
@@ -3675,10 +3727,10 @@ const Dashboard = ({ initialTab }) => {
 
       {/* CLASSROOM DETAILS MODAL (TIMETABLE & HISTORY LOGS) */}
       {selectedClassroom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => { setSelectedClassroom(null); setIsEditing(false); }} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => { setSelectedClassroom(null); setIsEditing(false); }} />
           
-          <div className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6 shadow-2xl animate-fade-in z-10">
+          <div className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6 shadow-2xl animate-fade-in z-10 modal-card-fullscreen">
             <button
               onClick={() => { setSelectedClassroom(null); setIsEditing(false); }}
               className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -3834,8 +3886,8 @@ const Dashboard = ({ initialTab }) => {
 
       {/* Modal: HOD Faculty Mentorship Manager */}
       {showMentorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-scale-in max-h-[90vh] flex flex-col modal-card-fullscreen">
             
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30 shrink-0">
@@ -4028,8 +4080,8 @@ const Dashboard = ({ initialTab }) => {
 
       {/* HOD Apply Leave Modal (Routes to AO) */}
       {showHodApplyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-scale-up modal-card-fullscreen">
             {/* Header */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/20">
               <div>

@@ -959,12 +959,12 @@ const ManageClassrooms = () => {
 
       {/* MODAL 1: ADD CLASSROOM */}
       {showAddClassModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowAddClassModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowAddClassModal(false)} />
           
           <form 
             onSubmit={handleAddClassroom}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4"
+            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
           >
             <div className="flex items-center justify-between pb-3 border-b">
               <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
@@ -1046,12 +1046,12 @@ const ManageClassrooms = () => {
 
       {/* MODAL: EDIT CLASSROOM */}
       {showEditClassModal && editingClassroom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowEditClassModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowEditClassModal(false)} />
           
           <form 
             onSubmit={handleEditClassroomSubmit}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4"
+            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
           >
             <div className="flex items-center justify-between pb-3 border-b">
               <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
@@ -1114,12 +1114,12 @@ const ManageClassrooms = () => {
 
       {/* MODAL 2: ASSIGN SCHEDULE PERIOD */}
       {showAddPeriodModal && selectedClassroom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowAddPeriodModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowAddPeriodModal(false)} />
           
           <form 
             onSubmit={handleAddPeriod}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-lg p-6 shadow-2xl animate-fade-in z-10 space-y-4"
+            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-lg p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
           >
             <div className="flex items-center justify-between pb-3 border-b">
               <div>
@@ -1251,12 +1251,12 @@ const ManageClassrooms = () => {
 
       {/* MODAL 3: BULK IMPORT TIMETABLE */}
       {showImportModal && selectedClassroom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => !importSubmitting && !aiLoading && setShowImportModal(false)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => !importSubmitting && !aiLoading && setShowImportModal(false)} />
           
           <form 
             onSubmit={handleBulkImportSubmit}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-lg p-6 shadow-2xl animate-fade-in z-10 space-y-4"
+            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-lg p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
           >
             <div className="flex items-center justify-between pb-3 border-b">
               <div>
