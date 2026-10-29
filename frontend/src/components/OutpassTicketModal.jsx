@@ -322,11 +322,22 @@ const OutpassTicketModal = ({ ticket, onClose }) => {
           <div 
             id="printable-slip" 
             ref={printAreaRef}
-            className="bg-white text-slate-900 p-5 sm:p-7 rounded-2xl border-2 border-slate-900 shadow-sm print:border-2 print:border-black print:p-6 print:rounded-none print:shadow-none space-y-4"
+            className="relative bg-white text-slate-900 p-5 sm:p-7 rounded-2xl border-2 border-slate-900 shadow-sm print:border-2 print:border-black print:p-6 print:rounded-none print:shadow-none space-y-4 overflow-hidden"
           >
+            {/* Official College Logo Watermark for Print & Screen */}
+            <div 
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none flex items-center justify-center z-0 opacity-[0.06] print:opacity-[0.08] select-none"
+            >
+              <img 
+                src={logo} 
+                alt="NEC Watermark" 
+                className="w-72 h-72 sm:w-96 sm:h-96 object-contain -rotate-12 filter grayscale" 
+              />
+            </div>
             
             {/* Header: College Logo, Name, Autonomous, Affiliations */}
-            <div className="border-b-2 border-slate-900 pb-3.5 text-center">
+            <div className="relative z-10 border-b-2 border-slate-900 pb-3.5 text-center">
               <div className="flex items-center justify-between gap-3">
                 <img 
                   src={logo} 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import logo from '../neclogo.png';
 import { 
   getAllCertificateRequests, 
   updateCertificateStatus, 
@@ -516,8 +517,15 @@ const OfficeDashboard = () => {
       {/* Printable Certificate Request Slip Modal */}
       {selectedRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
-          <div className="glass-card w-full max-w-xl p-8 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-6 modal-card-fullscreen">
-            <div className="text-center border-b pb-4 border-slate-200 dark:border-slate-800 space-y-1">
+          <div className="relative glass-card w-full max-w-xl p-8 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-6 modal-card-fullscreen overflow-hidden">
+            {/* College Logo Watermark */}
+            <div 
+              aria-hidden="true" 
+              className="absolute inset-0 pointer-events-none flex items-center justify-center z-0 opacity-[0.06] select-none"
+            >
+              <img src={logo} alt="Watermark" className="w-80 h-80 object-contain -rotate-12 filter grayscale" />
+            </div>
+            <div className="relative z-10 text-center border-b pb-4 border-slate-200 dark:border-slate-800 space-y-1">
               <h2 className="text-xl font-black text-primary uppercase tracking-tight">
                 Narasaraopeta Engineering College
               </h2>

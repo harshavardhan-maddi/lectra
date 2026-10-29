@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { recordLogin, recordLogout } from '../services/activityLogger';
 
 const AuthContext = createContext(null);
 
@@ -123,6 +124,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
         setToken(customToken);
         setUser(watchmanUser);
+        try { recordLogin(watchmanUser); } catch (e) {}
         return watchmanUser;
       }
     } catch (e) {
@@ -144,6 +146,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
         setToken('watchman-session-token');
         setUser(watchmanUser);
+        try { recordLogin(watchmanUser); } catch (e) {}
         return watchmanUser;
       }
     }
@@ -164,6 +167,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
         setToken('ao-session-token');
         setUser(aoUser);
+        try { recordLogin(aoUser); } catch (e) {}
         return aoUser;
       }
     }
@@ -184,6 +188,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
         setToken('office-session-token');
         setUser(officeUser);
+        try { recordLogin(officeUser); } catch (e) {}
         return officeUser;
       }
     }
@@ -226,6 +231,7 @@ export const AuthProvider = ({ children }) => {
 
           setToken(data.token);
           setUser(finalUser);
+          try { recordLogin(finalUser); } catch (e) {}
           return finalUser;
         } else if (!res.ok && data.message && !data.message.includes('Invalid')) {
           throw new Error(data.message);
@@ -259,6 +265,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
         setToken(customToken);
         setUser(facultyUser);
+        try { recordLogin(facultyUser); } catch (e) {}
         return facultyUser;
       }
     } catch (e) {
@@ -269,6 +276,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    if (user) {
+      try { recordLogout(user); } catch (e) {}
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('auth_session');

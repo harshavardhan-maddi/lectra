@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { logActivity } from '../services/activityLogger';
+import ModalSessionHeader from '../components/ModalSessionHeader';
 import { 
   Plus, 
   Trash2, 
@@ -8,7 +11,7 @@ import {
   Clock, 
   BookOpen, 
   User, 
-  Building,
+  Building, 
   Calendar,
   X,
   Grid,
@@ -33,6 +36,7 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satur
 
 const ManageClassrooms = () => {
   const { token, user, selectedDepartment, departments } = useAuth();
+  const toast = useToast();
   const [newClassDepartment, setNewClassDepartment] = useState('');
 
   // Classrooms list state
@@ -341,6 +345,16 @@ const ManageClassrooms = () => {
       if (!res.ok) throw new Error(data.message || 'Failed to import timetable');
 
       setSuccess(`Imported ${data.count} timetable slots successfully!`);
+      if (toast?.success) {
+        toast.success(`Imported ${data.count} timetable slots successfully!`);
+      }
+      logActivity({
+        user,
+        action: 'IMPORT_TIMETABLE',
+        category: 'Classroom',
+        details: `Imported ${data.count} weekly periods into ${selectedClassroom?.roomNumber} (${selectedClassroom?.className})`,
+        status: 'COMPLETED'
+      });
       setShowImportModal(false);
       setImportFile(null);
       setImportData([]);
@@ -348,6 +362,7 @@ const ManageClassrooms = () => {
       fetchTimetable(selectedClassroom.id);
     } catch (err) {
       setImportError(err.message);
+      if (toast?.error) toast.error(err.message || 'Import failed');
     } finally {
       setImportSubmitting(false);
     }
@@ -432,6 +447,14 @@ const ManageClassrooms = () => {
       if (!res.ok) throw new Error(data.message || 'Failed to create classroom');
 
       setSuccess(`Classroom ${newRoomNumber} (${newClassName}) created successfully!`);
+      if (toast?.success) toast.success(`Classroom ${newRoomNumber} (${newClassName}) created!`);
+      logActivity({
+        user,
+        action: 'ADD_CLASSROOM',
+        category: 'Classroom',
+        details: `Created classroom ${newRoomNumber} (${newClassName})`,
+        status: 'COMPLETED'
+      });
       setShowAddClassModal(false);
       setNewRoomNumber('');
       setNewClassName('');
@@ -439,6 +462,7 @@ const ManageClassrooms = () => {
       fetchClassrooms();
     } catch (err) {
       setError(err.message);
+      if (toast?.error) toast.error(err.message || 'Failed to create classroom');
     }
   };
 
@@ -469,6 +493,14 @@ const ManageClassrooms = () => {
       if (!res.ok) throw new Error(data.message || 'Failed to update classroom');
 
       setSuccess(`Classroom updated to ${editRoomNumber} (${editClassName}) successfully!`);
+      if (toast?.success) toast.success(`Classroom updated to ${editRoomNumber} (${editClassName})!`);
+      logActivity({
+        user,
+        action: 'UPDATE_CLASSROOM',
+        category: 'Classroom',
+        details: `Updated classroom to ${editRoomNumber} (${editClassName})`,
+        status: 'COMPLETED'
+      });
       setShowEditClassModal(false);
       setEditingClassroom(null);
       fetchClassrooms();
@@ -479,6 +511,7 @@ const ManageClassrooms = () => {
       }
     } catch (err) {
       setError(err.message);
+      if (toast?.error) toast.error(err.message || 'Failed to update classroom');
     }
   };
 
@@ -500,6 +533,14 @@ const ManageClassrooms = () => {
       if (!res.ok) throw new Error(data.message || 'Failed to delete classroom');
 
       setSuccess('Classroom deleted successfully.');
+      if (toast?.success) toast.success('Classroom deleted successfully.');
+      logActivity({
+        user,
+        action: 'DELETE_CLASSROOM',
+        category: 'Classroom',
+        details: `Deleted classroom ID: ${id}`,
+        status: 'COMPLETED'
+      });
       if (selectedClassroom?.id === id) {
         setSelectedClassroom(null);
         setTimetable([]);
@@ -507,6 +548,7 @@ const ManageClassrooms = () => {
       fetchClassrooms();
     } catch (err) {
       setError(err.message);
+      if (toast?.error) toast.error(err.message || 'Failed to delete classroom');
     }
   };
 
@@ -539,12 +581,21 @@ const ManageClassrooms = () => {
       if (!res.ok) throw new Error(data.message || 'Failed to save timetable period');
 
       setSuccess(`Period ${periodNo} saved successfully!`);
+      if (toast?.success) toast.success(`Period ${periodNo} (${periodSubject}) saved successfully!`);
+      logActivity({
+        user,
+        action: 'ADD_TIMETABLE_PERIOD',
+        category: 'Classroom',
+        details: `Added ${periodDay} Period ${periodNo} (${periodSubject} - ${periodFaculty}) to ${selectedClassroom.roomNumber}`,
+        status: 'COMPLETED'
+      });
       setShowAddPeriodModal(false);
       setPeriodFaculty('');
       setPeriodSubject('');
       fetchTimetable(selectedClassroom.id);
     } catch (err) {
       setError(err.message);
+      if (toast?.error) toast.error(err.message || 'Failed to save period');
     }
   };
 
@@ -568,9 +619,18 @@ const ManageClassrooms = () => {
       }
 
       setSuccess('Period deleted successfully.');
+      if (toast?.success) toast.success('Period deleted successfully.');
+      logActivity({
+        user,
+        action: 'DELETE_TIMETABLE_PERIOD',
+        category: 'Classroom',
+        details: `Deleted timetable period ID: ${periodId} from ${selectedClassroom?.roomNumber}`,
+        status: 'COMPLETED'
+      });
       fetchTimetable(selectedClassroom.id);
     } catch (err) {
       setError(err.message);
+      if (toast?.error) toast.error(err.message || 'Failed to delete period');
     }
   };
 
@@ -954,329 +1014,290 @@ const ManageClassrooms = () => {
             </div>
           )}
         </div>
-
       </div>
 
       {/* MODAL 1: ADD CLASSROOM */}
       {showAddClassModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-wrapper-fullscreen">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowAddClassModal(false)} />
-          
-          <form 
-            onSubmit={handleAddClassroom}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
-          >
-            <div className="flex items-center justify-between pb-3 border-b">
-              <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
-                Register New Classroom
-              </h3>
-              <button 
-                type="button"
-                onClick={() => setShowAddClassModal(false)} 
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
-            </div>
+          <div className="modal-window-fullscreen animate-fade-in z-10">
+            <ModalSessionHeader
+              title="Register New Classroom"
+              subtitle="Session: 2026–2027 • Classroom Management"
+              user={user}
+              onClose={() => setShowAddClassModal(false)}
+            />
+            <form onSubmit={handleAddClassroom} className="flex-1 flex flex-col overflow-hidden">
+              <div className="modal-window-body">
+                <div className="max-w-2xl mx-auto space-y-4 pt-4">
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
+                      Room Number (e.g., Room 301) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newRoomNumber}
+                      onChange={(e) => setNewRoomNumber(e.target.value)}
+                      placeholder="e.g. Room 301"
+                      className="glass-input w-full"
+                    />
+                  </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
-                  Room Number (e.g., Room 301)
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newRoomNumber}
-                  onChange={(e) => setNewRoomNumber(e.target.value)}
-                  placeholder="e.g. Room 301"
-                  className="glass-input"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
+                      Class Name (e.g., CSE 3rd Year) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newClassName}
+                      onChange={(e) => setNewClassName(e.target.value)}
+                      placeholder="e.g. CSE 3rd Year"
+                      className="glass-input w-full"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
-                  Class Name (e.g., CSE 3rd Year)
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newClassName}
-                  onChange={(e) => setNewClassName(e.target.value)}
-                  placeholder="e.g. CSE 3rd Year"
-                  className="glass-input"
-                />
-              </div>
-
-              {user?.role === 'SUPER_ADMIN' && (
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
-                    Department
-                  </label>
-                  <select
-                    value={newClassDepartment || (selectedDepartment !== 'ALL' ? selectedDepartment : 'Department of CSE(emerging Technologies)')}
-                    onChange={(e) => setNewClassDepartment(e.target.value)}
-                    className="glass-input"
-                  >
-                    {departments?.map((d) => (
-                      <option key={d} value={d} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
-                        {d}
-                      </option>
-                    ))}
-                  </select>
+                  {user?.role === 'SUPER_ADMIN' && (
+                    <div>
+                      <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
+                        Department
+                      </label>
+                      <select
+                        value={newClassDepartment || (selectedDepartment !== 'ALL' ? selectedDepartment : 'Department of CSE(emerging Technologies)')}
+                        onChange={(e) => setNewClassDepartment(e.target.value)}
+                        className="glass-input w-full"
+                      >
+                        {departments?.map((d) => (
+                          <option key={d} value={d} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button 
-                type="button" 
-                onClick={() => setShowAddClassModal(false)} 
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn-primary">
-                Add Classroom
-              </button>
-            </div>
-          </form>
+              </div>
+              <div className="modal-window-footer">
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddClassModal(false)} 
+                  className="btn-secondary py-2.5 px-5 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary py-2.5 px-6 text-xs font-black">
+                  Add Classroom
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
       {/* MODAL: EDIT CLASSROOM */}
       {showEditClassModal && editingClassroom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-wrapper-fullscreen">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowEditClassModal(false)} />
-          
-          <form 
-            onSubmit={handleEditClassroomSubmit}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
-          >
-            <div className="flex items-center justify-between pb-3 border-b">
-              <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
-                Edit Classroom Details
-              </h3>
-              <button 
-                type="button"
-                onClick={() => setShowEditClassModal(false)} 
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
-            </div>
+          <div className="modal-window-fullscreen animate-fade-in z-10">
+            <ModalSessionHeader
+              title="Edit Classroom Details"
+              subtitle={`Modifying ${editingClassroom.roomNumber} - ${editingClassroom.className}`}
+              user={user}
+              onClose={() => setShowEditClassModal(false)}
+            />
+            <form onSubmit={handleEditClassroomSubmit} className="flex-1 flex flex-col overflow-hidden">
+              <div className="modal-window-body">
+                <div className="max-w-2xl mx-auto space-y-4 pt-4">
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
+                      Room Number *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editRoomNumber}
+                      onChange={(e) => setEditRoomNumber(e.target.value)}
+                      placeholder="e.g. Room 301"
+                      className="glass-input w-full"
+                    />
+                  </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
-                  Room Number
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editRoomNumber}
-                  onChange={(e) => setEditRoomNumber(e.target.value)}
-                  placeholder="e.g. Room 301"
-                  className="glass-input"
-                />
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
+                      Class Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editClassName}
+                      onChange={(e) => setEditClassName(e.target.value)}
+                      placeholder="e.g. CSE 3rd Year"
+                      className="glass-input w-full"
+                    />
+                  </div>
+                </div>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-2">
-                  Class Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editClassName}
-                  onChange={(e) => setEditClassName(e.target.value)}
-                  placeholder="e.g. CSE 3rd Year"
-                  className="glass-input"
-                />
+              <div className="modal-window-footer">
+                <button 
+                  type="button" 
+                  onClick={() => setShowEditClassModal(false)} 
+                  className="btn-secondary py-2.5 px-5 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary py-2.5 px-6 text-xs font-black">
+                  Save Changes
+                </button>
               </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button 
-                type="button" 
-                onClick={() => setShowEditClassModal(false)} 
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn-primary">
-                Save Changes
-              </button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       )}
 
       {/* MODAL 2: ASSIGN SCHEDULE PERIOD */}
       {showAddPeriodModal && selectedClassroom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-wrapper-fullscreen">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowAddPeriodModal(false)} />
-          
-          <form 
-            onSubmit={handleAddPeriod}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-lg p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
-          >
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div>
-                <span className="text-[10px] font-bold text-primary uppercase">{selectedClassroom.roomNumber}</span>
-                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
-                  Assign Timetable Period
-                </h3>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setShowAddPeriodModal(false)} 
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
-            </div>
+          <div className="modal-window-fullscreen animate-fade-in z-10">
+            <ModalSessionHeader
+              title={`Assign Timetable Period (${selectedClassroom.roomNumber})`}
+              subtitle={`Classroom: ${selectedClassroom.className} • Academic Schedule`}
+              user={user}
+              onClose={() => setShowAddPeriodModal(false)}
+            />
+            <form onSubmit={handleAddPeriod} className="flex-1 flex flex-col overflow-hidden">
+              <div className="modal-window-body">
+                <div className="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Day of Week *
+                    </label>
+                    <select
+                      value={periodDay}
+                      onChange={(e) => setPeriodDay(e.target.value)}
+                      className="glass-input text-sm w-full"
+                    >
+                      {WEEKDAYS.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Day of Week
-                </label>
-                <select
-                  value={periodDay}
-                  onChange={(e) => setPeriodDay(e.target.value)}
-                  className="glass-input text-sm"
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Period Number (1 - 7) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      max="7"
+                      value={periodNo}
+                      onChange={(e) => setPeriodNo(e.target.value)}
+                      className="glass-input w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Start Time (HH:MM) *
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={periodStart}
+                      onChange={(e) => setPeriodStart(e.target.value)}
+                      className="glass-input w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      End Time (HH:MM) *
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={periodEnd}
+                      onChange={(e) => setPeriodEnd(e.target.value)}
+                      className="glass-input w-full"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Subject Name *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <BookOpen size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={periodSubject}
+                        onChange={(e) => setPeriodSubject(e.target.value)}
+                        placeholder="e.g. Computer Networks"
+                        className="glass-input pl-9 w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Assign Faculty Name *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <User size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={periodFaculty}
+                        onChange={(e) => setPeriodFaculty(e.target.value)}
+                        placeholder="e.g. Dr. Srinivas Rao"
+                        className="glass-input pl-9 w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-window-footer">
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddPeriodModal(false)} 
+                  className="btn-secondary py-2.5 px-5 text-xs font-bold"
                 >
-                  {WEEKDAYS.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary py-2.5 px-6 text-xs font-black">
+                  Save Schedule
+                </button>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Period Number (1 - 7)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  max="7"
-                  value={periodNo}
-                  onChange={(e) => setPeriodNo(e.target.value)}
-                  className="glass-input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Start Time (HH:MM)
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={periodStart}
-                  onChange={(e) => setPeriodStart(e.target.value)}
-                  className="glass-input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  End Time (HH:MM)
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={periodEnd}
-                  onChange={(e) => setPeriodEnd(e.target.value)}
-                  className="glass-input"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Subject Name
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    <BookOpen size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={periodSubject}
-                    onChange={(e) => setPeriodSubject(e.target.value)}
-                    placeholder="e.g. Computer Networks"
-                    className="glass-input pl-9"
-                  />
-                </div>
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Assign Faculty Name
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    <User size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={periodFaculty}
-                    onChange={(e) => setPeriodFaculty(e.target.value)}
-                    placeholder="e.g. Dr. Srinivas Rao"
-                    className="glass-input pl-9"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button 
-                type="button" 
-                onClick={() => setShowAddPeriodModal(false)} 
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn-primary">
-                Save Schedule
-              </button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       )}
 
       {/* MODAL 3: BULK IMPORT TIMETABLE */}
       {showImportModal && selectedClassroom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-wrapper-fullscreen">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => !importSubmitting && !aiLoading && setShowImportModal(false)} />
-          
-          <form 
-            onSubmit={handleBulkImportSubmit}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-lg p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
-          >
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div>
-                <span className="text-[10px] font-bold text-primary uppercase">{selectedClassroom.roomNumber}</span>
-                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
-                  Bulk Import Weekly Timetable
-                </h3>
-              </div>
-              <button 
-                type="button"
-                onClick={() => !importSubmitting && !aiLoading && setShowImportModal(false)} 
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                disabled={importSubmitting || aiLoading}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Tab buttons */}
-            <div className="flex border-b border-slate-200 dark:border-slate-800">
+          <div className="modal-window-fullscreen animate-fade-in z-10">
+            <ModalSessionHeader
+              title={`Bulk Import Timetable (${selectedClassroom.roomNumber})`}
+              subtitle={`Classroom: ${selectedClassroom.className} • Timetable Importer`}
+              user={user}
+              onClose={() => !importSubmitting && !aiLoading && setShowImportModal(false)}
+            />
+            <form onSubmit={handleBulkImportSubmit} className="flex-1 flex flex-col overflow-hidden">
+              <div className="modal-window-body">
+                <div className="max-w-4xl mx-auto space-y-4">
+                  {/* Tab buttons */}
+                  <div className="flex border-b border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => {
@@ -1478,26 +1499,29 @@ Monday,2,Artificial Intelligence,Dr. Sarah Thomas
                   </div>
                 </div>
               )}
-            </div>
+                  </div>
+                </div>
+              </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button 
-                type="button" 
-                onClick={() => setShowImportModal(false)} 
-                className="btn-secondary"
-                disabled={importSubmitting || aiLoading}
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                className="btn-primary bg-gradient-to-r from-primary to-primary-dark hover:from-primary-dark hover:to-primary"
-                disabled={importSubmitting || aiLoading || importPreviewCount === 0}
-              >
-                {importSubmitting ? 'Importing...' : 'Upload & Import Timetable'}
-              </button>
-            </div>
-          </form>
+              <div className="modal-window-footer">
+                <button 
+                  type="button" 
+                  onClick={() => setShowImportModal(false)} 
+                  className="btn-secondary py-2.5 px-5 text-xs font-bold"
+                  disabled={importSubmitting || aiLoading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn-primary py-2.5 px-6 text-xs font-black"
+                  disabled={importSubmitting || aiLoading || importPreviewCount === 0}
+                >
+                  {importSubmitting ? 'Importing...' : 'Upload & Import Timetable'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

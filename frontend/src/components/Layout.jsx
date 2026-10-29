@@ -27,7 +27,8 @@ import {
   CheckCircle2,
   PhoneCall,
   Calendar,
-  FileText
+  FileText,
+  Activity
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -170,6 +171,7 @@ const Layout = ({ children }) => {
   if (user?.role === 'SUPER_ADMIN') {
     navLinks.push(
       { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'User Activity Logs', path: '/activity-logs', icon: Activity },
       { name: 'Student Registry', path: '/students', icon: GraduationCap },
       { name: 'Absentees Tracking', path: '/absentees', icon: AlertCircle },
       { name: 'Outpass Approvals', path: '/outpasses', icon: FileText },

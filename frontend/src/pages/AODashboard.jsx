@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
+import { useToast } from '../context/ToastContext';
+import { logActivity } from '../services/activityLogger';
+import ModalSessionHeader from '../components/ModalSessionHeader';
 import { 
   getAllOutpasses, 
   subscribeToOutpasses, 
@@ -61,6 +64,7 @@ OFF2005, G. Ramesh, Office Attender`;
 
 const AODashboard = () => {
   const { user, token, registerUser } = useAuth();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef(null);
 
@@ -268,8 +272,11 @@ const AODashboard = () => {
         remarks: `Leave approved by AO for ${applicantRole}. Forwarded to Campus Security at main gate.`
       });
       setActionSuccess(`Permission granted for ${ticket.facultyName || applicantRole}! Forwarded to Campus Security.`);
+      toast?.success(`Permission granted for ${ticket.facultyName || applicantRole}! Forwarded to Campus Security.`);
+      logActivity(user?.name, user?.role, 'Approve Leave', `Approved leave for ${ticket.facultyName || applicantRole} (${ticket.id})`, 'APPROVE');
       setTimeout(() => setActionSuccess(''), 4000);
     } catch (err) {
+      toast?.error(err.message || 'Failed to approve leave application');
       setActionError(err.message || 'Failed to approve leave application');
     }
   };
@@ -290,10 +297,13 @@ const AODashboard = () => {
         reason: rejectReason.trim()
       });
       setActionSuccess(`Application for ${rejectingTicket.facultyName || applicantRole} rejected.`);
+      toast?.info(`Application for ${rejectingTicket.facultyName || applicantRole} rejected.`);
+      logActivity(user?.name, user?.role, 'Reject Leave', `Rejected leave for ${rejectingTicket.facultyName || applicantRole} (${rejectingTicket.id}). Reason: ${rejectReason}`, 'REJECT');
       setRejectingTicket(null);
       setRejectReason('');
       setTimeout(() => setActionSuccess(''), 4000);
     } catch (err) {
+      toast?.error(err.message || 'Failed to reject leave application');
       setActionError(err.message || 'Failed to reject leave application');
     }
   };
@@ -374,6 +384,8 @@ const AODashboard = () => {
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(updated));
 
       setAddStaffSuccess(`Office Staff "${cleanName}" added successfully! Login ID: ${cleanEmpId} | Password: nrtec@nec`);
+      toast?.success(`Office Staff "${cleanName}" (${cleanEmpId}) created successfully!`);
+      logActivity(user?.name, user?.role, 'Add Staff', `Added office staff member ${cleanName} (${cleanEmpId}) - ${cleanDesignation}`, 'CREATE');
       await loadOfficeStaff();
 
       setTimeout(() => {
@@ -386,6 +398,7 @@ const AODashboard = () => {
         setAddStaffSuccess('');
       }, 1800);
     } catch (err) {
+      toast?.error(err.message || 'Failed to add office staff member');
       setAddStaffError(err.message || 'Failed to add office staff member');
     } finally {
       setIsAddingStaff(false);
@@ -631,6 +644,8 @@ const AODashboard = () => {
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(merged));
 
       setBulkSuccess(`Successfully imported ${itemsToProcess.length} office staff members! All login accounts created with Login ID = Emp ID and default password nrtec@nec.`);
+      toast?.success(`Successfully imported ${itemsToProcess.length} office staff members!`);
+      logActivity(user?.name, user?.role, 'Bulk Import Staff', `Imported ${itemsToProcess.length} office staff members via CSV`, 'CREATE');
       await loadOfficeStaff();
 
       setTimeout(() => {
@@ -640,6 +655,7 @@ const AODashboard = () => {
         setBulkSuccess('');
       }, 2200);
     } catch (err) {
+      toast?.error(err.message || 'Failed to bulk import office staff');
       setBulkError(err.message || 'Failed to bulk import office staff');
     } finally {
       setIsBulkSaving(false);
@@ -669,9 +685,12 @@ const AODashboard = () => {
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(updated));
 
       setActionSuccess(`Office staff "${staff.name}" removed successfully.`);
+      toast?.info(`Office staff "${staff.name}" removed.`);
+      logActivity(user?.name, user?.role, 'Delete Staff', `Removed office staff member ${staff.name} (${staff.empid})`, 'DELETE');
       setTimeout(() => setActionSuccess(''), 3000);
       await loadOfficeStaff();
     } catch (err) {
+      toast?.error(err.message || 'Failed to delete office staff');
       setActionError(err.message || 'Failed to delete office staff');
     }
   };
@@ -718,10 +737,13 @@ const AODashboard = () => {
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(updated));
 
       setActionSuccess(`Staff details for "${editingStaff.name}" updated successfully.`);
+      toast?.success(`Staff details for "${editingStaff.name}" updated successfully!`);
+      logActivity(user?.name, user?.role, 'Modify Staff', `Updated staff details for ${editingStaff.name} (${editingStaff.empid})`, 'UPDATE');
       setTimeout(() => setActionSuccess(''), 3000);
       setEditingStaff(null);
       await loadOfficeStaff();
     } catch (err) {
+      toast?.error(err.message || 'Failed to update office staff');
       setActionError(err.message || 'Failed to update office staff');
     } finally {
       setIsUpdatingStaff(false);
@@ -1385,179 +1407,168 @@ const AODashboard = () => {
 
       {/* Single Add Office Staff Modal */}
       {showAddStaffModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
-          <div className="glass-card w-full max-w-lg p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-5 modal-card-fullscreen">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
-                  <UserPlus size={20} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/75 backdrop-blur-md animate-fade-in modal-wrapper-fullscreen">
+          <div className="modal-window-fullscreen glass-card w-full max-w-2xl rounded-none md:rounded-3xl border-0 md:border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            <ModalSessionHeader
+              title="Add New Office Staff"
+              subtitle="Administrative Officer Portal • Authorized Account Provisioning"
+              icon={UserPlus}
+              onClose={() => setShowAddStaffModal(false)}
+            />
+
+            <form onSubmit={handleAddOfficeStaff} className="flex-1 flex flex-col min-h-0">
+              <div className="modal-window-body flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                {addStaffError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold text-xs flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0" />
+                    <span>{addStaffError}</span>
+                  </div>
+                )}
+
+                {addStaffSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-2">
+                    <CheckCircle2 size={15} className="shrink-0" />
+                    <span>{addStaffSuccess}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Employee / Login ID */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                      Employee ID / Login ID *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. OFF2001 or 1042"
+                      value={newStaffEmpId}
+                      onChange={(e) => setNewStaffEmpId(e.target.value.toUpperCase())}
+                      className="w-full glass-input text-xs py-2.5 font-mono uppercase"
+                    />
+                    <span className="text-[10px] text-customText-muted mt-0.5 block">
+                      Used as the username for login
+                    </span>
+                  </div>
+
+                  {/* Mobile Phone Number */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                      Mobile Number *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="10-digit Mobile Number"
+                      value={newStaffPhone}
+                      onChange={(e) => setNewStaffPhone(e.target.value)}
+                      className="w-full glass-input text-xs py-2.5"
+                    />
+                    <span className="text-[10px] text-customText-muted mt-0.5 block">
+                      Contact for gate alerts and records
+                    </span>
+                  </div>
                 </div>
+
+                {/* Full Name */}
                 <div>
-                  <h3 className="text-base font-black text-customText dark:text-customText-dark">
-                    Add New Office Staff
-                  </h3>
-                  <p className="text-[11px] text-customText-muted">
-                    Administrative Officer Portal • Authorized Creation
+                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                    Staff Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. K. Rama Rao"
+                    value={newStaffName}
+                    onChange={(e) => setNewStaffName(e.target.value)}
+                    className="w-full glass-input text-xs py-2.5"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Designation */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                      Designation / Role in Office *
+                    </label>
+                    <select
+                      value={newStaffDesignation}
+                      onChange={(e) => setNewStaffDesignation(e.target.value)}
+                      className="w-full glass-input text-xs py-2.5"
+                    >
+                      {COMMON_DESIGNATIONS.map(d => (
+                        <option key={d} value={d} className="dark:bg-slate-900 text-customText">
+                          {d}
+                        </option>
+                      ))}
+                      <option value="Other" className="dark:bg-slate-900 text-customText">Other / Custom Designation...</option>
+                    </select>
+
+                    {newStaffDesignation === 'Other' && (
+                      <input
+                        type="text"
+                        placeholder="Enter Custom Designation"
+                        value={customDesignation}
+                        onChange={(e) => setCustomDesignation(e.target.value)}
+                        className="w-full glass-input text-xs py-2.5 mt-2"
+                        required
+                      />
+                    )}
+                  </div>
+
+                  {/* Department (Fixed to Administrative Office) */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                      Department
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value="Administrative Office"
+                      className="w-full glass-input text-xs py-2.5 bg-slate-100 dark:bg-slate-800 font-bold text-customText cursor-not-allowed opacity-80"
+                    />
+                  </div>
+                </div>
+
+                {/* Credentials Summary Box */}
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 font-black text-customText dark:text-customText-dark">
+                    <KeyRound size={14} className="text-indigo-600" />
+                    <span>Default Account Credentials</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                    <div>
+                      <span className="text-customText-muted block font-bold">Login ID:</span>
+                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        {newStaffEmpId || 'Emp ID entered above'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-customText-muted block font-bold">Default Password:</span>
+                      <span className="font-mono font-bold text-customText dark:text-customText-dark">
+                        nrtec@nec
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-customText-muted pt-1">
+                    When this staff member applies for permissions, the application routes directly to AO Login for approval before Security Gate clearance.
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowAddStaffModal(false)}
-                className="p-2 text-customText-muted hover:text-customText rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            {addStaffError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold text-xs flex items-center gap-2">
-                <AlertCircle size={15} className="shrink-0" />
-                <span>{addStaffError}</span>
-              </div>
-            )}
-
-            {addStaffSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-2">
-                <CheckCircle2 size={15} className="shrink-0" />
-                <span>{addStaffSuccess}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAddOfficeStaff} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Employee / Login ID */}
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Employee ID / Login ID *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. OFF2001 or 1042"
-                    value={newStaffEmpId}
-                    onChange={(e) => setNewStaffEmpId(e.target.value.toUpperCase())}
-                    className="w-full glass-input text-xs py-2.5 font-mono uppercase"
-                  />
-                  <span className="text-[10px] text-customText-muted mt-0.5 block">
-                    Used as the username for login
-                  </span>
-                </div>
-
-                {/* Mobile Phone Number */}
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Mobile Number *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="10-digit Mobile Number"
-                    value={newStaffPhone}
-                    onChange={(e) => setNewStaffPhone(e.target.value)}
-                    className="w-full glass-input text-xs py-2.5"
-                  />
-                  <span className="text-[10px] text-customText-muted mt-0.5 block">
-                    Contact for gate alerts and records
-                  </span>
-                </div>
-              </div>
-
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                  Staff Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. K. Rama Rao"
-                  value={newStaffName}
-                  onChange={(e) => setNewStaffName(e.target.value)}
-                  className="w-full glass-input text-xs py-2.5"
-                />
-              </div>
-
-              {/* Designation */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                  Designation / Role in Office *
-                </label>
-                <select
-                  value={newStaffDesignation}
-                  onChange={(e) => setNewStaffDesignation(e.target.value)}
-                  className="w-full glass-input text-xs py-2.5"
-                >
-                  {COMMON_DESIGNATIONS.map(d => (
-                    <option key={d} value={d} className="dark:bg-slate-900 text-customText">
-                      {d}
-                    </option>
-                  ))}
-                  <option value="Other" className="dark:bg-slate-900 text-customText">Other / Custom Designation...</option>
-                </select>
-
-                {newStaffDesignation === 'Other' && (
-                  <input
-                    type="text"
-                    placeholder="Enter Custom Designation"
-                    value={customDesignation}
-                    onChange={(e) => setCustomDesignation(e.target.value)}
-                    className="w-full glass-input text-xs py-2.5 mt-2"
-                    required
-                  />
-                )}
-              </div>
-
-              {/* Department (Fixed to Administrative Office) */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                  Department
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  disabled
-                  value="Administrative Office"
-                  className="w-full glass-input text-xs py-2.5 bg-slate-100 dark:bg-slate-800 font-bold text-customText cursor-not-allowed opacity-80"
-                />
-              </div>
-
-              {/* Credentials Summary Box */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs space-y-1.5">
-                <div className="flex items-center gap-2 font-black text-customText dark:text-customText-dark">
-                  <KeyRound size={14} className="text-indigo-600" />
-                  <span>Default Account Credentials</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
-                  <div>
-                    <span className="text-customText-muted block font-bold">Login ID:</span>
-                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                      {newStaffEmpId || 'Emp ID entered above'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-customText-muted block font-bold">Default Password:</span>
-                    <span className="font-mono font-bold text-customText dark:text-customText-dark">
-                      nrtec@nec
-                    </span>
-                  </div>
-                </div>
-                <p className="text-[10px] text-customText-muted pt-1">
-                  When this staff member applies for permissions, the application routes directly to AO Login for approval before Security Gate clearance.
-                </p>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-2">
+              <div className="modal-window-footer flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
                 <button
                   type="button"
                   onClick={() => setShowAddStaffModal(false)}
-                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isAddingStaff}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-black text-xs hover:bg-indigo-700 shadow-md transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-black text-xs hover:bg-indigo-700 shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isAddingStaff ? (
                     <>
@@ -1579,156 +1590,143 @@ const AODashboard = () => {
 
       {/* Bulk Upload Office Staff CSV Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto modal-wrapper-fullscreen">
-          <div className="glass-card w-full max-w-2xl p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-5 my-8 modal-card-fullscreen">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary-dark text-white flex items-center justify-center shadow-md shadow-primary-dark/20">
-                  <UploadCloud size={20} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/75 backdrop-blur-md animate-fade-in modal-wrapper-fullscreen">
+          <div className="modal-window-fullscreen glass-card w-full max-w-2xl rounded-none md:rounded-3xl border-0 md:border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            <ModalSessionHeader
+              title="Bulk Upload Office Staff"
+              subtitle="Administrative Officer Portal • CSV Data Ingestion"
+              icon={UploadCloud}
+              onClose={() => setShowBulkModal(false)}
+            />
+
+            <form onSubmit={handleBulkStaffSubmit} className="flex-1 flex flex-col min-h-0">
+              <div className="modal-window-body flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                {bulkError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold text-xs flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0" />
+                    <span>{bulkError}</span>
+                  </div>
+                )}
+
+                {bulkSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-2">
+                    <CheckCircle2 size={15} className="shrink-0" />
+                    <span>{bulkSuccess}</span>
+                  </div>
+                )}
+
+                {/* Quick Helper Tools Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs">
+                  <span className="font-bold text-customText-muted flex items-center gap-1.5">
+                    <FileSpreadsheet size={15} className="text-primary-dark" />
+                    CSV Format: <span className="text-customText dark:text-customText-dark font-mono">emp id, name, designation</span>
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={insertSampleTemplate}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] transition-colors cursor-pointer"
+                    >
+                      Insert Sample Template
+                    </button>
+
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept=".csv,.txt"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-customText font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <UploadCloud size={12} />
+                      <span>Choose File</span>
+                    </button>
+                  </div>
                 </div>
+
                 <div>
-                  <h3 className="text-base font-black text-customText dark:text-customText-dark">
-                    Bulk Upload Office Staff (CSV Text)
-                  </h3>
-                  <p className="text-[11px] text-customText-muted">
-                    Format: <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-bold">emp id, name, designation</code>
+                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                    Paste CSV Text Content *
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={bulkCsvText}
+                    onChange={handleBulkTextChange}
+                    placeholder={`emp id, name, designation\nOFF2001, K. Rama Rao, Senior Assistant\nOFF2002, M. Lakshmi, Junior Assistant\nOFF2003, P. Venkat, Accountant\nOFF2004, S. Suresh, Record Assistant`}
+                    className="w-full glass-input text-xs font-mono py-2.5 leading-relaxed resize-y"
+                    required
+                  />
+                  <p className="text-[10px] text-customText-muted mt-1">
+                    Separate each column with a comma (,) or tab. Department is automatically set to <strong>Administrative Office</strong> and default login password will be <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-bold">nrtec@nec</code>.
                   </p>
                 </div>
-              </div>
-              <button
-                onClick={() => setShowBulkModal(false)}
-                className="p-2 text-customText-muted hover:text-customText rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            {bulkError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold text-xs flex items-center gap-2">
-                <AlertCircle size={15} className="shrink-0" />
-                <span>{bulkError}</span>
-              </div>
-            )}
+                {/* Parsed Live Preview Table */}
+                {parsedBulkList.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-black text-customText dark:text-customText-dark flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="text-emerald-500" />
+                        Previewing {parsedBulkList.length} Office Staff Member{parsedBulkList.length !== 1 ? 's' : ''} Ready to Import:
+                      </span>
+                      <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                        Default Password: nrtec@nec
+                      </span>
+                    </div>
 
-            {bulkSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-2">
-                <CheckCircle2 size={15} className="shrink-0" />
-                <span>{bulkSuccess}</span>
-              </div>
-            )}
-
-            {/* Quick Helper Tools Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs">
-              <span className="font-bold text-customText-muted flex items-center gap-1.5">
-                <FileSpreadsheet size={15} className="text-primary-dark" />
-                CSV Format: <span className="text-customText dark:text-customText-dark font-mono">emp id, name, designation</span>
-              </span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={insertSampleTemplate}
-                  className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] transition-colors cursor-pointer"
-                >
-                  Insert Sample Template
-                </button>
-
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept=".csv,.txt"
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-customText font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <UploadCloud size={12} />
-                  <span>Choose File</span>
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleBulkStaffSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                  Paste CSV Text Content *
-                </label>
-                <textarea
-                  rows={6}
-                  value={bulkCsvText}
-                  onChange={handleBulkTextChange}
-                  placeholder={`emp id, name, designation\nOFF2001, K. Rama Rao, Senior Assistant\nOFF2002, M. Lakshmi, Junior Assistant\nOFF2003, P. Venkat, Accountant\nOFF2004, S. Suresh, Record Assistant`}
-                  className="w-full glass-input text-xs font-mono py-2.5 leading-relaxed resize-y"
-                  required
-                />
-                <p className="text-[10px] text-customText-muted mt-1">
-                  Separate each column with a comma (,) or tab. Department is automatically set to <strong>Administrative Office</strong> and default login password will be <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-bold">nrtec@nec</code>.
-                </p>
-              </div>
-
-              {/* Parsed Live Preview Table */}
-              {parsedBulkList.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-black text-customText dark:text-customText-dark flex items-center gap-1.5">
-                      <CheckCircle2 size={14} className="text-emerald-500" />
-                      Previewing {parsedBulkList.length} Office Staff Member{parsedBulkList.length !== 1 ? 's' : ''} Ready to Import:
-                    </span>
-                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
-                      Default Password: nrtec@nec
-                    </span>
-                  </div>
-
-                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-100 dark:bg-slate-800/80 text-[10px] uppercase font-bold text-customText-muted sticky top-0">
-                        <tr>
-                          <th className="p-2.5">#</th>
-                          <th className="p-2.5">Emp ID (Login)</th>
-                          <th className="p-2.5">Full Name</th>
-                          <th className="p-2.5">Designation</th>
-                          <th className="p-2.5">Department</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {parsedBulkList.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                            <td className="p-2.5 text-customText-muted font-bold">{idx + 1}</td>
-                            <td className="p-2.5 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                              {item.empid}
-                            </td>
-                            <td className="p-2.5 font-bold text-customText dark:text-customText-dark">
-                              {item.name}
-                            </td>
-                            <td className="p-2.5 text-customText-muted">
-                              {item.designation}
-                            </td>
-                            <td className="p-2.5 text-[11px] text-customText-muted">
-                              Administrative Office
-                            </td>
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100 dark:bg-slate-800/80 text-[10px] uppercase font-bold text-customText-muted sticky top-0">
+                          <tr>
+                            <th className="p-2.5">#</th>
+                            <th className="p-2.5">Emp ID (Login)</th>
+                            <th className="p-2.5">Full Name</th>
+                            <th className="p-2.5">Designation</th>
+                            <th className="p-2.5">Department</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {parsedBulkList.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                              <td className="p-2.5 text-customText-muted font-bold">{idx + 1}</td>
+                              <td className="p-2.5 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                {item.empid}
+                              </td>
+                              <td className="p-2.5 font-bold text-customText dark:text-customText-dark">
+                                {item.name}
+                              </td>
+                              <td className="p-2.5 text-customText-muted">
+                                {item.designation}
+                              </td>
+                              <td className="p-2.5 text-[11px] text-customText-muted">
+                                Administrative Office
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              <div className="flex gap-2 justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="modal-window-footer flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
                 <button
                   type="button"
                   onClick={() => setShowBulkModal(false)}
-                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isBulkSaving || parsedBulkList.length === 0}
-                  className="px-5 py-2.5 rounded-xl bg-primary-dark hover:bg-primary text-white font-black text-xs shadow-md transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary-dark hover:bg-primary text-white font-black text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isBulkSaving ? (
                     <>
@@ -1750,69 +1748,56 @@ const AODashboard = () => {
 
       {/* Edit Office Staff Modal */}
       {editingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
-          <div className="glass-card w-full max-w-md p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4 modal-card-fullscreen">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
-                  <Edit size={18} />
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/75 backdrop-blur-md animate-fade-in modal-wrapper-fullscreen">
+          <div className="modal-window-fullscreen glass-card w-full max-w-lg rounded-none md:rounded-3xl border-0 md:border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            <ModalSessionHeader
+              title="Edit Office Staff Details"
+              subtitle={`${editingStaff.name} • Emp ID: ${editingStaff.empid}`}
+              icon={Edit}
+              onClose={() => setEditingStaff(null)}
+            />
+
+            <form onSubmit={handleEditStaffSubmit} className="flex-1 flex flex-col min-h-0">
+              <div className="modal-window-body flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
                 <div>
-                  <h3 className="text-base font-black text-customText dark:text-customText-dark">
-                    Edit Office Staff Details
-                  </h3>
-                  <p className="text-[11px] text-customText-muted">
-                    {editingStaff.name} ({editingStaff.empid})
-                  </p>
+                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                    Designation / Role
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editDesignation}
+                    onChange={(e) => setEditDesignation(e.target.value)}
+                    className="w-full glass-input text-xs py-2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="Optional 10-digit mobile number"
+                    className="w-full glass-input text-xs py-2.5"
+                  />
                 </div>
               </div>
-              <button
-                onClick={() => setEditingStaff(null)}
-                className="p-2 text-customText-muted hover:text-customText rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <form onSubmit={handleEditStaffSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                  Designation / Role
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editDesignation}
-                  onChange={(e) => setEditDesignation(e.target.value)}
-                  className="w-full glass-input text-xs py-2.5"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                  Mobile Number
-                </label>
-                <input
-                  type="tel"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  placeholder="Optional 10-digit mobile number"
-                  className="w-full glass-input text-xs py-2.5"
-                />
-              </div>
-
-              <div className="flex gap-2 justify-end pt-2">
+              <div className="modal-window-footer flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
                 <button
                   type="button"
                   onClick={() => setEditingStaff(null)}
-                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isUpdatingStaff}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-black text-xs hover:bg-indigo-700 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-black text-xs hover:bg-indigo-700 shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isUpdatingStaff ? 'Updating...' : 'Save Changes'}
                 </button>
@@ -1824,46 +1809,48 @@ const AODashboard = () => {
 
       {/* Reject Modal */}
       {rejectingTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
-          <div className="glass-card w-full max-w-md p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4 modal-card-fullscreen">
-            <div className="flex items-center gap-3 text-rose-600">
-              <AlertCircle size={24} />
-              <h3 className="text-lg font-black text-customText dark:text-customText-dark">
-                Reject Leave Application
-              </h3>
-            </div>
-            
-            <p className="text-xs text-customText-muted">
-              Are you sure you want to reject the leave application for <strong className="text-customText dark:text-customText-dark">{rejectingTicket.facultyName}</strong> ({rejectingTicket.id})?
-            </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/75 backdrop-blur-md animate-fade-in modal-wrapper-fullscreen">
+          <div className="modal-window-fullscreen glass-card w-full max-w-lg rounded-none md:rounded-3xl border-0 md:border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            <ModalSessionHeader
+              title="Reject Leave Application"
+              subtitle={`${rejectingTicket.facultyName} • Ticket ID: ${rejectingTicket.id}`}
+              icon={AlertCircle}
+              onClose={() => setRejectingTicket(null)}
+            />
 
-            <form onSubmit={handleRejectSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                  Rejection Reason / Remarks *
-                </label>
-                <textarea
-                  rows={3}
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="State reason for rejecting (e.g. Institutional requirements, mandatory office work...)"
-                  className="w-full glass-input text-xs py-2.5 resize-none"
-                  required
-                  autoFocus
-                />
+            <form onSubmit={handleRejectSubmit} className="flex-1 flex flex-col min-h-0">
+              <div className="modal-window-body flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                <p className="text-xs text-customText-muted">
+                  Are you sure you want to reject the leave application for <strong className="text-customText dark:text-customText-dark">{rejectingTicket.facultyName}</strong> ({rejectingTicket.id})?
+                </p>
+
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
+                    Rejection Reason / Remarks *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="State reason for rejecting (e.g. Institutional requirements, mandatory office work...)"
+                    className="w-full glass-input text-xs py-2.5 resize-none"
+                    required
+                    autoFocus
+                  />
+                </div>
               </div>
 
-              <div className="flex gap-2 justify-end pt-2">
+              <div className="modal-window-footer flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
                 <button
                   type="button"
                   onClick={() => setRejectingTicket(null)}
-                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="w-full sm:w-auto btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-rose-600 text-white font-black text-xs hover:bg-rose-700 shadow-md transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-rose-600 text-white font-black text-xs hover:bg-rose-700 shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   Confirm Rejection
                 </button>

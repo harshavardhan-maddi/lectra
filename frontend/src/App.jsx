@@ -19,6 +19,8 @@ import WatchmanDashboard from './pages/WatchmanDashboard';
 import AODashboard from './pages/AODashboard';
 import OfficeDashboard from './pages/OfficeDashboard';
 import PWAUpdateNotification from './components/PWAUpdateNotification';
+import { ToastProvider } from './context/ToastContext';
+import CookieConsentBanner from './components/CookieConsentBanner';
 
 // Custom router resolver to send authenticated users to their correct home dashboard
 const HomeRedirect = () => {
@@ -250,6 +252,18 @@ const AppRoutes = () => {
         }
       />
 
+      {/* Protected User Activity Logs Route for Super Admin */}
+      <Route
+        path="/activity-logs"
+        element={
+          <PrivateRoute allowedRoles={['SUPER_ADMIN']}>
+            <Layout>
+              <Dashboard initialTab="activityLogs" />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
       {/* Wildcard redirects */}
       <Route path="/" element={<HomeRedirect />} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -261,10 +275,13 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <SocketProvider>
-          <AppRoutes />
-          <PWAUpdateNotification />
-        </SocketProvider>
+        <ToastProvider>
+          <SocketProvider>
+            <AppRoutes />
+            <CookieConsentBanner />
+            <PWAUpdateNotification />
+          </SocketProvider>
+        </ToastProvider>
       </AuthProvider>
     </Router>
   );

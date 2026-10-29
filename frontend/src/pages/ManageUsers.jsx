@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { logActivity } from '../services/activityLogger';
+import ModalSessionHeader from '../components/ModalSessionHeader';
 import { 
   UserPlus, 
   Trash2, 
@@ -23,6 +26,7 @@ import {
 
 const ManageUsers = () => {
   const { token, user: currentUser, registerUser, updateUserAdmin, deleteUser, getUsersList, getDepartmentsList } = useAuth();
+  const toast = useToast();
 
   const [users, setUsers] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
@@ -183,6 +187,8 @@ const ManageUsers = () => {
     if (successCount > 0) {
       setCsvModalSuccess(`Successfully created ${successCount} faculty login accounts with password "nrtec@nec"!`);
       setSuccess(`Batch imported ${successCount} faculty accounts into ${assignedDept}.`);
+      toast?.success(`Successfully imported ${successCount} faculty accounts!`);
+      logActivity(currentUser?.name, currentUser?.role, 'Bulk Create Users', `Created ${successCount} faculty logins via CSV`, 'CREATE');
       setParsedFacultyList([]);
       setCsvRawText('');
       loadData();
@@ -260,6 +266,8 @@ const ManageUsers = () => {
         (role === 'WATCHMAN' || role === 'SECURITY_HEAD') ? null : assignedDept
       );
       setSuccess(`User "${name}" successfully registered as ${role === 'WATCHMAN' || role === 'SECURITY_HEAD' ? 'Security Head' : role} in ${(role === 'WATCHMAN' || role === 'SECURITY_HEAD') ? 'Campus Gate' : assignedDept}.`);
+      toast?.success(`User "${name}" (${userId}) registered successfully!`);
+      logActivity(currentUser?.name, currentUser?.role, 'Add User', `Created ${role} account for ${name} (${userId})`, 'CREATE');
       setShowAddUserModal(false);
       
       // Clear forms
@@ -275,6 +283,7 @@ const ManageUsers = () => {
       
       loadData();
     } catch (err) {
+      toast?.error(err.message || 'Registration failed');
       setError(err.message || 'Registration failed');
     }
   };
@@ -311,10 +320,13 @@ const ManageUsers = () => {
 
       await updateUserAdmin(selectedUser.id, updatePayload);
       setSuccess(`User "${editName}" updated successfully.`);
+      toast?.success(`User "${editName}" updated successfully!`);
+      logActivity(currentUser?.name, currentUser?.role, 'Modify User', `Updated user account for ${editName} (${selectedUser.userId})`, 'UPDATE');
       setShowEditUserModal(false);
       setSelectedUser(null);
       loadData();
     } catch (err) {
+      toast?.error(err.message || 'Update failed');
       setError(err.message || 'Update failed');
     } finally {
       setEditSubmitting(false);
@@ -339,8 +351,11 @@ const ManageUsers = () => {
     try {
       await deleteUser(userToDelete.id);
       setSuccess(`User ${userToDelete.name} deleted successfully.`);
+      toast?.info(`User "${userToDelete.name}" deleted.`);
+      logActivity(currentUser?.name, currentUser?.role, 'Delete User', `Deleted user account for ${userToDelete.name} (${userToDelete.userId})`, 'DELETE');
       loadData();
     } catch (err) {
+      toast?.error(err.message || 'Delete user failed');
       setError(err.message || 'Delete user failed');
     }
   };
@@ -543,558 +558,534 @@ const ManageUsers = () => {
 
       {/* CREATE USER POPUP MODAL */}
       {showAddUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowAddUserModal(false)} />
-          
-          <form 
-            onSubmit={handleAddUser}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
-          >
-            <div className="flex items-center justify-between pb-3 border-b">
-              <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
-                Create User Account
-              </h3>
-              <button 
-                type="button"
-                onClick={() => setShowAddUserModal(false)} 
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    <User size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter name"
-                    className="glass-input pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* User ID */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  User ID (Unique login name)
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    <ShieldCheck size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                    placeholder="Enter unique ID (e.g. cr_rahul)"
-                    className="glass-input pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Secure Password
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    <Lock size={16} />
-                  </span>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    className="glass-input pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* Role */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Assign Account Role
-                </label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="glass-input text-sm"
-                >
-                  <option value="CR">Class Representative (CR)</option>
-                  <option value="FACULTY">Faculty</option>
-                  <option value="ABSENT_CONTROLLER">Absent Controller</option>
-                  <option value="SUB_ADMIN">Sub Admin</option>
-                  {isSuperAdmin && (
-                    <>
-                      <option value="HOD">HOD (Head of Department)</option>
-                      <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
-                      <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {/* Department Selection */}
-              {role !== 'WATCHMAN' && role !== 'SECURITY_HEAD' && (
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                    Department
-                  </label>
-                  {isSuperAdmin ? (
-                    <div className="space-y-2">
-                      <select
-                        value={isCustomDept ? '__NEW__' : department}
-                        onChange={(e) => {
-                          if (e.target.value === '__NEW__') {
-                            setIsCustomDept(true);
-                          } else {
-                            setIsCustomDept(false);
-                            setDepartment(e.target.value);
-                          }
-                        }}
-                        className="glass-input text-sm"
-                      >
-                        {departments.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                        <option value="__NEW__">➕ Create New Department...</option>
-                      </select>
-
-                      {isCustomDept && (
-                        <input
-                          type="text"
-                          required
-                          value={customDeptName}
-                          onChange={(e) => setCustomDeptName(e.target.value)}
-                          placeholder="Type new department name (e.g. Department of ECE)"
-                          className="glass-input text-sm border-primary"
-                        />
-                      )}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/75 backdrop-blur-md animate-fade-in modal-wrapper-fullscreen">
+          <div className="modal-window-fullscreen glass-card w-full max-w-2xl rounded-none md:rounded-3xl border-0 md:border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            <ModalSessionHeader
+              title="Create User Account"
+              subtitle="User Credential Provisioning & Role Delegation"
+              icon={UserPlus}
+              onClose={() => setShowAddUserModal(false)}
+            />
+            
+            <form 
+              onSubmit={handleAddUser}
+              className="flex-1 flex flex-col min-h-0"
+            >
+              <div className="modal-window-body flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Full Name */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <User size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Enter name"
+                        className="glass-input pl-9"
+                      />
                     </div>
-                  ) : (
-                    <div className="glass-input text-sm bg-slate-100/50 dark:bg-slate-800/50 cursor-not-allowed text-customText-muted dark:text-customText-mutedDark font-medium">
-                      {currentUser?.department || 'Department of CSE(emerging Technologies)'}
-                    </div>
-                  )}
-                </div>
-              )}
+                  </div>
 
-              {/* Class Selection (Only for CR) */}
-              {role === 'CR' && (
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                    Assign Classroom
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                      <Building size={16} />
-                    </span>
+                  {/* User ID */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      User ID (Unique login name)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <ShieldCheck size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={userId}
+                        onChange={(e) => setUserId(e.target.value)}
+                        placeholder="Enter unique ID (e.g. cr_rahul)"
+                        className="glass-input pl-9"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Password */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Secure Password
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <Lock size={16} />
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter password"
+                        className="glass-input pl-9"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Role */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Assign Account Role
+                    </label>
                     <select
-                      value={className}
-                      onChange={(e) => setClassName(e.target.value)}
-                      className="glass-input pl-9 text-sm"
-                      required
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="glass-input text-sm"
                     >
-                      <option value="">-- Choose Class --</option>
-                      {classrooms.map((c) => (
-                        <option key={c.id} value={c.className}>
-                          {c.className} ({c.roomNumber})
-                        </option>
-                      ))}
+                      <option value="CR">Class Representative (CR)</option>
+                      <option value="FACULTY">Faculty</option>
+                      <option value="ABSENT_CONTROLLER">Absent Controller</option>
+                      <option value="SUB_ADMIN">Sub Admin</option>
+                      {isSuperAdmin && (
+                        <>
+                          <option value="HOD">HOD (Head of Department)</option>
+                          <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
+                          <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
+                        </>
+                      )}
                     </select>
                   </div>
-                  {classrooms.length === 0 && (
-                    <p className="text-[10px] text-red-500 font-semibold mt-1">
-                      ⚠️ Note: No classrooms available. Please create classrooms first.
-                    </p>
-                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button 
-                type="button" 
-                onClick={() => setShowAddUserModal(false)} 
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn-primary">
-                Create Account
-              </button>
-            </div>
-          </form>
+                {/* Department Selection */}
+                {role !== 'WATCHMAN' && role !== 'SECURITY_HEAD' && (
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Department
+                    </label>
+                    {isSuperAdmin ? (
+                      <div className="space-y-2">
+                        <select
+                          value={isCustomDept ? '__NEW__' : department}
+                          onChange={(e) => {
+                            if (e.target.value === '__NEW__') {
+                              setIsCustomDept(true);
+                            } else {
+                              setIsCustomDept(false);
+                              setDepartment(e.target.value);
+                            }
+                          }}
+                          className="glass-input text-sm"
+                        >
+                          {departments.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                          <option value="__NEW__">➕ Create New Department...</option>
+                        </select>
+
+                        {isCustomDept && (
+                          <input
+                            type="text"
+                            required
+                            value={customDeptName}
+                            onChange={(e) => setCustomDeptName(e.target.value)}
+                            placeholder="Type new department name (e.g. Department of ECE)"
+                            className="glass-input text-sm border-primary"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="glass-input text-sm bg-slate-100/50 dark:bg-slate-800/50 cursor-not-allowed text-customText-muted dark:text-customText-mutedDark font-medium">
+                        {currentUser?.department || 'Department of CSE(emerging Technologies)'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Class Selection (Only for CR) */}
+                {role === 'CR' && (
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Assign Classroom
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <Building size={16} />
+                      </span>
+                      <select
+                        value={className}
+                        onChange={(e) => setClassName(e.target.value)}
+                        className="glass-input pl-9 text-sm"
+                        required
+                      >
+                        <option value="">-- Choose Class --</option>
+                        {classrooms.map((c) => (
+                          <option key={c.id} value={c.className}>
+                            {c.className} ({c.roomNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {classrooms.length === 0 && (
+                      <p className="text-[10px] text-red-500 font-semibold mt-1">
+                        ⚠️ Note: No classrooms available. Please create classrooms first.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-window-footer flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddUserModal(false)} 
+                  className="w-full sm:w-auto btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="w-full sm:w-auto btn-primary py-2.5 px-5 text-xs font-bold cursor-pointer"
+                >
+                  Create Account
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
       {/* EDIT USER / RESET PASSWORD MODAL */}
       {showEditUserModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowEditUserModal(false)} />
-          
-          <form 
-            onSubmit={handleEditUser}
-            className="relative glass-card bg-white dark:bg-slate-900 border border-white/60 w-full max-w-md p-6 shadow-2xl animate-fade-in z-10 space-y-4 modal-card-fullscreen"
-          >
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div>
-                <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
-                  Edit User & Password
-                </h3>
-                <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
-                  User ID: <span className="font-mono font-bold text-primary-dark">{selectedUser.userId}</span>
-                </p>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setShowEditUserModal(false)} 
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/75 backdrop-blur-md animate-fade-in modal-wrapper-fullscreen">
+          <div className="modal-window-fullscreen glass-card w-full max-w-2xl rounded-none md:rounded-3xl border-0 md:border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            <ModalSessionHeader
+              title="Edit User & Password"
+              subtitle={`User ID: ${selectedUser.userId} • Role: ${selectedUser.role}`}
+              icon={Pencil}
+              onClose={() => setShowEditUserModal(false)}
+            />
+            
+            <form 
+              onSubmit={handleEditUser}
+              className="flex-1 flex flex-col min-h-0"
+            >
+              <div className="modal-window-body flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Full Name */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <User size={16} />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="glass-input pl-9"
+                        disabled={editSubmitting}
+                      />
+                    </div>
+                  </div>
 
-            <div className="space-y-4">
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    <User size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="glass-input pl-9"
-                    disabled={editSubmitting}
-                  />
-                </div>
-              </div>
-
-              {/* Role Selection */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Role
-                </label>
-                <select
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
-                  className="glass-input text-sm"
-                  disabled={editSubmitting || (!isSuperAdmin && (selectedUser.role === 'SUPER_ADMIN' || selectedUser.role === 'HOD'))}
-                >
-                  <option value="CR">Class Representative (CR)</option>
-                  <option value="FACULTY">Faculty</option>
-                  <option value="ABSENT_CONTROLLER">Absent Controller</option>
-                  <option value="SUB_ADMIN">Sub Admin</option>
-                  {isSuperAdmin && (
-                    <>
-                      <option value="HOD">HOD (Head of Department)</option>
-                      <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
-                      <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {/* Department Selection (Super Admin only) */}
-              {isSuperAdmin && editRole !== 'WATCHMAN' && editRole !== 'SECURITY_HEAD' && (
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                    Department
-                  </label>
-                  <select
-                    value={editDepartment}
-                    onChange={(e) => setEditDepartment(e.target.value)}
-                    className="glass-input text-sm"
-                    disabled={editSubmitting}
-                  >
-                    {departments.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Class Selection (Only for CR) */}
-              {editRole === 'CR' && (
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                    Assign Classroom
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                      <Building size={16} />
-                    </span>
+                  {/* Role Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Role
+                    </label>
                     <select
-                      value={editClassName}
-                      onChange={(e) => setEditClassName(e.target.value)}
-                      className="glass-input pl-9 text-sm"
-                      required
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value)}
+                      className="glass-input text-sm"
+                      disabled={editSubmitting || (!isSuperAdmin && (selectedUser.role === 'SUPER_ADMIN' || selectedUser.role === 'HOD'))}
                     >
-                      <option value="">-- Choose Class --</option>
-                      {classrooms.map((c) => (
-                        <option key={c.id} value={c.className}>
-                          {c.className} ({c.roomNumber})
-                        </option>
-                      ))}
+                      <option value="CR">Class Representative (CR)</option>
+                      <option value="FACULTY">Faculty</option>
+                      <option value="ABSENT_CONTROLLER">Absent Controller</option>
+                      <option value="SUB_ADMIN">Sub Admin</option>
+                      {isSuperAdmin && (
+                        <>
+                          <option value="HOD">HOD (Head of Department)</option>
+                          <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
+                          <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>
-              )}
 
-              {/* Reset Password */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Reset Password (Optional)
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    <KeyRound size={16} />
-                  </span>
-                  <input
-                    type="password"
-                    value={editPassword}
-                    onChange={(e) => setEditPassword(e.target.value)}
-                    placeholder="Leave blank to keep existing password"
-                    className="glass-input pl-9"
-                    disabled={editSubmitting}
-                  />
+                {/* Department Selection (Super Admin only) */}
+                {isSuperAdmin && editRole !== 'WATCHMAN' && editRole !== 'SECURITY_HEAD' && (
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Department
+                    </label>
+                    <select
+                      value={editDepartment}
+                      onChange={(e) => setEditDepartment(e.target.value)}
+                      className="glass-input text-sm"
+                      disabled={editSubmitting}
+                    >
+                      {departments.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Class Selection (Only for CR) */}
+                {editRole === 'CR' && (
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Assign Classroom
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <Building size={16} />
+                      </span>
+                      <select
+                        value={editClassName}
+                        onChange={(e) => setEditClassName(e.target.value)}
+                        className="glass-input pl-9 text-sm"
+                        required
+                      >
+                        <option value="">-- Choose Class --</option>
+                        {classrooms.map((c) => (
+                          <option key={c.id} value={c.className}>
+                            {c.className} ({c.roomNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Reset Password */}
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                    Reset Password (Optional)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <KeyRound size={16} />
+                    </span>
+                    <input
+                      type="password"
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="Leave blank to keep existing password"
+                      className="glass-input pl-9"
+                      disabled={editSubmitting}
+                    />
+                  </div>
+                  <p className="text-[10px] text-customText-muted dark:text-customText-mutedDark mt-1">
+                    Enter a new password here to immediately override this user's password.
+                  </p>
                 </div>
-                <p className="text-[10px] text-customText-muted dark:text-customText-mutedDark mt-1">
-                  Enter a new password here to immediately override this user's password.
-                </p>
               </div>
-            </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t">
-              <button 
-                type="button" 
-                onClick={() => setShowEditUserModal(false)} 
-                className="btn-secondary"
-                disabled={editSubmitting}
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                className="btn-primary"
-                disabled={editSubmitting}
-              >
-                {editSubmitting ? 'Saving Changes...' : 'Save & Override'}
-              </button>
-            </div>
-          </form>
+              <div className="modal-window-footer flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
+                <button 
+                  type="button" 
+                  onClick={() => setShowEditUserModal(false)} 
+                  className="w-full sm:w-auto btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
+                  disabled={editSubmitting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="w-full sm:w-auto btn-primary py-2.5 px-5 text-xs font-bold cursor-pointer"
+                  disabled={editSubmitting}
+                >
+                  {editSubmitting ? 'Saving Changes...' : 'Save & Override'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
       {/* FACULTY CSV BULK IMPORT MODAL */}
       {showCsvModal && (
-        <div className="modal-backdrop">
-          <div className="modal-content max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                  <UploadCloud size={22} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/75 backdrop-blur-md animate-fade-in modal-wrapper-fullscreen">
+          <div className="modal-window-fullscreen glass-card w-full max-w-2xl rounded-none md:rounded-3xl border-0 md:border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+            <ModalSessionHeader
+              title="Batch Create Faculty Logins (.CSV)"
+              subtitle="Upload or paste CSV containing Faculty Name and Login ID"
+              icon={UploadCloud}
+              onClose={() => !csvUploading && setShowCsvModal(false)}
+            />
+
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="modal-window-body flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                {/* Default Password Banner */}
+                <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300 font-bold">
+                    <KeyRound size={16} />
+                    <span>Default Common Password: <code className="bg-purple-950/20 dark:bg-purple-950/60 px-2 py-0.5 rounded font-mono text-purple-600 dark:text-purple-300 border border-purple-500/30">nrtec@nec</code></span>
+                  </div>
+                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-purple-600 text-white">Auto-Assigned</span>
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-lg text-customText dark:text-customText-dark">
-                    Batch Create Faculty Logins (.CSV)
-                  </h3>
-                  <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
-                    Upload a CSV file containing Faculty Name and Login ID
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowCsvModal(false)} 
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                disabled={csvUploading}
-              >
-                <X size={20} />
-              </button>
-            </div>
 
-            <div className="py-4 space-y-4">
-              
-              {/* Default Password Banner */}
-              <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300 font-bold">
-                  <KeyRound size={16} />
-                  <span>Default Common Password: <code className="bg-purple-950/20 dark:bg-purple-950/60 px-2 py-0.5 rounded font-mono text-purple-600 dark:text-purple-300 border border-purple-500/30">nrtec@nec</code></span>
-                </div>
-                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-purple-600 text-white">Auto-Assigned</span>
-              </div>
+                {csvModalError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
+                    ⚠️ {csvModalError}
+                  </div>
+                )}
 
-              {csvModalError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
-                  ⚠️ {csvModalError}
-                </div>
-              )}
+                {csvModalSuccess && (
+                  <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
+                    ✅ {csvModalSuccess}
+                  </div>
+                )}
 
-              {csvModalSuccess && (
-                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
-                  ✅ {csvModalSuccess}
-                </div>
-              )}
-
-              {/* Department Selector for Super Admin */}
-              {isSuperAdmin && (
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                    Target Department for Faculty Logins
-                  </label>
-                  <select
-                    value={csvTargetDept}
-                    onChange={(e) => setCsvTargetDept(e.target.value)}
-                    className="glass-input text-sm"
-                    disabled={csvUploading}
-                  >
-                    {departments.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* File Upload Drop Zone */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  1. Select CSV File
-                </label>
-                <input
-                  type="file"
-                  accept=".csv,.txt"
-                  onChange={handleCsvFileUpload}
-                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 dark:file:bg-purple-950/40 dark:file:text-purple-300 cursor-pointer border border-slate-200 dark:border-slate-800 rounded-xl p-1"
-                  disabled={csvUploading}
-                />
-              </div>
-
-              {/* CSV Text Area Fallback */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
-                  Or Paste CSV Content Directly
-                </label>
-                <textarea
-                  rows={4}
-                  value={csvRawText}
-                  onChange={(e) => {
-                    setCsvRawText(e.target.value);
-                    parseCsvText(e.target.value);
-                  }}
-                  placeholder={`Faculty Name, Login ID\nDr. John Smith, CSE001\nProf. Jane Doe, CSE002`}
-                  className="glass-input font-mono text-xs p-3 leading-relaxed"
-                  disabled={csvUploading}
-                />
-                <p className="text-[10px] text-customText-muted dark:text-customText-mutedDark mt-1">
-                  Format per line: <span className="font-semibold text-customText dark:text-customText-dark">Faculty Name, Login ID</span> (e.g. "Dr. Ramesh, CSE101")
-                </p>
-              </div>
-
-              {/* Parsed Preview Table */}
-              {parsedFacultyList.length > 0 && (
-                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
-                      📋 Preview Ready ({parsedFacultyList.length} Accounts Found)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setParsedFacultyList([]);
-                        setCsvRawText('');
-                      }}
-                      className="text-[11px] text-slate-400 hover:text-red-500 underline"
+                {/* Department Selector for Super Admin */}
+                {isSuperAdmin && (
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      Target Department for Faculty Logins
+                    </label>
+                    <select
+                      value={csvTargetDept}
+                      onChange={(e) => setCsvTargetDept(e.target.value)}
+                      className="glass-input text-sm"
                       disabled={csvUploading}
                     >
-                      Clear
-                    </button>
+                      {departments.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
                   </div>
+                )}
 
-                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 p-2">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="text-[10px] text-slate-400 uppercase border-b border-slate-200 dark:border-slate-800">
-                          <th className="py-1 px-2">#</th>
-                          <th className="py-1 px-2">Faculty Name</th>
-                          <th className="py-1 px-2">Login ID</th>
-                          <th className="py-1 px-2">Password</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
-                        {parsedFacultyList.map((item, idx) => (
-                          <tr key={idx}>
-                            <td className="py-1.5 px-2 text-slate-400 font-mono">{idx + 1}</td>
-                            <td className="py-1.5 px-2 font-bold text-customText dark:text-customText-dark">{item.name}</td>
-                            <td className="py-1.5 px-2 font-mono text-purple-600 dark:text-purple-400">{item.userId}</td>
-                            <td className="py-1.5 px-2 font-mono text-slate-400">nrtec@nec</td>
+                {/* File Upload Drop Zone */}
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                    1. Select CSV File
+                  </label>
+                  <input
+                    type="file"
+                    accept=".csv,.txt"
+                    onChange={handleCsvFileUpload}
+                    className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 dark:file:bg-purple-950/40 dark:file:text-purple-300 cursor-pointer border border-slate-200 dark:border-slate-800 rounded-xl p-1"
+                    disabled={csvUploading}
+                  />
+                </div>
+
+                {/* CSV Text Area Fallback */}
+                <div>
+                  <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                    Or Paste CSV Content Directly
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={csvRawText}
+                    onChange={(e) => {
+                      setCsvRawText(e.target.value);
+                      parseCsvText(e.target.value);
+                    }}
+                    placeholder={`Faculty Name, Login ID\nDr. John Smith, CSE001\nProf. Jane Doe, CSE002`}
+                    className="glass-input font-mono text-xs p-3 leading-relaxed"
+                    disabled={csvUploading}
+                  />
+                  <p className="text-[10px] text-customText-muted dark:text-customText-mutedDark mt-1">
+                    Format per line: <span className="font-semibold text-customText dark:text-customText-dark">Faculty Name, Login ID</span> (e.g. "Dr. Ramesh, CSE101")
+                  </p>
+                </div>
+
+                {/* Parsed Preview Table */}
+                {parsedFacultyList.length > 0 && (
+                  <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                        📋 Preview Ready ({parsedFacultyList.length} Accounts Found)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setParsedFacultyList([]);
+                          setCsvRawText('');
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-red-500 underline"
+                        disabled={csvUploading}
+                      >
+                        Clear
+                      </button>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 p-2">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="text-[10px] text-slate-400 uppercase border-b border-slate-200 dark:border-slate-800">
+                            <th className="py-1 px-2">#</th>
+                            <th className="py-1 px-2">Faculty Name</th>
+                            <th className="py-1 px-2">Login ID</th>
+                            <th className="py-1 px-2">Password</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
+                          {parsedFacultyList.map((item, idx) => (
+                            <tr key={idx}>
+                              <td className="py-1.5 px-2 text-slate-400 font-mono">{idx + 1}</td>
+                              <td className="py-1.5 px-2 font-bold text-customText dark:text-customText-dark">{item.name}</td>
+                              <td className="py-1.5 px-2 font-mono text-purple-600 dark:text-purple-400">{item.userId}</td>
+                              <td className="py-1.5 px-2 font-mono text-slate-400">nrtec@nec</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Progress Indicator */}
-              {csvProgress && (
-                <div className="space-y-1.5 pt-2">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span>Import Progress</span>
-                    <span>{csvProgress.current} / {csvProgress.total}</span>
+                {/* Progress Indicator */}
+                {csvProgress && (
+                  <div className="space-y-1.5 pt-2">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span>Import Progress</span>
+                      <span>{csvProgress.current} / {csvProgress.total}</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-purple-600 transition-all duration-200"
+                        style={{ width: `${(csvProgress.current / csvProgress.total) * 100}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-purple-600 transition-all duration-200"
-                      style={{ width: `${(csvProgress.current / csvProgress.total) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
 
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-              <button 
-                type="button" 
-                onClick={() => setShowCsvModal(false)} 
-                className="btn-secondary"
-                disabled={csvUploading}
-              >
-                Cancel
-              </button>
-              <button 
-                type="button"
-                onClick={handleBatchImportFaculty}
-                disabled={csvUploading || parsedFacultyList.length === 0}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm shadow-lg disabled:opacity-50 transition-all"
-              >
-                <UploadCloud size={16} />
-                <span>
-                  {csvUploading 
-                    ? `Creating Logins (${csvProgress?.current || 0}/${csvProgress?.total || 0})...` 
-                    : `Create ${parsedFacultyList.length} Faculty Accounts`}
-                </span>
-              </button>
+              <div className="modal-window-footer flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80">
+                <button 
+                  type="button" 
+                  onClick={() => setShowCsvModal(false)} 
+                  className="w-full sm:w-auto btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
+                  disabled={csvUploading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleBatchImportFaculty}
+                  disabled={csvUploading || parsedFacultyList.length === 0}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-lg disabled:opacity-50 transition-all cursor-pointer"
+                >
+                  <UploadCloud size={16} />
+                  <span>
+                    {csvUploading 
+                      ? `Creating Logins (${csvProgress?.current || 0}/${csvProgress?.total || 0})...` 
+                      : `Create ${parsedFacultyList.length} Faculty Accounts`}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

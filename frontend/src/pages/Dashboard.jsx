@@ -78,9 +78,14 @@ import {
   downloadMySQLDump,
   getMigrationHistory
 } from '../services/backupService';
+import UserActivityLogs from '../components/UserActivityLogs';
+import { useToast } from '../context/ToastContext';
+import { logActivity } from '../services/activityLogger';
+import ModalSessionHeader from '../components/ModalSessionHeader';
 
 const Dashboard = ({ initialTab }) => {
   const { token, user, selectedDepartment } = useAuth();
+  const toast = useToast();
   const { socket } = useSocket();
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,10 +99,11 @@ const Dashboard = ({ initialTab }) => {
     if (location.pathname === '/absentees') return 'absentees';
     if (location.pathname === '/outpasses') return 'outpassApprovals';
     if (location.pathname === '/backup') return 'dataBackup';
+    if (location.pathname === '/activity-logs' || qTab === 'activityLogs') return 'activityLogs';
     return 'faculty';
   };
 
-  // Active Tab: 'faculty', 'students', 'absentees', 'settings', 'outpassApprovals', 'dataBackup'
+  // Active Tab: 'faculty', 'students', 'absentees', 'settings', 'outpassApprovals', 'dataBackup', 'activityLogs'
   const [activeTab, setActiveTab] = useState(getResolvedTab);
 
   useEffect(() => {
@@ -113,6 +119,7 @@ const Dashboard = ({ initialTab }) => {
     else if (newTab === 'absentees') navigate('/absentees');
     else if (newTab === 'outpassApprovals') navigate('/outpasses');
     else if (newTab === 'dataBackup') navigate('/backup');
+    else if (newTab === 'activityLogs') navigate('/activity-logs');
     else if (newTab === 'faculty') navigate('/dashboard');
   };
   const [success, setSuccess] = useState('');
@@ -237,11 +244,20 @@ const Dashboard = ({ initialTab }) => {
         section: sectionName
       });
       setMentorSuccessMsg(`Successfully assigned ${foundFaculty.name} as mentor for Section ${sectionName}!`);
+      toast.success(`Assigned ${foundFaculty.name} as mentor for Section ${sectionName}!`);
+      logActivity({
+        action: 'ASSIGN_MENTOR',
+        details: `Assigned faculty ${foundFaculty.name} as mentor for Section ${sectionName}`,
+        category: 'ACADEMICS',
+        completed: true,
+        user
+      });
       setEditingSectionMentor(null);
       setSelectedFacultyForSection('');
       setTimeout(() => setMentorSuccessMsg(''), 4000);
     } catch (err) {
       setMentorErrorMsg(err.message || 'Failed to assign mentor.');
+      toast.error(err.message || 'Failed to assign mentor.');
     } finally {
       setSavingMentorAssignment(false);
     }
@@ -253,10 +269,19 @@ const Dashboard = ({ initialTab }) => {
       setMentorErrorMsg('');
       await removeFacultyMentorByHod(sectionName);
       setMentorSuccessMsg(`Mentor removed for Section ${sectionName}.`);
+      toast.info(`Mentor removed for Section ${sectionName}.`);
+      logActivity({
+        action: 'REMOVE_MENTOR',
+        details: `Removed mentor for Section ${sectionName}`,
+        category: 'ACADEMICS',
+        completed: true,
+        user
+      });
       setEditingSectionMentor(null);
       setTimeout(() => setMentorSuccessMsg(''), 4000);
     } catch (err) {
       setMentorErrorMsg(err.message || 'Failed to remove mentor.');
+      toast.error(err.message || 'Failed to remove mentor.');
     } finally {
       setSavingMentorAssignment(false);
     }
@@ -997,6 +1022,14 @@ const Dashboard = ({ initialTab }) => {
       const data = await res.json();
       if (res.ok) {
         setStudentSubmitSuccess(`Student "${studentName}" added successfully.`);
+        toast.success(`Student "${studentName}" registered successfully!`);
+        logActivity({
+          action: 'ADD_STUDENT',
+          details: `Registered student ${studentName} (${studentRoll}) in Section ${studentSection}`,
+          category: 'STUDENTS',
+          completed: true,
+          user
+        });
         setStudentName('');
         setStudentRoll('');
         setStudentMobile('');
@@ -1008,9 +1041,11 @@ const Dashboard = ({ initialTab }) => {
         }, 1500);
       } else {
         setStudentSubmitError(data.message || 'Failed to add student');
+        toast.error(data.message || 'Failed to add student');
       }
     } catch (err) {
       setStudentSubmitError('Network connection issue');
+      toast.error('Network connection issue');
     } finally {
       setStudentSubmitting(false);
     }
@@ -1032,6 +1067,7 @@ const Dashboard = ({ initialTab }) => {
     e.preventDefault();
     if (!editStudentName || !editStudentRoll || !editStudentSection || !editStudentMobile || !editParentMobile) {
       setEditStudentSubmitError('All fields are required');
+      toast.error('All fields are required');
       return;
     }
 
@@ -1058,6 +1094,14 @@ const Dashboard = ({ initialTab }) => {
       const data = await res.json();
       if (res.ok) {
         setEditStudentSubmitSuccess('Student details updated successfully.');
+        toast.success(`Student "${editStudentName}" details updated successfully!`);
+        logActivity({
+          action: 'UPDATE_STUDENT',
+          details: `Updated details for ${editStudentName} (${editStudentRoll}) in Section ${editStudentSection}`,
+          category: 'STUDENTS',
+          completed: true,
+          user
+        });
         fetchStudents();
         fetchDashboardData(true); // Silent update of classroom student counts
         setTimeout(() => {
@@ -1067,9 +1111,11 @@ const Dashboard = ({ initialTab }) => {
         }, 1500);
       } else {
         setEditStudentSubmitError(data.message || 'Failed to update student details');
+        toast.error(data.message || 'Failed to update student details');
       }
     } catch (err) {
       setEditStudentSubmitError('Network connection issue');
+      toast.error('Network connection issue');
     } finally {
       setEditStudentSubmitting(false);
     }
@@ -3139,6 +3185,11 @@ const Dashboard = ({ initialTab }) => {
         </div>
       )}
 
+      {/* VIEW 7: SUPER ADMIN USER ACTIVITY AUDIT LOGS */}
+      {activeTab === 'activityLogs' && (
+        <UserActivityLogs />
+      )}
+
       {/* Official Outpass Ticket Modal for HOD */}
       {selectedOutpassModalTicket && (
         <OutpassTicketModal
@@ -3368,359 +3419,362 @@ const Dashboard = ({ initialTab }) => {
 
       {/* REGISTRATION MODAL FOR STUDENTS (HOD ONLY / SUPER ADMIN) */}
       {showAddStudentModal && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto modal-wrapper-fullscreen">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block modal-backdrop-responsive" onClick={() => setShowAddStudentModal(false)} />
-          
-          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto modal-card-fullscreen">
-            <div>
-              <div className="flex justify-between items-center pb-3 border-b mb-4 shrink-0">
-                <h3 className="font-extrabold text-base sm:text-lg text-customText dark:text-customText-dark">
-                  Add Student Profile
-                </h3>
-                <button onClick={() => setShowAddStudentModal(false)} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                  <X size={20} />
-                </button>
-              </div>
+        <div className="modal-window-fullscreen animate-fade-in">
+          <ModalSessionHeader
+            title="Add Student Profile"
+            subtitle={`Academic & Attendance Registry • ${user?.department || 'Department'}`}
+            user={user}
+            onClose={() => setShowAddStudentModal(false)}
+          />
 
+          <div className="modal-window-body">
+            <div className="max-w-5xl mx-auto space-y-4">
               {studentSubmitError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-655 text-xs font-semibold rounded-lg mb-3">
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
                   ⚠️ {studentSubmitError}
                 </div>
               )}
 
               {studentSubmitSuccess && (
-                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-655 text-xs font-semibold rounded-lg mb-3">
+                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
                   ✓ {studentSubmitSuccess}
                 </div>
               )}
 
               <form id="add-student-form" onSubmit={handleAddStudentSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. John Doe"
-                      value={studentName}
-                      onChange={(e) => setStudentName(e.target.value)}
-                      className="glass-input text-xs"
-                    />
-                  </div>
+                <div className="p-5 sm:p-6 rounded-3xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-customText dark:text-customText-dark">
+                    Student Details & Class Section
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. John Doe"
+                        value={studentName}
+                        onChange={(e) => setStudentName(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Roll / Register Number
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 22B81A0501"
-                      value={studentRoll}
-                      onChange={(e) => setStudentRoll(e.target.value)}
-                      className="glass-input text-xs"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Roll / Register Number
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 22B81A0501"
+                        value={studentRoll}
+                        onChange={(e) => setStudentRoll(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Assigned Section / Class
-                    </label>
-                    <select
-                      value={studentSection}
-                      onChange={(e) => setStudentSection(e.target.value)}
-                      className="glass-input text-xs"
-                      required
-                    >
-                      {classrooms.map((c) => (
-                        <option key={c.id} value={c.className}>
-                          {c.className} ({c.roomNumber})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Assigned Section / Class
+                      </label>
+                      <select
+                        value={studentSection}
+                        onChange={(e) => setStudentSection(e.target.value)}
+                        className="glass-input text-xs"
+                        required
+                      >
+                        {classrooms.map((c) => (
+                          <option key={c.id} value={c.className}>
+                            {c.className} ({c.roomNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Student Mobile Number
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="e.g. 9876543201"
-                      value={studentMobile}
-                      onChange={(e) => setStudentMobile(e.target.value)}
-                      className="glass-input text-xs"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Student Mobile Number
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="e.g. 9876543201"
+                        value={studentMobile}
+                        onChange={(e) => setStudentMobile(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Parent Mobile Number
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="e.g. 9123456701"
-                      value={parentMobile}
-                      onChange={(e) => setParentMobile(e.target.value)}
-                      className="glass-input text-xs"
-                    />
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Parent Mobile Number
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="e.g. 9123456701"
+                        value={parentMobile}
+                        onChange={(e) => setParentMobile(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddStudentModal(false)}
-                    className="btn-secondary py-2.5 px-4 text-xs font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={studentSubmitting}
-                    className="btn-primary py-2.5 px-5 text-xs bg-primary-dark font-bold"
-                  >
-                    {studentSubmitting ? 'Registering...' : 'Register Student'}
-                  </button>
                 </div>
               </form>
             </div>
+          </div>
+
+          <div className="modal-window-footer">
+            <button
+              type="button"
+              onClick={() => setShowAddStudentModal(false)}
+              className="btn-secondary py-3 px-6 text-xs font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="add-student-form"
+              disabled={studentSubmitting}
+              className="btn-primary py-3 px-8 text-xs font-black shadow-lg cursor-pointer"
+            >
+              {studentSubmitting ? 'Registering Student...' : 'Save & Register Student'}
+            </button>
           </div>
         </div>
       )}
 
       {/* EDIT MODAL FOR STUDENTS (HOD ONLY / SUPER ADMIN) */}
       {showEditStudentModal && editingStudent && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto modal-wrapper-fullscreen">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block modal-backdrop-responsive" onClick={() => setShowEditStudentModal(false)} />
-          
-          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto modal-card-fullscreen">
-            <div>
-              <div className="flex justify-between items-center pb-3 border-b mb-4 shrink-0">
-                <h3 className="font-extrabold text-base sm:text-lg text-customText dark:text-customText-dark">
-                  Edit Student details / Transfer section
-                </h3>
-                <button onClick={() => setShowEditStudentModal(false)} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                  <X size={20} />
-                </button>
-              </div>
+        <div className="modal-window-fullscreen animate-fade-in">
+          <ModalSessionHeader
+            title="Edit Student Details / Transfer Section"
+            subtitle={`Student: ${editingStudent.name} (${editingStudent.rollNumber}) • ${user?.department || 'Department'}`}
+            user={user}
+            onClose={() => setShowEditStudentModal(false)}
+          />
 
+          <div className="modal-window-body">
+            <div className="max-w-5xl mx-auto space-y-4">
               {editStudentSubmitError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-650 text-xs font-semibold rounded-lg mb-3 animate-shake">
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
                   ⚠️ {editStudentSubmitError}
                 </div>
               )}
 
               {editStudentSubmitSuccess && (
-                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-650 text-xs font-semibold rounded-lg mb-3">
+                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
                   ✓ {editStudentSubmitSuccess}
                 </div>
               )}
 
               <form id="edit-student-form" onSubmit={handleEditStudentSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. John Doe"
-                      value={editStudentName}
-                      onChange={(e) => setEditStudentName(e.target.value)}
-                      className="glass-input text-xs"
-                    />
-                  </div>
+                <div className="p-5 sm:p-6 rounded-3xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-customText dark:text-customText-dark">
+                    Modify Student & Section Assignment
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. John Doe"
+                        value={editStudentName}
+                        onChange={(e) => setEditStudentName(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Roll / Register Number
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 22B81A0501"
-                      value={editStudentRoll}
-                      onChange={(e) => setEditStudentRoll(e.target.value)}
-                      className="glass-input text-xs"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Roll / Register Number
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 22B81A0501"
+                        value={editStudentRoll}
+                        onChange={(e) => setEditStudentRoll(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Assigned Section / Class (Transfer Section)
-                    </label>
-                    <select
-                      value={editStudentSection}
-                      onChange={(e) => setEditStudentSection(e.target.value)}
-                      className="glass-input text-xs"
-                      required
-                    >
-                      {classrooms.map((c) => (
-                        <option key={c.id} value={c.className}>
-                          {c.className} ({c.roomNumber})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Assigned Section / Class (Transfer Section)
+                      </label>
+                      <select
+                        value={editStudentSection}
+                        onChange={(e) => setEditStudentSection(e.target.value)}
+                        className="glass-input text-xs"
+                        required
+                      >
+                        {classrooms.map((c) => (
+                          <option key={c.id} value={c.className}>
+                            {c.className} ({c.roomNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Student Mobile Number
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="e.g. 9876543201"
-                      value={editStudentMobile}
-                      onChange={(e) => setEditStudentMobile(e.target.value)}
-                      className="glass-input text-xs"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Student Mobile Number
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="e.g. 9876543201"
+                        value={editStudentMobile}
+                        onChange={(e) => setEditStudentMobile(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Parent Mobile Number
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="e.g. 9123456701"
-                      value={editParentMobile}
-                      onChange={(e) => setEditParentMobile(e.target.value)}
-                      className="glass-input text-xs"
-                    />
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Parent Mobile Number
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="e.g. 9123456701"
+                        value={editParentMobile}
+                        onChange={(e) => setEditParentMobile(e.target.value)}
+                        className="glass-input text-xs"
+                      />
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setShowEditStudentModal(false)}
-                    className="btn-secondary py-2.5 px-4 text-xs font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={editStudentSubmitting}
-                    className="btn-primary py-2.5 px-5 text-xs bg-primary-dark font-bold"
-                  >
-                    {editStudentSubmitting ? 'Saving changes...' : 'Save Changes'}
-                  </button>
                 </div>
               </form>
             </div>
+          </div>
+
+          <div className="modal-window-footer">
+            <button
+              type="button"
+              onClick={() => setShowEditStudentModal(false)}
+              className="btn-secondary py-3 px-6 text-xs font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="edit-student-form"
+              disabled={editStudentSubmitting}
+              className="btn-primary py-3 px-8 text-xs font-black shadow-lg cursor-pointer"
+            >
+              {editStudentSubmitting ? 'Saving changes...' : 'Save & Update Student'}
+            </button>
           </div>
         </div>
       )}
 
       {/* BULK UPLOAD MODAL FOR STUDENTS (HOD ONLY / SUPER ADMIN) */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-stretch lg:items-start justify-center p-0 lg:p-4 lg:pt-10 overflow-y-auto modal-wrapper-fullscreen">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden lg:block modal-backdrop-responsive" onClick={() => setShowBulkModal(false)} />
-          
-          <div className="relative glass-card border-0 lg:border border-white/60 w-full h-full lg:h-auto min-h-screen lg:min-h-0 lg:max-w-7xl p-4 sm:p-6 bg-white dark:bg-slate-900 shadow-2xl animate-fade-in z-10 text-left rounded-none lg:rounded-3xl flex flex-col justify-between overflow-y-auto modal-card-fullscreen">
-            <div className="flex justify-between items-center pb-3 border-b mb-4">
-              <h3 className="font-extrabold text-base text-customText dark:text-customText-dark">
-                Bulk Student Import (CSV/Text)
-              </h3>
-              <button onClick={() => setShowBulkModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
-            </div>
+        <div className="modal-window-fullscreen animate-fade-in">
+          <ModalSessionHeader
+            title="Bulk Student Import (CSV / Text)"
+            subtitle={`Mass Student Onboarding & Section Assignment • ${user?.department || 'Department'}`}
+            user={user}
+            onClose={() => setShowBulkModal(false)}
+          />
 
-            {bulkError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-655 text-xs font-semibold rounded-lg mb-3">
-                ⚠️ {bulkError}
-              </div>
-            )}
+          <div className="modal-window-body">
+            <div className="max-w-5xl mx-auto space-y-4">
+              {bulkError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
+                  ⚠️ {bulkError}
+                </div>
+              )}
 
-            {bulkSuccess && (
-              <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-655 text-xs font-semibold rounded-lg mb-3">
-                ✓ {bulkSuccess}
-              </div>
-            )}
+              {bulkSuccess && (
+                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
+                  ✓ {bulkSuccess}
+                </div>
+              )}
 
-            <form onSubmit={handleBulkSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                <div className="md:col-span-2 space-y-4">
-                  <div>
+              <form id="bulk-student-form" onSubmit={handleBulkSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                  <div className="md:col-span-2 space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
+                        Target Section / Class
+                      </label>
+                      <select
+                        value={bulkSection}
+                        onChange={(e) => setBulkSection(e.target.value)}
+                        className="glass-input text-xs"
+                        required
+                      >
+                        {classrooms.map((c) => (
+                          <option key={c.id} value={c.className}>
+                            {c.className} ({c.roomNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800/60">
+                      <h4 className="text-xs font-extrabold text-customText dark:text-customText-dark mb-2">CSV Upload Guide</h4>
+                      <p className="text-[10px] text-customText-muted leading-relaxed">
+                        Please format your CSV data line-by-line as follows:
+                      </p>
+                      <code className="block p-2 bg-slate-100 dark:bg-slate-900/60 rounded text-[10px] font-mono text-primary dark:text-primary-light my-2 select-all leading-normal whitespace-pre">
+                        RollNumber,Name,StudentMobile,ParentMobile
+                      </code>
+                      <p className="text-[10px] text-customText-muted leading-relaxed">
+                        Example:
+                      </p>
+                      <code className="block p-2 bg-slate-100 dark:bg-slate-900/60 rounded text-[10px] font-mono text-slate-600 dark:text-slate-400 my-1 leading-normal whitespace-pre">
+                        22B81A0501,Aarav Mehta,9876543201,9123456701{"\n"}
+                        22B81A0502,Bhavya Sen,9876543202,9123456702
+                      </code>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-3 space-y-2">
                     <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                      Target Section / Class
+                      Paste Student CSV Data
                     </label>
-                    <select
-                      value={bulkSection}
-                      onChange={(e) => setBulkSection(e.target.value)}
-                      className="glass-input text-xs"
+                    <textarea
+                      rows="12"
                       required
-                    >
-                      {classrooms.map((c) => (
-                        <option key={c.id} value={c.className}>
-                          {c.className} ({c.roomNumber})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60">
-                    <h4 className="text-xs font-extrabold text-customText dark:text-customText-dark mb-2">CSV Upload Guide</h4>
-                    <p className="text-[10px] text-customText-muted leading-relaxed">
-                      Please format your CSV data line-by-line as follows:
+                      placeholder="Format: RollNumber,Name,StudentMobile,ParentMobile"
+                      value={bulkText}
+                      onChange={(e) => setBulkText(e.target.value)}
+                      className="w-full glass-input text-xs font-mono p-3 leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary border border-slate-200 dark:border-slate-800 rounded-xl"
+                    />
+                    <p className="text-[10px] text-customText-muted mt-1 leading-snug">
+                      * Note: Each line must contain four values separated by a comma (,) or a tab (\t). Upserts are supported, so re-importing existing roll numbers updates their details.
                     </p>
-                    <code className="block p-2 bg-slate-100 dark:bg-slate-900/60 rounded text-[10px] font-mono text-primary dark:text-primary-light my-2 select-all leading-normal whitespace-pre">
-                      RollNumber,Name,StudentMobile,ParentMobile
-                    </code>
-                    <p className="text-[10px] text-customText-muted leading-relaxed">
-                      Example:
-                    </p>
-                    <code className="block p-2 bg-slate-100 dark:bg-slate-900/60 rounded text-[10px] font-mono text-slate-600 dark:text-slate-400 my-1 leading-normal whitespace-pre">
-                      22B81A0501,Aarav Mehta,9876543201,9123456701{"\n"}
-                      22B81A0502,Bhavya Sen,9876543202,9123456702
-                    </code>
                   </div>
                 </div>
+              </form>
+            </div>
+          </div>
 
-                <div className="md:col-span-3 space-y-2">
-                  <label className="block text-[10px] font-bold text-customText-muted uppercase tracking-wider mb-1">
-                    Paste Student CSV Data
-                  </label>
-                  <textarea
-                    rows="10"
-                    required
-                    placeholder="Format: RollNumber,Name,StudentMobile,ParentMobile"
-                    value={bulkText}
-                    onChange={(e) => setBulkText(e.target.value)}
-                    className="w-full glass-input text-xs font-mono p-3 leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary border border-slate-200 dark:border-slate-800 rounded-xl"
-                  />
-                  <p className="text-[10px] text-customText-muted mt-1 leading-snug">
-                    * Note: Each line must contain four values separated by a comma (,) or a tab (\t). Upserts are supported, so re-importing existing roll numbers updates their details.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowBulkModal(false)}
-                  className="btn-secondary py-2 text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={bulkSubmitting || classrooms.length === 0}
-                  className="btn-primary py-2 text-xs bg-primary-dark"
-                >
-                  {bulkSubmitting ? 'Importing...' : 'Import Students'}
-                </button>
-              </div>
-            </form>
+          <div className="modal-window-footer">
+            <button
+              type="button"
+              onClick={() => setShowBulkModal(false)}
+              className="btn-secondary py-3 px-6 text-xs font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="bulk-student-form"
+              disabled={bulkSubmitting || classrooms.length === 0}
+              className="btn-primary py-3 px-8 text-xs font-black shadow-lg cursor-pointer"
+            >
+              {bulkSubmitting ? 'Importing Students...' : 'Execute Bulk Student Import'}
+            </button>
           </div>
         </div>
       )}
@@ -3886,39 +3940,20 @@ const Dashboard = ({ initialTab }) => {
 
       {/* Modal: HOD Faculty Mentorship Manager */}
       {showMentorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-scale-in max-h-[90vh] flex flex-col modal-card-fullscreen">
-            
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
-                  <GraduationCap size={22} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-customText dark:text-customText-dark">
-                    Department Faculty Mentorship Manager
-                  </h3>
-                  <p className="text-xs text-customText-muted">
-                    Assign, re-assign, or change class mentors for sections in {user?.department || 'Department'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMentorModal(false);
-                  setEditingSectionMentor(null);
-                  setSelectedFacultyForSection('');
-                }}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
+        <div className="modal-window-fullscreen animate-fade-in">
+          <ModalSessionHeader
+            title="Department Faculty Mentorship Manager"
+            subtitle={`Assign, re-assign, or change class mentors • ${user?.department || 'Department'}`}
+            user={user}
+            onClose={() => {
+              setShowMentorModal(false);
+              setEditingSectionMentor(null);
+              setSelectedFacultyForSection('');
+            }}
+          />
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-4">
+          <div className="modal-window-body">
+            <div className="max-w-4xl mx-auto space-y-4">
               
               {mentorSuccessMsg && (
                 <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2">
@@ -4059,21 +4094,20 @@ const Dashboard = ({ initialTab }) => {
               </div>
 
             </div>
+          </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50/50 dark:bg-slate-950/30 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMentorModal(false);
-                  setEditingSectionMentor(null);
-                }}
-                className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-customText text-xs font-bold hover:bg-slate-300 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-
+          {/* Modal Footer */}
+          <div className="modal-window-footer">
+            <button
+              type="button"
+              onClick={() => {
+                setShowMentorModal(false);
+                setEditingSectionMentor(null);
+              }}
+              className="btn-secondary py-3 px-6 text-xs font-bold cursor-pointer"
+            >
+              Close Mentorship Window
+            </button>
           </div>
         </div>
       )}

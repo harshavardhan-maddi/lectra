@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Edit, UploadCloud, Users, Phone, Loader, Plus, X, Trash2, KeyRound, CheckCircle2, FileText, Lock, Download } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { logActivity } from '../services/activityLogger';
+import ModalSessionHeader from '../components/ModalSessionHeader';
+import { Search, Edit, UploadCloud, Users, Phone, Loader, Plus, X, Trash2, KeyRound, CheckCircle2, FileText, Lock, Download, AlertCircle } from 'lucide-react';
 
 const ManageFaculty = () => {
   const { token, user, registerUser } = useAuth();
+  const toast = useToast();
   const isHOD = user?.role === 'HOD';
   const isAO = user?.role === 'AO';
   const defaultDept = isAO 
@@ -162,6 +166,16 @@ const ManageFaculty = () => {
       setFacultyMetadata(updated);
 
       setAddSuccess(`Faculty "${newName}" added successfully! Login ID: ${newEmpId.trim()} | Password: nrtec@nec`);
+      if (toast?.success) {
+        toast.success(`Faculty member "${newName.trim()}" added successfully!`);
+      }
+      logActivity({
+        user,
+        action: 'ADD_FACULTY',
+        category: 'Faculty',
+        details: `Added faculty "${newName.trim()}" (${newEmpId.trim()}) to ${assignedDept} as ${newFacultyType}`,
+        status: 'COMPLETED'
+      });
       await fetchFaculty();
       setTimeout(() => {
         setShowAddModal(false);
@@ -394,14 +408,26 @@ const ManageFaculty = () => {
         }),
       });
       if (res.ok) {
+        if (toast?.success) {
+          toast.success(`Contact details updated for "${editingFaculty.facultyName}"!`);
+        }
+        logActivity({
+          user,
+          action: 'UPDATE_FACULTY_CONTACT',
+          category: 'Faculty',
+          details: `Updated phone number for "${editingFaculty.facultyName}" to ${editPhone}`,
+          status: 'COMPLETED'
+        });
         await fetchFaculty();
         setEditingFaculty(null);
       } else {
-        alert('Failed to update phone number');
+        if (toast?.error) toast.error('Failed to update phone number');
+        else alert('Failed to update phone number');
       }
     } catch (err) {
       console.error(err);
-      alert('Error saving phone number');
+      if (toast?.error) toast.error('Error saving phone number');
+      else alert('Error saving phone number');
     } finally {
       setIsSaving(false);
     }
@@ -421,14 +447,24 @@ const ManageFaculty = () => {
       });
       
       if (res.ok) {
+        if (toast?.success) toast.success(`Faculty "${name}" removed successfully.`);
+        logActivity({
+          user,
+          action: 'DELETE_FACULTY',
+          category: 'Faculty',
+          details: `Deleted faculty record "${name}" (ID: ${id})`,
+          status: 'COMPLETED'
+        });
         fetchFaculty();
       } else {
         const data = await res.json();
-        alert(data.message || 'Failed to delete faculty');
+        if (toast?.error) toast.error(data.message || 'Failed to delete faculty');
+        else alert(data.message || 'Failed to delete faculty');
       }
     } catch (err) {
       console.error(err);
-      alert('Error deleting faculty');
+      if (toast?.error) toast.error('Error deleting faculty');
+      else alert('Error deleting faculty');
     }
   };
 
@@ -515,12 +551,23 @@ const ManageFaculty = () => {
         let msg = data.message || `Successfully processed ${itemsToProcess.length} faculty records.`;
         msg += ` (${itemsToProcess.length} faculty logins created with Login ID = Emp ID and password nrtec@nec)`;
         setBulkMessage(msg);
+        if (toast?.success) {
+          toast.success(`Successfully uploaded and registered ${itemsToProcess.length} faculty members!`);
+        }
+        logActivity({
+          user,
+          action: 'BULK_IMPORT_FACULTY',
+          category: 'Faculty',
+          details: `Bulk imported ${itemsToProcess.length} faculty members into ${isHOD ? user?.department : bulkDepartment}`,
+          status: 'COMPLETED'
+        });
         setBulkData('');
         setParsedList([]);
         fetchFaculty();
         setTimeout(() => setShowBulkModal(false), 2500);
       } else {
         setBulkError(data.message || 'Failed to bulk upload faculty contacts');
+        if (toast?.error) toast.error(data.message || 'Failed to bulk upload faculty contacts');
       }
     } catch (err) {
       console.error(err);
@@ -779,229 +826,218 @@ const ManageFaculty = () => {
 
       {/* Add Single Faculty Member Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
-          <div className="glass-card w-full max-w-lg p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4 modal-card-fullscreen">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                  <Plus size={20} />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-lg text-customText dark:text-customText-dark">
-                    Add Faculty Member
-                  </h3>
-                  <p className="text-xs text-customText-muted">
-                    Add faculty by Emp ID, Name, Mobile, Designation, and Teaching/Non-Teaching category
-                  </p>
-                </div>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setShowAddModal(false)} 
-                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-customText-muted"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {addError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-bold rounded-xl flex items-center gap-2">
-                <AlertCircle size={16} className="shrink-0" />
-                <span>{addError}</span>
-              </div>
-            )}
-
-            {addSuccess && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-bold rounded-xl flex items-center gap-2">
-                <CheckCircle2 size={16} className="shrink-0" />
-                <span>{addSuccess}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAddFacultySubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Employee ID (Emp ID / Login ID) *
-                  </label>
-                  <input
-                    type="text"
-                    value={newEmpId}
-                    onChange={(e) => setNewEmpId(e.target.value.toUpperCase())}
-                    placeholder="e.g. EMP1024 or FAC01"
-                    className="w-full glass-input text-xs font-mono uppercase py-2.5"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Faculty Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="e.g. Dr. K. Srinivas"
-                    className="w-full glass-input text-xs py-2.5"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Mobile Number *
-                  </label>
-                  <input
-                    type="tel"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    placeholder="e.g. 9876543210"
-                    className="w-full glass-input text-xs font-mono py-2.5"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Designation *
-                  </label>
-                  <select
-                    value={newDesignation}
-                    onChange={(e) => setNewDesignation(e.target.value)}
-                    className="w-full glass-input text-xs py-2.5"
-                  >
-                    <option value="Professor">Professor</option>
-                    <option value="Associate Professor">Associate Professor</option>
-                    <option value="Assistant Professor">Assistant Professor</option>
-                    <option value="Lab Assistant / Incharge">Lab Assistant / Incharge</option>
-                    <option value="Office Administrative Staff">Office Administrative Staff</option>
-                    <option value="Attender">Attender</option>
-                    <option value="Lecturer">Lecturer</option>
-                  </select>
-                </div>
-
-                {/* Department: Fixed in HOD login, selectable in other logins */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Department {isHOD ? '(Fixed to Your Department)' : '*'}
-                  </label>
-                  {isHOD ? (
-                    <div className="p-2.5 rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary-950/20 text-xs font-bold text-customText dark:text-customText-dark flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Lock size={14} className="text-primary-dark dark:text-primary" />
-                        <span>{user?.department || 'Department of CSE(emerging Technologies)'}</span>
-                      </div>
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary-dark dark:text-primary border border-primary/20">
-                        Fixed in HOD Login
-                      </span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowAddModal(false)} />
+          <div className="modal-window-fullscreen animate-fade-in z-10">
+            <ModalSessionHeader
+              title="Add Faculty Member"
+              subtitle="Session: 2026–2027 • Faculty Directory Management"
+              user={user}
+              onClose={() => setShowAddModal(false)}
+            />
+            <form onSubmit={handleAddFacultySubmit} className="flex-1 flex flex-col overflow-hidden">
+              <div className="modal-window-body">
+                <div className="max-w-4xl mx-auto space-y-5">
+                  {addError && (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-bold rounded-xl flex items-center gap-2">
+                      <AlertCircle size={16} className="shrink-0" />
+                      <span>{addError}</span>
                     </div>
-                  ) : (
-                    <select
-                      value={newDepartment}
-                      onChange={(e) => setNewDepartment(e.target.value)}
-                      className="w-full glass-input text-xs py-2.5"
-                      required
-                    >
-                      {departmentsList.map(dept => (
-                        <option key={dept} value={dept}>{dept}</option>
-                      ))}
-                    </select>
                   )}
+
+                  {addSuccess && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-bold rounded-xl flex items-center gap-2">
+                      <CheckCircle2 size={16} className="shrink-0" />
+                      <span>{addSuccess}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
+                        Employee ID (Emp ID / Login ID) *
+                      </label>
+                      <input
+                        type="text"
+                        value={newEmpId}
+                        onChange={(e) => setNewEmpId(e.target.value.toUpperCase())}
+                        placeholder="e.g. EMP1024 or FAC01"
+                        className="w-full glass-input text-xs font-mono uppercase py-2.5"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
+                        Faculty Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="e.g. Dr. K. Srinivas"
+                        className="w-full glass-input text-xs py-2.5"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
+                        Mobile Number *
+                      </label>
+                      <input
+                        type="tel"
+                        value={newPhone}
+                        onChange={(e) => setNewPhone(e.target.value)}
+                        placeholder="e.g. 9876543210"
+                        className="w-full glass-input text-xs font-mono py-2.5"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
+                        Designation *
+                      </label>
+                      <select
+                        value={newDesignation}
+                        onChange={(e) => setNewDesignation(e.target.value)}
+                        className="w-full glass-input text-xs py-2.5"
+                      >
+                        <option value="Professor">Professor</option>
+                        <option value="Associate Professor">Associate Professor</option>
+                        <option value="Assistant Professor">Assistant Professor</option>
+                        <option value="Lab Assistant / Incharge">Lab Assistant / Incharge</option>
+                        <option value="Office Administrative Staff">Office Administrative Staff</option>
+                        <option value="Attender">Attender</option>
+                        <option value="Lecturer">Lecturer</option>
+                      </select>
+                    </div>
+
+                    {/* Department: Fixed in HOD login, selectable in other logins */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
+                        Department {isHOD ? '(Fixed to Your Department)' : '*'}
+                      </label>
+                      {isHOD ? (
+                        <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary-950/20 text-xs font-bold text-customText dark:text-customText-dark flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Lock size={14} className="text-primary-dark dark:text-primary" />
+                            <span>{user?.department || 'Department of CSE(emerging Technologies)'}</span>
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary-dark dark:text-primary border border-primary/20">
+                            Fixed in HOD Login
+                          </span>
+                        </div>
+                      ) : (
+                        <select
+                          value={newDepartment}
+                          onChange={(e) => setNewDepartment(e.target.value)}
+                          className="w-full glass-input text-xs py-2.5"
+                          required
+                        >
+                          {departmentsList.map(dept => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Teaching or Non-Teaching selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted uppercase mb-2">
+                      Faculty Category *
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <label className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                        newFacultyType === 'TEACHING'
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200'
+                          : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-customText'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="facultyType"
+                          value="TEACHING"
+                          checked={newFacultyType === 'TEACHING'}
+                          onChange={() => setNewFacultyType('TEACHING')}
+                          className="mt-1 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <span className="font-bold text-xs block">Teaching Faculty</span>
+                          <span className="text-[10px] text-customText-muted block mt-0.5">
+                            Can take student attendance, parent calls, and apply permissions
+                          </span>
+                        </div>
+                      </label>
+
+                      <label className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                        newFacultyType === 'NON_TEACHING'
+                          ? 'border-amber-500 bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                          : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-customText'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="facultyType"
+                          value="NON_TEACHING"
+                          checked={newFacultyType === 'NON_TEACHING'}
+                          onChange={() => setNewFacultyType('NON_TEACHING')}
+                          className="mt-1 text-amber-600 focus:ring-amber-500"
+                        />
+                        <div>
+                          <span className="font-bold text-xs block">Non-Teaching Staff</span>
+                          <span className="text-[10px] text-customText-muted block mt-0.5">
+                            Unable to take student attendance, just apply permissions
+                          </span>
+                        </div>
+                      </label>
+
+                      <label className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                        newFacultyType === 'OFFICE'
+                          ? 'border-blue-500 bg-blue-500/10 text-blue-900 dark:text-blue-200'
+                          : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-customText'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="facultyType"
+                          value="OFFICE"
+                          checked={newFacultyType === 'OFFICE'}
+                          onChange={() => setNewFacultyType('OFFICE')}
+                          className="mt-1 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div>
+                          <span className="font-bold text-xs block">🏢 Office Staff</span>
+                          <span className="text-[10px] text-customText-muted block mt-0.5">
+                            No student attendance; leaves route directly to AO login & Security
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Login credentials notice */}
+                  <div className="p-3.5 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center gap-3 text-xs text-purple-700 dark:text-purple-300">
+                    <KeyRound size={18} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                    <div className="leading-relaxed">
+                      <span className="font-bold">System Login Credentials:</span> Login ID will be <strong className="font-mono bg-purple-500/20 px-1.5 py-0.5 rounded">{newEmpId || 'Emp ID'}</strong> and Password will be <strong className="font-mono bg-purple-500/20 px-1.5 py-0.5 rounded">nrtec@nec</strong>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Teaching or Non-Teaching selector */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
-                  Faculty Category *
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <label className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
-                    newFacultyType === 'TEACHING'
-                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200'
-                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-customText'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="facultyType"
-                      value="TEACHING"
-                      checked={newFacultyType === 'TEACHING'}
-                      onChange={() => setNewFacultyType('TEACHING')}
-                      className="mt-1 text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <div>
-                      <span className="font-bold text-xs block">Teaching Faculty</span>
-                      <span className="text-[10px] text-customText-muted block">
-                        Can take student attendance, parent calls, and apply permissions
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
-                    newFacultyType === 'NON_TEACHING'
-                      ? 'border-amber-500 bg-amber-500/10 text-amber-900 dark:text-amber-200'
-                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-customText'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="facultyType"
-                      value="NON_TEACHING"
-                      checked={newFacultyType === 'NON_TEACHING'}
-                      onChange={() => setNewFacultyType('NON_TEACHING')}
-                      className="mt-1 text-amber-600 focus:ring-amber-500"
-                    />
-                    <div>
-                      <span className="font-bold text-xs block">Non-Teaching Staff</span>
-                      <span className="text-[10px] text-customText-muted block">
-                        Unable to take student attendance, just apply permissions
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
-                    newFacultyType === 'OFFICE'
-                      ? 'border-blue-500 bg-blue-500/10 text-blue-900 dark:text-blue-200'
-                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-customText'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="facultyType"
-                      value="OFFICE"
-                      checked={newFacultyType === 'OFFICE'}
-                      onChange={() => setNewFacultyType('OFFICE')}
-                      className="mt-1 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <span className="font-bold text-xs block">🏢 Office Staff</span>
-                      <span className="text-[10px] text-customText-muted block">
-                        No student attendance; leaves route directly to AO login & Security
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Login credentials notice */}
-              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center gap-2.5 text-xs text-purple-700 dark:text-purple-300">
-                <KeyRound size={16} className="shrink-0 text-purple-600 dark:text-purple-400" />
-                <div className="leading-relaxed">
-                  <span className="font-bold">Login Credentials:</span> Login ID will be <strong className="font-mono bg-purple-500/20 px-1 py-0.5 rounded">{newEmpId || 'Emp ID'}</strong> and Password is <strong className="font-mono bg-purple-500/20 px-1 py-0.5 rounded">nrtec@nec</strong>
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+              {/* Window Sticky Footer */}
+              <div className="modal-window-footer">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="btn-secondary py-2.5 px-4 text-xs font-bold cursor-pointer"
+                  className="btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isAdding}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   {isAdding ? (
                     <span>Adding Faculty...</span>
@@ -1020,226 +1056,233 @@ const ManageFaculty = () => {
 
       {/* Single Edit Modal */}
       {editingFaculty && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-wrapper-fullscreen">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setEditingFaculty(null)} />
-          <form onSubmit={handleEditSubmit} className="relative glass-card bg-white dark:bg-slate-900 w-full max-w-sm p-6 shadow-2xl animate-fade-in z-10 modal-card-fullscreen">
-            <div className="flex items-center justify-between mb-4 border-b pb-2">
-              <h3 className="font-extrabold text-lg text-customText dark:text-customText-dark">Edit Contact</h3>
-              <button type="button" onClick={() => setEditingFaculty(null)} className="p-1 hover:bg-slate-100 rounded">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-bold text-customText-muted uppercase mb-1">Faculty Name</label>
-              <input type="text" value={editingFaculty.facultyName} disabled className="glass-input opacity-70" />
-            </div>
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-customText-muted uppercase mb-1">Phone Number</label>
-              <input 
-                type="tel" 
-                value={editPhone} 
-                onChange={(e) => setEditPhone(e.target.value)} 
-                placeholder="+91..." 
-                className="glass-input" 
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setEditingFaculty(null)} className="btn-secondary">Cancel</button>
-              <button type="submit" disabled={isSaving} className="btn-primary">
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </form>
+          <div className="modal-window-fullscreen animate-fade-in z-10">
+            <ModalSessionHeader
+              title="Edit Faculty Details"
+              subtitle={`Modifying Contact for ${editingFaculty.facultyName}`}
+              user={user}
+              onClose={() => setEditingFaculty(null)}
+            />
+            <form onSubmit={handleEditSubmit} className="flex-1 flex flex-col overflow-hidden">
+              <div className="modal-window-body">
+                <div className="max-w-2xl mx-auto space-y-4 pt-4">
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">Faculty Name</label>
+                    <input type="text" value={editingFaculty.facultyName} disabled className="glass-input opacity-70 w-full" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">Phone Number *</label>
+                    <input 
+                      type="tel" 
+                      value={editPhone} 
+                      onChange={(e) => setEditPhone(e.target.value)} 
+                      placeholder="+91..." 
+                      className="glass-input w-full font-mono" 
+                      autoFocus
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-window-footer">
+                <button type="button" onClick={() => setEditingFaculty(null)} className="btn-secondary py-2.5 px-5 text-xs font-bold">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSaving} className="btn-primary py-2.5 px-6 text-xs font-black">
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
       {/* Bulk Upload CSV Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-wrapper-fullscreen">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => setShowBulkModal(false)} />
-          <div className="relative glass-card bg-white dark:bg-slate-900 w-full max-w-2xl p-6 shadow-2xl animate-fade-in z-10 max-h-[90vh] overflow-y-auto modal-card-fullscreen">
-            <div className="flex items-center justify-between mb-4 border-b pb-2">
-              <div className="flex items-center gap-2">
-                <UploadCloud size={22} className="text-primary-dark dark:text-primary" />
-                <h3 className="font-extrabold text-lg text-customText dark:text-customText-dark">
-                  Bulk Upload Faculty CSV
-                </h3>
-              </div>
-              <button type="button" onClick={() => setShowBulkModal(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                <X size={18} />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Template Download Banner */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-                <div>
-                  <h4 className="text-xs font-extrabold text-customText dark:text-customText-dark">Need a CSV template?</h4>
-                  <p className="text-[11px] text-customText-muted">
-                    Columns: Emp ID, Name, Phone Number, Designation{isHOD ? '' : ', Department'}, Category
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={downloadSampleCsv}
-                  className="px-3.5 py-2 bg-primary/10 hover:bg-primary/20 text-primary-dark dark:text-primary text-xs font-bold rounded-xl border border-primary/20 flex items-center gap-2 shrink-0 transition-all cursor-pointer"
-                >
-                  <Download size={15} />
-                  <span>Download Sample CSV</span>
-                </button>
-              </div>
-
-              {/* Department Scoping in Bulk Modal */}
-              {isHOD ? (
-                <div className="p-3 bg-primary/5 dark:bg-primary-950/20 border border-primary/20 rounded-xl flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <Lock size={15} className="text-primary-dark dark:text-primary shrink-0" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-wrapper-fullscreen">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm modal-backdrop-responsive" onClick={() => !isBulkSaving && setShowBulkModal(false)} />
+          <div className="modal-window-fullscreen animate-fade-in z-10">
+            <ModalSessionHeader
+              title="Bulk Upload Faculty Directory"
+              subtitle="Session: 2026–2027 • CSV Batch Import"
+              user={user}
+              onClose={() => !isBulkSaving && setShowBulkModal(false)}
+            />
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="modal-window-body">
+                <div className="max-w-4xl mx-auto space-y-4">
+                  {/* Template Download Banner */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/60 dark:border-slate-800">
                     <div>
-                      <span className="font-bold text-customText dark:text-customText-dark">Department: </span>
-                      <span className="font-extrabold text-primary-dark dark:text-primary">{user?.department || 'Department of CSE(emerging Technologies)'}</span>
+                      <h4 className="text-xs font-extrabold text-customText dark:text-customText-dark">Need an official CSV template?</h4>
+                      <p className="text-[11px] text-customText-muted mt-0.5">
+                        Required Columns: Emp ID, Name, Phone Number, Designation{isHOD ? '' : ', Department'}, Category
+                      </p>
                     </div>
-                  </div>
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-primary/10 text-primary-dark dark:text-primary shrink-0 border border-primary/20">
-                    Fixed for HOD
-                  </span>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-bold text-customText-muted uppercase mb-1">
-                    Default Department (for rows without department column)
-                  </label>
-                  <select
-                    value={bulkDepartment}
-                    onChange={(e) => setBulkDepartment(e.target.value)}
-                    className="w-full glass-input text-xs py-2"
-                  >
-                    {departmentsList.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Login info notification */}
-              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center gap-2.5 text-xs text-purple-700 dark:text-purple-300">
-                <KeyRound size={16} className="shrink-0 text-purple-600 dark:text-purple-400" />
-                <span>
-                  For all uploaded faculty: <strong>Login ID = Emp ID</strong> and <strong>Password = nrtec@nec</strong>
-                </span>
-              </div>
-
-              {bulkError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
-                  ⚠️ {bulkError}
-                </div>
-              )}
-
-              {bulkMessage && (
-                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
-                  ✅ {bulkMessage}
-                </div>
-              )}
-
-              {/* File Upload Selector */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1">
-                  1. Select CSV File from Device
-                </label>
-                <input
-                  type="file"
-                  accept=".csv,.txt"
-                  onChange={handleFileChange}
-                  disabled={isBulkSaving}
-                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-primary/10 file:text-primary-dark hover:file:bg-primary/20 dark:file:bg-primary-dark/20 dark:file:text-primary cursor-pointer border border-slate-200 dark:border-slate-800 rounded-xl p-1"
-                />
-              </div>
-
-              {/* Raw Text Fallback */}
-              <div>
-                <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1">
-                  Or Paste CSV Lines
-                </label>
-                <textarea
-                  value={bulkData}
-                  onChange={(e) => {
-                    setBulkData(e.target.value);
-                    parseFacultyCsv(e.target.value);
-                  }}
-                  placeholder={isHOD ? "EMP1001, Dr. John Smith, 9876543210, Professor, TEACHING\nEMP1002, Mrs. Jane Doe, 9848022334, Assistant Professor, NON_TEACHING" : "EMP1001, Dr. John Smith, 9876543210, Professor, Department of CSE(emerging Technologies), TEACHING"}
-                  rows={4}
-                  className="glass-input w-full font-mono text-xs resize-none"
-                  disabled={isBulkSaving}
-                />
-              </div>
-
-              {/* Parsed Preview Table */}
-              {parsedList.length > 0 && (
-                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-primary-dark dark:text-primary">
-                      📋 Preview Ready ({parsedList.length} Records Found)
-                    </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setParsedList([]);
-                        setBulkData('');
-                      }}
-                      className="text-[11px] text-slate-400 hover:text-red-500 underline"
-                      disabled={isBulkSaving}
+                      onClick={downloadSampleCsv}
+                      className="px-4 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary-dark dark:text-primary text-xs font-bold rounded-xl border border-primary/20 flex items-center gap-2 shrink-0 transition-all cursor-pointer"
                     >
-                      Clear
+                      <Download size={15} />
+                      <span>Download Sample CSV</span>
                     </button>
                   </div>
 
-                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 p-2">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="text-[10px] text-slate-400 uppercase border-b border-slate-200 dark:border-slate-800">
-                          <th className="py-1 px-2">#</th>
-                          <th className="py-1 px-2">Emp ID (Login)</th>
-                          <th className="py-1 px-2">Faculty Name</th>
-                          <th className="py-1 px-2">Phone</th>
-                          <th className="py-1 px-2">Designation</th>
-                          <th className="py-1 px-2">Category</th>
-                          {!isHOD && <th className="py-1 px-2">Department</th>}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
-                        {parsedList.map((item, idx) => (
-                          <tr key={idx}>
-                            <td className="py-1 px-2 text-slate-400 font-mono">{idx + 1}</td>
-                            <td className="py-1 px-2 font-mono font-bold text-primary">{item.empid}</td>
-                            <td className="py-1 px-2 font-bold text-customText dark:text-customText-dark">{item.facultyName}</td>
-                            <td className="py-1 px-2 font-mono text-slate-500">{item.phoneNumber || '—'}</td>
-                            <td className="py-1 px-2 text-slate-500">{item.designation || 'Assistant Professor'}</td>
-                            <td className="py-1 px-2">
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                item.facultyType === 'OFFICE'
-                                  ? 'bg-blue-500/10 text-blue-600'
-                                  : item.facultyType === 'NON_TEACHING'
-                                  ? 'bg-amber-500/10 text-amber-600'
-                                  : 'bg-emerald-500/10 text-emerald-600'
-                              }`}>
-                                {item.facultyType === 'OFFICE' ? 'Office Staff' : item.facultyType === 'NON_TEACHING' ? 'Non-Teaching' : 'Teaching'}
-                              </span>
-                            </td>
-                            {!isHOD && <td className="py-1 px-2 text-[11px] text-slate-500 truncate max-w-[130px]">{item.department}</td>}
-                          </tr>
+                  {/* Department Scoping in Bulk Modal */}
+                  {isHOD ? (
+                    <div className="p-3.5 bg-primary/5 dark:bg-primary-950/20 border border-primary/20 rounded-xl flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <Lock size={15} className="text-primary-dark dark:text-primary shrink-0" />
+                        <div>
+                          <span className="font-bold text-customText dark:text-customText-dark">Department: </span>
+                          <span className="font-extrabold text-primary-dark dark:text-primary">{user?.department || 'Department of CSE(emerging Technologies)'}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-primary/10 text-primary-dark dark:text-primary shrink-0 border border-primary/20">
+                        Fixed for HOD
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-customText-muted uppercase mb-1.5">
+                        Default Department (for rows without department column)
+                      </label>
+                      <select
+                        value={bulkDepartment}
+                        onChange={(e) => setBulkDepartment(e.target.value)}
+                        className="w-full glass-input text-xs py-2.5"
+                      >
+                        {departmentsList.map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+                      </select>
+                    </div>
+                  )}
 
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                  {/* Login info notification */}
+                  <div className="p-3.5 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center gap-3 text-xs text-purple-700 dark:text-purple-300">
+                    <KeyRound size={18} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                    <span>
+                      For all uploaded faculty: <strong>Login ID = Emp ID</strong> and <strong>Password = nrtec@nec</strong>
+                    </span>
+                  </div>
+
+                  {bulkError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl">
+                      ⚠️ {bulkError}
+                    </div>
+                  )}
+
+                  {bulkMessage && (
+                    <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-xl">
+                      ✅ {bulkMessage}
+                    </div>
+                  )}
+
+                  {/* File Upload Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      1. Select CSV File from Device
+                    </label>
+                    <input
+                      type="file"
+                      accept=".csv,.txt"
+                      onChange={handleFileChange}
+                      disabled={isBulkSaving}
+                      className="block w-full text-xs text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-primary/10 file:text-primary-dark hover:file:bg-primary/20 dark:file:bg-primary-dark/20 dark:file:text-primary cursor-pointer border border-slate-200 dark:border-slate-800 rounded-xl p-1.5"
+                    />
+                  </div>
+
+                  {/* Raw Text Fallback */}
+                  <div>
+                    <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                      2. Or Paste CSV Lines Directly
+                    </label>
+                    <textarea
+                      value={bulkData}
+                      onChange={(e) => {
+                        setBulkData(e.target.value);
+                        parseFacultyCsv(e.target.value);
+                      }}
+                      placeholder={isHOD ? "EMP1001, Dr. John Smith, 9876543210, Professor, TEACHING\nEMP1002, Mrs. Jane Doe, 9848022334, Assistant Professor, NON_TEACHING" : "EMP1001, Dr. John Smith, 9876543210, Professor, Department of CSE(emerging Technologies), TEACHING"}
+                      rows={4}
+                      className="glass-input w-full font-mono text-xs resize-none"
+                      disabled={isBulkSaving}
+                    />
+                  </div>
+
+                  {/* Parsed Preview Table */}
+                  {parsedList.length > 0 && (
+                    <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-primary-dark dark:text-primary">
+                          📋 Preview Ready ({parsedList.length} Records Found)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setParsedList([]);
+                            setBulkData('');
+                          }}
+                          className="text-[11px] text-slate-400 hover:text-red-500 underline"
+                          disabled={isBulkSaving}
+                        >
+                          Clear
+                        </button>
+                      </div>
+
+                      <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 p-2">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="text-[10px] text-slate-400 uppercase border-b border-slate-200 dark:border-slate-800">
+                              <th className="py-1 px-2">#</th>
+                              <th className="py-1 px-2">Emp ID (Login)</th>
+                              <th className="py-1 px-2">Faculty Name</th>
+                              <th className="py-1 px-2">Phone</th>
+                              <th className="py-1 px-2">Designation</th>
+                              <th className="py-1 px-2">Category</th>
+                              {!isHOD && <th className="py-1 px-2">Department</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
+                            {parsedList.map((item, idx) => (
+                              <tr key={idx}>
+                                <td className="py-1 px-2 text-slate-400 font-mono">{idx + 1}</td>
+                                <td className="py-1 px-2 font-mono font-bold text-primary">{item.empid}</td>
+                                <td className="py-1 px-2 font-bold text-customText dark:text-customText-dark">{item.facultyName}</td>
+                                <td className="py-1 px-2 font-mono text-slate-500">{item.phoneNumber || '—'}</td>
+                                <td className="py-1 px-2 text-slate-500">{item.designation || 'Assistant Professor'}</td>
+                                <td className="py-1 px-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    item.facultyType === 'OFFICE'
+                                      ? 'bg-blue-500/10 text-blue-600'
+                                      : item.facultyType === 'NON_TEACHING'
+                                      ? 'bg-amber-500/10 text-amber-600'
+                                      : 'bg-emerald-500/10 text-emerald-600'
+                                  }`}>
+                                    {item.facultyType === 'OFFICE' ? 'Office Staff' : item.facultyType === 'NON_TEACHING' ? 'Non-Teaching' : 'Teaching'}
+                                  </span>
+                                </td>
+                                {!isHOD && <td className="py-1 px-2 text-[11px] text-slate-500 truncate max-w-[130px]">{item.department}</td>}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons in Sticky Footer */}
+              <div className="modal-window-footer">
                 <button 
                   type="button" 
                   onClick={() => setShowBulkModal(false)} 
-                  className="btn-secondary"
+                  className="btn-secondary py-2.5 px-5 text-xs font-bold"
                   disabled={isBulkSaving}
                 >
                   Cancel
@@ -1248,7 +1291,7 @@ const ManageFaculty = () => {
                   type="button"
                   onClick={handleBulkUpload}
                   disabled={isBulkSaving || (parsedList.length === 0 && !bulkData.trim())} 
-                  className="btn-primary flex items-center gap-2"
+                  className="btn-primary py-2.5 px-6 text-xs font-black flex items-center gap-2"
                 >
                   <UploadCloud size={16} />
                   <span>{isBulkSaving ? 'Processing...' : `Process ${parsedList.length || 'CSV'} Records`}</span>
