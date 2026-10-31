@@ -39,7 +39,11 @@ import {
   getStudentOutpassHistory,
   syncOutpassesFromBackend,
   submitCertificateRequest,
-  getStudentCertificateRequests
+  getStudentCertificateRequests,
+  isAfter410PM,
+  isPastTimeToday,
+  getCurrentTimeHHMM,
+  isHodDirectlyAcceptableCertificate
 } from '../services/outpassService';
 
 const Login = () => {
@@ -75,6 +79,7 @@ const Login = () => {
   const [matchedStudent, setMatchedStudent] = useState(null);
   const [outpassReason, setOutpassReason] = useState('');
   const [outpassDestination, setOutpassDestination] = useState('Home');
+  const [outpassLeaveTime, setOutpassLeaveTime] = useState(getCurrentTimeHHMM());
   const [isSubmittingOutpass, setIsSubmittingOutpass] = useState(false);
   const [submittedTicket, setSubmittedTicket] = useState(null);
   
@@ -92,6 +97,7 @@ const Login = () => {
   const [isVerifyingBlock, setIsVerifyingBlock] = useState(false);
   const [presentBlock, setPresentBlock] = useState('');
   const [destinationArea, setDestinationArea] = useState('');
+  const [movementTime, setMovementTime] = useState(getCurrentTimeHHMM());
   const [blockReason, setBlockReason] = useState('');
   const [isSubmittingBlock, setIsSubmittingBlock] = useState(false);
   const [submittedBlockTicket, setSubmittedBlockTicket] = useState(null);
@@ -113,6 +119,7 @@ const Login = () => {
   const [isSearchingStatus, setIsSearchingStatus] = useState(false);
   const [hasSearchedStatus, setHasSearchedStatus] = useState(false);
   const [statusTickets, setStatusTickets] = useState([]);
+  const [statusHistoryTab, setStatusHistoryTab] = useState('accepted'); // 'accepted' | 'rejected'
   const [statusError, setStatusError] = useState('');
 
   // Intro Animation
@@ -308,8 +315,16 @@ const Login = () => {
   // Step 2: Confirm & Submit Application
   const handleSubmitOutpass = async (e) => {
     e.preventDefault();
+    if (isAfter410PM()) {
+      setVerifyError('Applications are closed for today. Students cannot submit leave or outpass requests after 4:10 PM.');
+      return;
+    }
     if (!outpassReason.trim()) {
       setVerifyError('Please state your reason for going out.');
+      return;
+    }
+    if (outpassLeaveTime && isPastTimeToday(outpassLeaveTime)) {
+      setVerifyError(`Cannot submit leave for a past time (${outpassLeaveTime}). Please select current or future time.`);
       return;
     }
 
@@ -324,6 +339,7 @@ const Login = () => {
         parentMobile: matchedStudent.parentMobile,
         reason: outpassReason.trim(),
         destination: outpassDestination,
+        leaveTime: outpassLeaveTime,
       });
 
       setSubmittedTicket(newTicket);
@@ -375,6 +391,10 @@ const Login = () => {
 
   const handleSubmitCertificate = async (e) => {
     e.preventDefault();
+    if (isAfter410PM()) {
+      setCertVerifyError('Applications are closed for today. Certificate requests cannot be submitted after 4:10 PM.');
+      return;
+    }
     if (!certificateName.trim()) {
       setCertVerifyError('Please specify the Certificate Name.');
       return;
@@ -441,6 +461,14 @@ const Login = () => {
 
   const handleSubmitBlockMovement = async (e) => {
     e.preventDefault();
+    if (isAfter410PM()) {
+      setBlockVerifyError('Applications are closed for today. Out of block requests cannot be submitted after 4:10 PM.');
+      return;
+    }
+    if (movementTime && isPastTimeToday(movementTime)) {
+      setBlockVerifyError(`Cannot submit movement permission for a past time (${movementTime}). Please select current or future time.`);
+      return;
+    }
     if (!presentBlock.trim()) {
       setBlockVerifyError('Please enter your present block number / building.');
       return;
@@ -464,6 +492,7 @@ const Login = () => {
         presentBlock: presentBlock.trim(),
         destinationArea: destinationArea.trim(),
         reason: blockReason.trim(),
+        movementTime: movementTime,
         studentMobile: blockMatchedStudent.studentMobile,
         parentMobile: blockMatchedStudent.parentMobile
       });
@@ -897,17 +926,31 @@ const Login = () => {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-bold text-customText-muted uppercase mb-1">
-                          Destination / Clinic / Home Address
-                        </label>
-                        <input
-                          type="text"
-                          value={outpassDestination}
-                          onChange={(e) => setOutpassDestination(e.target.value)}
-                          placeholder="e.g. Home / Hospital / Government Office"
-                          className="glass-input text-xs py-2.5 w-full"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-customText-muted uppercase mb-1">
+                            Destination / Clinic / Home Address
+                          </label>
+                          <input
+                            type="text"
+                            value={outpassDestination}
+                            onChange={(e) => setOutpassDestination(e.target.value)}
+                            placeholder="e.g. Home / Hospital / Government Office"
+                            className="glass-input text-xs py-2.5 w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-customText-muted uppercase mb-1">
+                            Time of Leaving / Out Time *
+                          </label>
+                          <input
+                            type="time"
+                            value={outpassLeaveTime}
+                            onChange={(e) => setOutpassLeaveTime(e.target.value)}
+                            className="glass-input text-xs py-2.5 w-full font-bold"
+                            required
+                          />
+                        </div>
                       </div>
 
                       {/* Action buttons */}
@@ -1510,6 +1553,17 @@ const Login = () => {
                         </div>
                       </div>
 
+                      {/* Routing guidance notice */}
+                      <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5">
+                          <span>ℹ️</span>
+                          <span>Certificate Approval & Routing:</span>
+                        </p>
+                        <p className="text-[11px] leading-relaxed">
+                          <strong>Study Certificate, Custodian Certificate, Bus Pass, and Bonafide Certificate</strong> come to HOD first and are approved directly by HOD. All other certificate types are reviewed by HOD and forwarded to the Administrative Officer (AO).
+                        </p>
+                      </div>
+
                       {/* Certificate Name Input */}
                       <div className="space-y-2">
                         <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
@@ -1528,6 +1582,7 @@ const Login = () => {
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {[
                             'Bonafide Certificate',
+                            'Bus Pass Certificate',
                             'Study & Conduct Certificate',
                             'Custodian Certificate',
                             'Transfer Certificate (TC)',
@@ -1841,8 +1896,135 @@ const Login = () => {
                           </div>
                         )}
 
-                        {/* PREVIOUS APPLICATIONS HISTORY */}
-                        {previousTickets.length > 0 && (
+                        {/* PREVIOUS APPLICATIONS & CERTIFICATES HISTORY (Separated by Accepted & Rejected) */}
+                        {(() => {
+                          const allPrevTickets = previousTickets || [];
+                          const acceptedTickets = allPrevTickets.filter(t => t.status === 'PERMISSION_GRANTED' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED');
+                          const rejectedTickets = allPrevTickets.filter(t => t.status === 'REJECTED');
+                          const allCerts = statusCertificates || [];
+                          const acceptedCerts = allCerts.filter(c => c.status === 'ACCEPTED' || c.status === 'APPROVED' || c.status === 'READY_FOR_PICKUP' || c.status === 'ISSUED');
+                          const rejectedCerts = allCerts.filter(c => c.status === 'REJECTED');
+
+                          const currentTicketsList = statusHistoryTab === 'accepted' ? acceptedTickets : rejectedTickets;
+                          const currentCertsList = statusHistoryTab === 'accepted' ? acceptedCerts : rejectedCerts;
+
+                          return (
+                            <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                              {/* History Tabs */}
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <span className="text-xs font-black uppercase tracking-wider text-customText-muted flex items-center gap-1.5">
+                                  <History size={13} />
+                                  <span>Application History</span>
+                                </span>
+                                <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setStatusHistoryTab('accepted')}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${statusHistoryTab === 'accepted' ? 'bg-emerald-600 text-white shadow-sm' : 'text-customText-muted hover:text-customText'}`}
+                                  >
+                                    ✓ Accepted ({acceptedTickets.length + acceptedCerts.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setStatusHistoryTab('rejected')}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${statusHistoryTab === 'rejected' ? 'bg-rose-600 text-white shadow-sm' : 'text-customText-muted hover:text-customText'}`}
+                                  >
+                                    ✕ Rejected ({rejectedTickets.length + rejectedCerts.length})
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Render Tickets */}
+                              {currentTicketsList.length === 0 && currentCertsList.length === 0 ? (
+                                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 text-center text-xs text-customText-muted">
+                                  No {statusHistoryTab} applications found for this student.
+                                </div>
+                              ) : (
+                                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                  {currentTicketsList.map((t) => (
+                                    <div
+                                      key={t.id}
+                                      className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-customText dark:text-customText-dark">
+                                            {t.appliedDate}
+                                          </span>
+                                          <span className="font-mono text-[10px] text-customText-muted">
+                                            {t.id}
+                                          </span>
+                                          {t.type === 'BLOCK_MOVEMENT' && (
+                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                              Out of Block
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="font-medium text-customText-muted truncate mt-0.5">
+                                          {t.type === 'BLOCK_MOVEMENT' ? (
+                                            <>"{t.reason}" • <span className="font-semibold text-emerald-600">{t.presentBlock} ➔ {t.destinationArea || t.destination}</span></>
+                                          ) : (
+                                            <>"{t.reason}" • <span className="font-semibold text-customText">{t.destination}</span></>
+                                          )}
+                                        </p>
+                                      </div>
+
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                                          t.status === 'PERMISSION_GRANTED'
+                                            ? 'bg-emerald-500/10 text-emerald-700'
+                                            : t.status === 'SENT_OUT'
+                                            ? 'bg-purple-500/10 text-purple-700'
+                                            : t.status === 'REJECTED'
+                                            ? 'bg-rose-500/10 text-rose-700'
+                                            : 'bg-slate-200 text-slate-700'
+                                        }`}>
+                                          {t.status.replace(/_/g, ' ')}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveTicket(t)}
+                                          className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                          title="View and download pass slip"
+                                        >
+                                          <FileText size={13} />
+                                          <span>Slip (PDF)</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+
+                                  {/* Render Certificates in same history view */}
+                                  {currentCertsList.map((cert) => (
+                                    <div
+                                      key={cert.id}
+                                      className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-customText dark:text-customText-dark">
+                                            📜 {cert.certificateName}
+                                          </span>
+                                          <span className="font-mono text-[10px] text-customText-muted">
+                                            {cert.id}
+                                          </span>
+                                        </div>
+                                        <p className="font-medium text-customText-muted truncate mt-0.5">
+                                          "{cert.purpose || cert.reason}"
+                                        </p>
+                                        <span className="text-[10px] text-customText-muted block mt-0.5">Applied: {cert.appliedDate} {cert.appliedTime}</span>
+                                      </div>
+                                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${cert.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-700' : 'bg-emerald-500/10 text-emerald-700'}`}>
+                                        {cert.status.replace(/_/g, ' ')}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {false && (
                           <div className="space-y-2.5 pt-2">
                             <h4 className="text-xs font-black uppercase tracking-wider text-customText-muted flex items-center gap-1.5">
                               <History size={13} />

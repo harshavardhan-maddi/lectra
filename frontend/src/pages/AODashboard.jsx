@@ -982,6 +982,138 @@ const AODashboard = () => {
       {/* VIEW 1: Leave & Gate Approvals */}
       {mainView === 'approvals' && (
         <div className="space-y-6">
+          {/* Approvals Mode Toggle: Staff Leaves vs Forwarded Student Certificates */}
+          <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl w-fit">
+            <button
+              type="button"
+              onClick={() => setAoSubTab('leaves')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${aoSubTab === 'leaves' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-customText-muted hover:text-customText'}`}
+            >
+              Staff & HOD Leaves (${pendingTickets.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAoSubTab('certificates')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${aoSubTab === 'certificates' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-customText-muted hover:text-customText'}`}
+            >
+              <span>Student Certificates (HOD Forwarded)</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-mono">
+                ${(certificateRequests || []).filter(c => c.status === 'FORWARDED_TO_AO').length}
+              </span>
+            </button>
+          </div>
+
+          {certActionSuccess && (
+            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 size={16} />
+              <span>{certActionSuccess}</span>
+            </div>
+          )}
+          {certActionError && (
+            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+              <AlertCircle size={16} />
+              <span>{certActionError}</span>
+            </div>
+          )}
+
+          {aoSubTab === 'certificates' ? (
+            <div className="space-y-4">
+              {(() => {
+                const forwardedCerts = (certificateRequests || []).filter(c => c.status === 'FORWARDED_TO_AO');
+                const approvedCerts = (certificateRequests || []).filter(c => c.status === 'ACCEPTED' || c.status === 'APPROVED');
+                const rejectedCerts = (certificateRequests || []).filter(c => c.status === 'REJECTED');
+
+                if (forwardedCerts.length === 0) {
+                  return (
+                    <div className="glass-card p-12 text-center rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-customText-muted">
+                        <CheckCircle2 size={32} />
+                      </div>
+                      <h3 className="text-base font-black text-customText dark:text-customText-dark">
+                        No Student Certificates Awaiting AO Clearance
+                      </h3>
+                      <p className="text-xs text-customText-muted max-w-md mx-auto">
+                        When HOD forwards other student certificates (such as TC, Fee Estimation, NOC), they will appear here for your review and approval.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {forwardedCerts.map((cert) => (
+                      <div
+                        key={cert.id}
+                        className="glass-card p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 relative overflow-hidden"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono font-bold text-indigo-600 block">
+                                {cert.id}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-black text-[10px] uppercase border border-indigo-500/30">
+                                Forwarded by HOD
+                              </span>
+                            </div>
+                            <h4 className="text-lg font-black text-customText dark:text-customText-dark mt-0.5">
+                              {cert.studentName}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-xs font-bold text-customText">
+                                {cert.rollNumber}
+                              </span>
+                              <span className="text-xs text-customText-muted font-medium">
+                                {cert.section} • {cert.department}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-mono text-customText-muted">
+                            {cert.appliedTime}
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80 space-y-2 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block">Certificate Type Requested:</span>
+                            <p className="text-sm font-black text-indigo-600">📜 {cert.certificateName}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block">Student Purpose:</span>
+                            <p className="font-semibold text-customText dark:text-customText-dark italic">"{cert.reason || cert.purpose}"</p>
+                          </div>
+                          {cert.hodAction && (
+                            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-700 dark:text-indigo-300">
+                              <strong>Forwarded by HOD ({cert.hodAction.hodName || 'HOD'}):</strong> {cert.hodAction.remarks || 'Forwarded to AO for approval.'}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptCertAO(cert)}
+                            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+                          >
+                            <CheckCircle2 size={16} />
+                            <span>Approve & Accept Certificate</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectCertAO(cert)}
+                            className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+          <>
           {/* Filter Tabs and Search Bar */}
           <div className="glass-card p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-full md:w-auto overflow-x-auto">
@@ -1172,6 +1304,8 @@ const AODashboard = () => {
               })
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 

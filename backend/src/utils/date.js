@@ -35,6 +35,44 @@ const getTodayDay = () => {
   return parts.weekday; // e.g. "Friday"
 };
 
+
+const getTodayDateKey = () => {
+  const parts = getLocalTimeParts();
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const isAfter410PM = () => {
+  const parts = getLocalTimeParts();
+  const mins = parseInt(parts.hour, 10) * 60 + parseInt(parts.minute, 10);
+  return mins >= (16 * 60 + 10);
+};
+
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const trimmed = timeStr.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const meridiem = match[3] ? match[3].toUpperCase() : null;
+  if (meridiem === 'PM' && h < 12) h += 12;
+  if (meridiem === 'AM' && h === 12) h = 0;
+  return h * 60 + m;
+};
+
+const isPastTimeToday = (timeStr, targetDateStr = null) => {
+  const parts = getLocalTimeParts();
+  const todayKey = `${parts.year}-${parts.month}-${parts.day}`;
+  if (targetDateStr && targetDateStr !== todayKey) {
+    if (targetDateStr < todayKey) return true;
+    if (targetDateStr > todayKey) return false;
+  }
+  const parsed = parseTimeToMinutes(timeStr);
+  if (parsed === null) return false;
+  const currentMinutes = parseInt(parts.hour, 10) * 60 + parseInt(parts.minute, 10);
+  return parsed < currentMinutes;
+};
+
 const getCurrentTimeInHHMM = () => {
   const parts = getLocalTimeParts();
   return `${parts.hour}:${parts.minute}`; // e.g. "11:19"
@@ -103,6 +141,10 @@ const STANDARD_PERIODS = [
 ];
 
 module.exports = {
+  getTodayDateKey,
+  isAfter410PM,
+  parseTimeToMinutes,
+  isPastTimeToday,
   getTodayDay,
   getCurrentTimeInHHMM,
   getLocalDayBounds,

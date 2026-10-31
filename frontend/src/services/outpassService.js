@@ -4,6 +4,208 @@
 const STORAGE_KEY = 'lectra_outpass_tickets';
 const STUDENTS_CACHE_KEY = 'lectra_outpass_students_directory';
 
+// ==========================================
+// DATE & TIME HELPERS (Asia/Kolkata timezone)
+// ==========================================
+
+export const getKolkataDateParts = (d = new Date()) => {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  const parts = formatter.formatToParts(d);
+  const map = {};
+  parts.forEach(p => { map[p.type] = p.value; });
+  const year = parseInt(map.year, 10);
+  const month = parseInt(map.month, 10);
+  const day = parseInt(map.day, 10);
+  const hour = parseInt(map.hour, 10);
+  const minute = parseInt(map.minute, 10);
+  return {
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    dateKey: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    timeHHMM: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+  };
+};
+
+export const getCurrentTimeHHMM = () => {
+  return getKolkataDateParts().timeHHMM;
+};
+
+export const getTodayDateKey = () => {
+  return getKolkataDateParts().dateKey;
+};
+
+// Check if current time in Asia/Kolkata is at or after 4:10 PM (16:10)
+export const isAfter410PM = () => {
+  const parts = getKolkataDateParts();
+  const currentMinutes = parts.hour * 60 + parts.minute;
+  return currentMinutes >= (16 * 60 + 10); // 16:10 = 970 minutes
+};
+
+// Parse various time formats ("13:20", "01:20 PM", "1:20 pm") into total minutes from midnight
+export const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const trimmed = timeStr.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const meridiem = match[3] ? match[3].toUpperCase() : null;
+  if (meridiem === 'PM' && h < 12) h += 12;
+  if (meridiem === 'AM' && h === 12) h = 0;
+  return h * 60 + m;
+};
+
+// Normalize date strings into "YYYY-MM-DD"
+export const normalizeDateKey = (dateStr) => {
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  const trimmed = dateStr.trim();
+  if (trimmed.includes('-')) {
+    const parts = trimmed.split('-');
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+  }
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts[2]?.length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  return '';
+};
+
+// Returns true if the given time is earlier than current time today
+export const isPastTimeToday = (timeStr, targetDateStr = null) => {
+  const currentParts = getKolkataDateParts();
+  if (targetDateStr) {
+    const targetKey = normalizeDateKey(targetDateStr);
+    if (targetKey && targetKey < currentParts.dateKey) return true;
+    if (targetKey && targetKey > currentParts.dateKey) return false;
+  }
+  const parsed = parseTimeToMinutes(timeStr);
+  if (parsed === null) return false;
+  const currentMinutes = currentParts.hour * 60 + currentParts.minute;
+  return parsed < currentMinutes;
+};
+
+// Extract dateKey from ticket
+export const getTicketDateKey = (ticket) => {
+  if (!ticket) return '';
+  if (ticket.appliedAt) {
+    try {
+      const d = new Date(ticket.appliedAt);
+      if (!isNaN(d.getTime())) {
+        return getKolkataDateParts(d).dateKey;
+      }
+    } catch (e) {}
+  }
+  return normalizeDateKey(ticket.date || ticket.appliedDate);
+};
+
+// Check if certificate is one of: Study, Custodian, Bus Pass, Bonafide (approved directly by HOD)
+export const isHodDirectlyAcceptableCertificate = (certName = '') => {
+  if (!certName || typeof certName !== 'string') return false;
+  const lower = certName.toLowerCase();
+  return (
+    lower.includes('study') ||
+    lower.includes('custodian') ||
+    lower.includes('bus pass') ||
+    lower.includes('bonafi')
+  );
+};
+
+// Purges any requests from previous days that were NOT accepted and NOT forwarded.
+// Only accepted or rejected requests are preserved in history.
+export const purgeExpiredUnprocessedRequests = (items) => {
+  const todayKey = getTodayDateKey();
+  let changed = false;
+
+  const filtered = (items || []).filter(item => {
+    if (!item) return false;
+    if (item.applicantType === 'SYSTEM_CONFIG') return true;
+
+    const itemDateKey = getTicketDateKey(item);
+    // If ticket is from today or future, keep it active
+    if (!itemDateKey || itemDateKey >= todayKey) return true;
+
+    // Previous day: Did it get accepted or rejected?
+    const isAccepted = item.status === 'PERMISSION_GRANTED' || 
+                       item.status === 'SENT_OUT' || 
+                       item.status === 'ACCEPTED' || 
+                       item.status === 'FACULTY_OUT' ||
+                       item.status === 'APPROVED' ||
+                       item.status === 'READY' ||
+                       item.status === 'ISSUED';
+    const isRejected = item.status === 'REJECTED';
+
+    if (isAccepted || isRejected) {
+      return true; // Keep in history!
+    }
+
+    // Item was from a previous day and was NEITHER accepted NOR forwarded.
+    // Clears that day only!
+    changed = true;
+    return false;
+  });
+
+  return { filtered, changed };
+};
+
+// Helper to separate outpasses and block movement into accepted and rejected
+export const getSeparatedOutpasses = (ticketList) => {
+  const accepted = [];
+  const rejected = [];
+  const pending = [];
+
+  (ticketList || []).forEach(t => {
+    if (!t) return;
+    const isAccepted = t.status === 'PERMISSION_GRANTED' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED' || t.status === 'FACULTY_OUT';
+    const isRejected = t.status === 'REJECTED';
+    if (isAccepted) {
+      accepted.push(t);
+    } else if (isRejected) {
+      rejected.push(t);
+    } else {
+      pending.push(t);
+    }
+  });
+
+  return { accepted, rejected, pending };
+};
+
+// Helper to separate certificate requests into accepted and rejected
+export const getSeparatedCertificates = (certList) => {
+  const accepted = [];
+  const rejected = [];
+  const pending = [];
+
+  (certList || []).forEach(c => {
+    if (!c) return;
+    const isAccepted = c.status === 'ACCEPTED' || c.status === 'APPROVED' || c.status === 'READY' || c.status === 'ISSUED';
+    const isRejected = c.status === 'REJECTED';
+    if (isAccepted) {
+      accepted.push(c);
+    } else if (isRejected) {
+      rejected.push(c);
+    } else {
+      pending.push(c);
+    }
+  });
+
+  return { accepted, rejected, pending };
+};
+
 // Default initial student directory for matching roll numbers
 const DEFAULT_STUDENTS = [
   {
@@ -215,8 +417,13 @@ export const getAllOutpasses = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const list = JSON.parse(raw);
-    return list
+    let list = JSON.parse(raw);
+    const { filtered, changed } = purgeExpiredUnprocessedRequests(list);
+    if (changed) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered)); } catch (e) {}
+    }
+    const targetList = filtered;
+    return targetList
       .filter(t => t && t.applicantType !== 'SYSTEM_CONFIG')
       .map(t => {
         if (t.applicantType === 'FACULTY' && (!t.department || t.department === 'General' || t.section === 'General' || t.section === 'Faculty')) {
@@ -479,9 +686,17 @@ export const submitOutpassApplication = async ({
   studentMobile,
   parentMobile,
   reason,
-  destination
+  destination,
+  leaveTime = null
 }) => {
+  if (isAfter410PM()) {
+    throw new Error('Applications closed: Students cannot submit leave or outpass requests after 4:10 PM.');
+  }
+  if (leaveTime && isPastTimeToday(leaveTime)) {
+    throw new Error(`Cannot submit leave for a past time (${leaveTime}). Please select current or future time.`);
+  }
   const now = new Date();
+  const effectiveLeaveTime = leaveTime || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   
   const newTicket = {
     id: generateTicketId(),
@@ -495,6 +710,7 @@ export const submitOutpassApplication = async ({
     maskedParentMobile: maskPhoneNumber(parentMobile),
     reason,
     destination: destination || 'Home / Medical Emergency',
+    leaveTime: effectiveLeaveTime,
     appliedAt: now.toISOString(),
     appliedDate: now.toLocaleDateString('en-GB'),
     appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -557,9 +773,17 @@ export const submitBlockMovementApplication = async ({
   destinationArea,
   reason,
   studentMobile,
-  parentMobile
+  parentMobile,
+  movementTime = null
 }) => {
+  if (isAfter410PM()) {
+    throw new Error('Applications closed: Students cannot submit out of block movement requests after 4:10 PM.');
+  }
+  if (movementTime && isPastTimeToday(movementTime)) {
+    throw new Error(`Cannot submit out of block movement for a past time (${movementTime}). Please select current or future time.`);
+  }
   const now = new Date();
+  const effectiveMovementTime = movementTime || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
   const randomNum = Math.floor(1000 + Math.random() * 9000);
   
@@ -576,6 +800,7 @@ export const submitBlockMovementApplication = async ({
     destinationArea: destinationArea?.trim() || 'Campus Area',
     destination: destinationArea?.trim() || 'Campus Area',
     reason: reason?.trim() || 'Academic work out of block',
+    leaveTime: effectiveMovementTime,
     studentMobile: studentMobile || '',
     parentMobile: parentMobile || '',
     maskedStudentMobile: maskPhoneNumber(studentMobile),
@@ -965,6 +1190,11 @@ export const applyFacultyLeave = async ({
     finalLeaveTime = '04:00 PM';
   } else if (type === 'FACULTY_OD') {
     finalLeaveTime = leaveTime && leaveTime.trim() ? leaveTime.trim() : 'On Duty (Full Day)';
+  }
+
+  // Prevent selecting past departure time on today's date
+  if (type !== 'FACULTY_OD' && finalLeaveTime && isPastTimeToday(finalLeaveTime, selectedDate)) {
+    throw new Error(`Cannot submit permission for a past time (${finalLeaveTime}). Please select current or future time.`);
   } else if (type === 'FACULTY_ONE_HOUR') {
     if (!leaveTime || !leaveTime.trim()) {
       throw new Error('Please specify what time you need to be out for the 1-hour permission.');
@@ -1740,11 +1970,15 @@ export const getAllCertificateRequests = () => {
     const syncTicket = tickets.find(t => t.id === SYS_CONFIG_CERT_ID);
     if (syncTicket && syncTicket.requests && Array.isArray(syncTicket.requests)) {
       if (syncTicket.requests.length >= localCerts.length) {
-        localStorage.setItem(CERT_STORAGE_KEY, JSON.stringify(syncTicket.requests));
-        return syncTicket.requests;
+        localCerts = syncTicket.requests;
       }
     }
-    return localCerts;
+
+    const { filtered, changed } = purgeExpiredUnprocessedRequests(localCerts);
+    if (changed || !cached) {
+      try { localStorage.setItem(CERT_STORAGE_KEY, JSON.stringify(filtered)); } catch (e) {}
+    }
+    return filtered;
   } catch (e) {
     return [];
   }
@@ -1788,6 +2022,9 @@ export const submitCertificateRequest = async ({
   certificateName,
   reason = ''
 }) => {
+  if (isAfter410PM()) {
+    throw new Error('Applications closed: Students cannot submit certificate requests after 4:10 PM.');
+  }
   if (!certificateName || !certificateName.trim()) {
     throw new Error('Please enter the certificate name you need.');
   }
@@ -1800,21 +2037,25 @@ export const submitCertificateRequest = async ({
   const dateCompact = now.toISOString().slice(0, 10).replace(/-/g, '');
   const randomNum = Math.floor(1000 + Math.random() * 9000);
   const reqId = `CERT-${dateCompact}-${randomNum}`;
+  const isDirectlyHod = isHodDirectlyAcceptableCertificate(certificateName);
 
   const newRequest = {
     id: reqId,
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName: studentName.trim(),
     section: section || '',
-    department: department || '',
+    department: department || 'Department of CSE(emerging Technologies)',
     studentMobile: studentMobile || '',
     parentMobile: parentMobile || '',
     certificateName: certificateName.trim(),
     reason: (reason || '').trim(),
-    status: 'PENDING', // 'PENDING' | 'APPROVED' | 'IN_PROGRESS' | 'READY' | 'ISSUED' | 'REJECTED'
+    status: 'PENDING_HOD', // Every certificate request comes to HOD first!
+    isHodAcceptable: isDirectlyHod,
     appliedAt: now.toISOString(),
     appliedDate: now.toLocaleDateString('en-GB'),
     appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    hodAction: null,
+    aoAction: null,
     officeAction: null
   };
 
@@ -1860,3 +2101,113 @@ export const subscribeToCertificates = (callback) => {
 
 
 
+
+
+// ==========================================
+// HOD & AO CERTIFICATE WORKFLOW ACTIONS
+// ==========================================
+
+export const hodAcceptCertificate = async (requestId, { hodName = 'Head of Department (HOD)', remarks = 'Certificate request accepted by HOD.' } = {}) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = 'ACCEPTED';
+  req.hodAction = {
+    status: 'ACCEPTED',
+    granted: true,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    hodName
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+export const hodForwardCertificateToAO = async (requestId, { hodName = 'Head of Department (HOD)', remarks = 'Forwarded to Administrative Officer (AO) for approval.' } = {}) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = 'FORWARDED_TO_AO';
+  req.hodAction = {
+    status: 'FORWARDED_TO_AO',
+    forwarded: true,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    hodName
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+export const hodRejectCertificate = async (requestId, { hodName = 'Head of Department (HOD)', reason = 'Certificate request rejected by HOD.' } = {}) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = 'REJECTED';
+  req.hodAction = {
+    status: 'REJECTED',
+    granted: false,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    reason,
+    hodName
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+export const aoAcceptCertificate = async (requestId, { aoName = 'Administrative Officer (AO)', remarks = 'Certificate request approved by Administrative Officer (AO).' } = {}) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = 'ACCEPTED';
+  req.aoAction = {
+    status: 'ACCEPTED',
+    granted: true,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    aoName
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+export const aoRejectCertificate = async (requestId, { aoName = 'Administrative Officer (AO)', reason = 'Certificate request rejected by Administrative Officer (AO).' } = {}) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = 'REJECTED';
+  req.aoAction = {
+    status: 'REJECTED',
+    granted: false,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    reason,
+    aoName
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};

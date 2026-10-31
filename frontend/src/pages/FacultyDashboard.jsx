@@ -1712,6 +1712,29 @@ const FacultyDashboard = () => {
                 <p className="text-xs text-customText-muted">
                   Live status of your requested permissions, HOD approvals, and Security Head gate departure slips
                 </p>
+                <div className="flex gap-1.5 mt-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setFacultyHistoryTab('ACCEPTED')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${facultyHistoryTab === 'ACCEPTED' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
+                  >
+                    ✓ Accepted (${facultyTickets.filter(t => t.status === 'PERMISSION_GRANTED' || t.status === 'FACULTY_OUT' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFacultyHistoryTab('REJECTED')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${facultyHistoryTab === 'REJECTED' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
+                  >
+                    ✕ Rejected (${facultyTickets.filter(t => t.status === 'REJECTED').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFacultyHistoryTab('ALL')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${facultyHistoryTab === 'ALL' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
+                  >
+                    All (${facultyTickets.length})
+                  </button>
+                </div>
               </div>
 
               <button
@@ -1741,7 +1764,24 @@ const FacultyDashboard = () => {
               </div>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {facultyTickets.map((ticket) => {
+                {(() => {
+                  const filteredFacTickets = facultyTickets.filter(t => {
+                    const isAcc = t.status === 'PERMISSION_GRANTED' || t.status === 'FACULTY_OUT' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED';
+                    const isRej = t.status === 'REJECTED';
+                    if (facultyHistoryTab === 'ACCEPTED') return isAcc;
+                    if (facultyHistoryTab === 'REJECTED') return isRej;
+                    return true;
+                  });
+
+                  if (filteredFacTickets.length === 0) {
+                    return (
+                      <div className="p-8 text-center text-xs text-customText-muted">
+                        No ${facultyHistoryTab.toLowerCase()} permissions found.
+                      </div>
+                    );
+                  }
+
+                  return filteredFacTickets.map((ticket) => {
                   return (
                     <div 
                       key={ticket.id}
@@ -1847,7 +1887,8 @@ const FacultyDashboard = () => {
 
                     </div>
                   );
-                })}
+                });
+                })()}
               </div>
             )}
           </div>

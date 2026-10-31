@@ -7,7 +7,9 @@ import ClassroomCard from '../components/ClassroomCard';
 import ActivityFeed from '../components/ActivityFeed';
 import Loading from '../components/Loading';
 import { 
-  Building, 
+  Building,
+  Award,
+  Send, 
   Users2, 
   UserSquare, 
   Percent, 
@@ -69,7 +71,13 @@ import {
   getFacultyMentorRegistry,
   assignFacultyMentorByHod,
   removeFacultyMentorByHod,
-  subscribeToMentors
+  subscribeToMentors,
+  getAllCertificateRequests,
+  subscribeToCertificates,
+  hodAcceptCertificate,
+  hodForwardCertificateToAO,
+  hodRejectCertificate,
+  isHodDirectlyAcceptableCertificate
 } from '../services/outpassService';
 import {
   exportOverallData,
@@ -130,6 +138,10 @@ const Dashboard = ({ initialTab }) => {
   const [studentHistoryModalStudent, setStudentHistoryModalStudent] = useState(null);
   const [outpassActionSuccess, setOutpassActionSuccess] = useState('');
   const [outpassActionError, setOutpassActionError] = useState('');
+  const [certificateRequests, setCertificateRequests] = useState([]);
+  const [historyTypeFilter, setHistoryTypeFilter] = useState('ACCEPTED'); // 'ACCEPTED' | 'REJECTED'
+  const [certActionSuccess, setCertActionSuccess] = useState('');
+  const [certActionError, setCertActionError] = useState('');
 
   // HOD Faculty Mentorship Management
   const [showMentorModal, setShowMentorModal] = useState(false);
@@ -400,7 +412,12 @@ const Dashboard = ({ initialTab }) => {
   useEffect(() => {
     setOutpassTickets(getAllOutpasses());
     const unsub = subscribeToOutpasses(setOutpassTickets);
-    return () => unsub();
+    setCertificateRequests(getAllCertificateRequests());
+    const unsubCerts = subscribeToCertificates(setCertificateRequests);
+    return () => {
+      unsub();
+      unsubCerts();
+    };
   }, []);
 
   // Department-scoped permission requests for HOD / Sub Admin
@@ -462,6 +479,50 @@ const Dashboard = ({ initialTab }) => {
       setTimeout(() => setOutpassActionSuccess(''), 4500);
     } catch (err) {
       setOutpassActionError(err.message || 'Failed to approve faculty leave');
+    }
+  };
+
+  const handleAcceptCertHOD = async (cert) => {
+    try {
+      setCertActionError('');
+      await hodAcceptCertificate(cert.id, {
+        hodName: user?.name || 'Head of Department (HOD)',
+        remarks: 'Accepted directly by HOD.'
+      });
+      setCertActionSuccess(`Certificate request for ${cert.studentName} (${cert.certificateName}) approved!`);
+      setTimeout(() => setCertActionSuccess(''), 4500);
+    } catch (err) {
+      setCertActionError(err.message || 'Failed to accept certificate');
+    }
+  };
+
+  const handleForwardCertToAOHOD = async (cert) => {
+    try {
+      setCertActionError('');
+      await hodForwardCertificateToAO(cert.id, {
+        hodName: user?.name || 'Head of Department (HOD)',
+        remarks: 'Reviewed by HOD and forwarded to Administrative Officer (AO) for approval.'
+      });
+      setCertActionSuccess(`Certificate request for ${cert.studentName} (${cert.certificateName}) forwarded to Administrative Officer (AO)!`);
+      setTimeout(() => setCertActionSuccess(''), 4500);
+    } catch (err) {
+      setCertActionError(err.message || 'Failed to forward certificate to AO');
+    }
+  };
+
+  const handleRejectCertHOD = async (cert) => {
+    const reason = window.prompt(`Enter rejection reason for ${cert.studentName}'s ${cert.certificateName}:`, 'Certificate request rejected by Head of Department.');
+    if (!reason) return;
+    try {
+      setCertActionError('');
+      await hodRejectCertificate(cert.id, {
+        hodName: user?.name || 'Head of Department (HOD)',
+        reason
+      });
+      setCertActionSuccess(`Certificate request for ${cert.studentName} was rejected.`);
+      setTimeout(() => setCertActionSuccess(''), 4500);
+    } catch (err) {
+      setCertActionError(err.message || 'Failed to reject certificate');
     }
   };
 
@@ -2527,12 +2588,176 @@ const Dashboard = ({ initialTab }) => {
             )}
           </div>
 
+          {/* Section 3: Student Certificate Requests (HOD Review & Clearance) */}
+          <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-start justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="text-lg font-black text-customText dark:text-customText-dark tracking-tight flex items-center gap-2">
+                  <Award size={20} className="text-primary" />
+                  <span>Student Certificate Applications</span>
+                </h3>
+                <p className="text-xs text-customText-muted">
+                  Study, Custodian, Bus Pass, & Bonafide certificates are directly approved by HOD. All other certificates can be forwarded to the Administrative Officer (AO).
+                </p>
+              </div>
+            </div>
+
+            {certActionSuccess && (
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 size={16} />
+                <span>{certActionSuccess}</span>
+              </div>
+            )}
+            {certActionError && (
+              <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+                <AlertCircle size={16} />
+                <span>{certActionError}</span>
+              </div>
+            )}
+
+            {(() => {
+              const deptCerts = (certificateRequests || []).filter(c => {
+                if (c.status !== 'PENDING_HOD' && c.status !== 'PENDING') return false;
+                if (user?.role === 'SUPER_ADMIN') return true;
+                if (!user?.department) return true;
+                return !c.department || c.department === user.department || c.department.toLowerCase().includes('emerging') || user.department.toLowerCase().includes('emerging');
+              });
+
+              if (deptCerts.length === 0) {
+                return (
+                  <div className="p-8 text-center rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 space-y-2">
+                    <CheckCircle2 size={28} className="mx-auto text-emerald-500" />
+                    <h4 className="font-bold text-sm text-customText dark:text-customText-dark">
+                      No Certificate Requests Pending HOD Clearance
+                    </h4>
+                    <p className="text-xs text-customText-muted max-w-sm mx-auto">
+                      All student certificate requests have been accepted, forwarded to AO, or completed.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {deptCerts.map((cert) => {
+                    const isDirectAccept = isHodDirectlyAcceptableCertificate(cert.certificateName);
+                    return (
+                      <div
+                        key={cert.id}
+                        className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 relative overflow-hidden"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono font-bold text-primary block">
+                                {cert.id}
+                              </span>
+                              {isDirectAccept ? (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase border border-emerald-500/30 flex items-center gap-1">
+                                  <BadgeCheck size={11} />
+                                  Eligible for Direct HOD Acceptance
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-black text-[10px] uppercase border border-indigo-500/30 flex items-center gap-1">
+                                  <Send size={11} />
+                                  Requires AO Clearance
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-lg font-black text-customText dark:text-customText-dark mt-0.5">
+                              {cert.studentName}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-xs font-bold text-customText">
+                                {cert.rollNumber}
+                              </span>
+                              <span className="text-xs text-customText-muted font-medium">
+                                {cert.section || 'Student'}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-mono text-customText-muted">
+                            {cert.appliedTime}
+                          </span>
+                        </div>
+
+                        {/* Certificate Details */}
+                        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/80 space-y-1.5 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block">Certificate Type Requested:</span>
+                            <p className="text-sm font-black text-primary">📜 {cert.certificateName}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-customText-muted uppercase block">Stated Purpose / Reason:</span>
+                            <p className="font-semibold text-customText dark:text-customText-dark italic">"{cert.reason || cert.purpose}"</p>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] text-customText-muted pt-1 border-t border-slate-200/50 dark:border-slate-800/50">
+                            <span><strong>Applied Date:</strong> {cert.appliedDate}</span>
+                            <span><strong>Student Mobile:</strong> {cert.studentMobile || 'N/A'}</span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+                          {isDirectAccept ? (
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptCertHOD(cert)}
+                              className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+                            >
+                              <BadgeCheck size={16} />
+                              <span>Accept Certificate (Grant Approval)</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleForwardCertToAOHOD(cert)}
+                              className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer active:scale-95"
+                            >
+                              <Send size={15} />
+                              <span>Forward to Administrative Officer (AO)</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRejectCertHOD(cert)}
+                            className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+
           {/* All Outpass History for HOD */}
           <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <h4 className="text-sm font-black text-customText dark:text-customText-dark uppercase tracking-wider">
-                Department Outpass Log & Clearance Status
-              </h4>
+              <div>
+                <h4 className="text-sm font-black text-customText dark:text-customText-dark uppercase tracking-wider">
+                  Department Permission & Clearance History
+                </h4>
+                <div className="flex gap-1.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('ACCEPTED')}
+                    className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${historyTypeFilter === 'ACCEPTED' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
+                  >
+                    ✓ Accepted History
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('REJECTED')}
+                    className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${historyTypeFilter === 'REJECTED' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
+                  >
+                    ✕ Rejected History
+                  </button>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -2572,14 +2797,26 @@ const Dashboard = ({ initialTab }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {deptTickets.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-6 text-center text-customText-muted text-xs">
-                        No pass or leave tickets found for your department.
-                      </td>
-                    </tr>
-                  ) : (
-                    deptTickets.map((t) => {
+                  {(() => {
+                    const filteredDeptHistory = deptTickets.filter(t => {
+                      const isAccepted = t.status === 'PERMISSION_GRANTED' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED' || t.status === 'FACULTY_OUT';
+                      const isRejected = t.status === 'REJECTED';
+                      if (historyTypeFilter === 'ACCEPTED') return isAccepted;
+                      if (historyTypeFilter === 'REJECTED') return isRejected;
+                      return true;
+                    });
+
+                    if (filteredDeptHistory.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-customText-muted text-xs">
+                            No ${historyTypeFilter.toLowerCase()} tickets found in department history.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filteredDeptHistory.map((t) => {
                       const isFac = t.applicantType === 'FACULTY';
                       return (
                         <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
@@ -2701,8 +2938,8 @@ const Dashboard = ({ initialTab }) => {
                         </td>
                       </tr>
                     );
-                  })
-                )}
+                  });
+                  })()}
                 </tbody>
               </table>
             </div>

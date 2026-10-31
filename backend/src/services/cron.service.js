@@ -102,11 +102,73 @@ const checkExpiredPeriods = async () => {
 };
 
 
+
+const cleanDailyUnprocessedRequests = async () => {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'lectra_outpass_tickets_db' }
+    });
+    if (!setting || !setting.value) return;
+
+    let tickets = [];
+    try {
+      tickets = JSON.parse(setting.value);
+    } catch (e) {
+      return;
+    }
+
+    const { getTodayDateKey } = require('../utils/date');
+    const todayKey = getTodayDateKey();
+
+    let changed = false;
+    const cleaned = tickets.filter(ticket => {
+      if (!ticket) return false;
+      if (ticket.id === 'SYS_CONFIG_CERTIFICATES' && Array.isArray(ticket.requests)) {
+        const prevLen = ticket.requests.length;
+        ticket.requests = ticket.requests.filter(req => {
+          if (!req) return false;
+          const reqDate = req.appliedAt ? req.appliedAt.slice(0, 10) : '';
+          if (!reqDate || reqDate >= todayKey) return true;
+          const isActed = req.status === 'ACCEPTED' || req.status === 'APPROVED' || req.status === 'REJECTED' || req.status === 'READY' || req.status === 'ISSUED';
+          return isActed;
+        });
+        if (ticket.requests.length !== prevLen) {
+          changed = true;
+        }
+        return true;
+      }
+
+      if (ticket.applicantType === 'SYSTEM_CONFIG') return true;
+
+      const dateStr = ticket.appliedAt ? ticket.appliedAt.slice(0, 10) : (ticket.date || '');
+      if (!dateStr || dateStr >= todayKey) return true;
+
+      const isAccepted = ticket.status === 'PERMISSION_GRANTED' || ticket.status === 'SENT_OUT' || ticket.status === 'ACCEPTED' || ticket.status === 'FACULTY_OUT';
+      const isRejected = ticket.status === 'REJECTED';
+      if (isAccepted || isRejected) return true;
+
+      changed = true;
+      return false;
+    });
+
+    if (changed) {
+      await prisma.systemSetting.update({
+        where: { key: 'lectra_outpass_tickets_db' },
+        data: { value: JSON.stringify(cleaned) }
+      });
+      console.log('[Daily Cleanup Cron] Cleared unaccepted/unforwarded requests from previous days.');
+    }
+  } catch (err) {
+    console.error('Error cleaning daily requests in cron:', err.message);
+  }
+};
+
 const startCron = () => {
   // Run every 60 seconds
   cron.schedule('* * * * *', () => {
     console.log('[Auto-Status Cron] Checking for expired periods...');
     checkExpiredPeriods();
+    cleanDailyUnprocessedRequests();
   });
   console.log('[Auto-Status Cron] Service initialized.');
 };
