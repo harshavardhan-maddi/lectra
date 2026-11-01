@@ -399,6 +399,11 @@ const Login = () => {
       setCertVerifyError('Please specify the Certificate Name.');
       return;
     }
+    const certLower = certificateName.trim().toLowerCase();
+    if (certLower.includes('transfer') || certLower === 'tc') {
+      setCertVerifyError('Transfer Certificate (TC) can only be applied offline at the Administrative Office. Please visit the office in person.');
+      return;
+    }
     if (!certificatePurpose.trim()) {
       setCertVerifyError('Please state the purpose for requesting this certificate.');
       return;
@@ -1585,7 +1590,6 @@ const Login = () => {
                             'Bus Pass Certificate',
                             'Study & Conduct Certificate',
                             'Custodian Certificate',
-                            'Transfer Certificate (TC)',
                             'Fee Estimation Certificate',
                             'No Objection Certificate (NOC)',
                             'Medium of Instruction'
@@ -1661,9 +1665,6 @@ const Login = () => {
                         </p>
                       </div>
 
-                      <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-900 dark:text-blue-200 text-xs font-semibold text-left">
-                        ℹ️ Your certificate request has been routed directly to the <strong>College Office Login</strong> for verification, preparation, and seal stamping. You can track status below using your roll number.
-                      </div>
 
                       <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 text-left text-xs space-y-2">
                         <div className="flex justify-between">
