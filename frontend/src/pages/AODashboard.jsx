@@ -276,6 +276,42 @@ const AODashboard = () => {
     return name.includes(q) || empid.includes(q) || designation.includes(q) || phone.includes(q);
   });
 
+  const handleAcceptCertAO = async (cert) => {
+    try {
+      setCertActionError('');
+      await aoAcceptCertificate(cert.id, {
+        aoName: user?.name || 'Administrative Officer (AO)',
+        remarks: 'Certificate request approved by Administrative Officer (AO).'
+      });
+      setCertActionSuccess(`Certificate for ${cert.studentName} (${cert.rollNumber}) approved successfully!`);
+      toast?.success(`Certificate for ${cert.studentName} approved!`);
+      setCertificateRequests(getAllCertificateRequests());
+      setTimeout(() => setCertActionSuccess(''), 4000);
+    } catch (err) {
+      setCertActionError(err.message || 'Failed to approve certificate request');
+      toast?.error(err.message || 'Failed to approve certificate request');
+    }
+  };
+
+  const handleRejectCertAO = async (cert) => {
+    const reason = window.prompt(`Enter reason for rejecting ${cert.studentName}'s certificate request:`, 'Rejected by Administrative Officer (AO).');
+    if (reason === null) return;
+    try {
+      setCertActionError('');
+      await aoRejectCertificate(cert.id, {
+        aoName: user?.name || 'Administrative Officer (AO)',
+        reason: reason.trim() || 'Rejected by Administrative Officer (AO).'
+      });
+      setCertActionSuccess(`Certificate request for ${cert.studentName} rejected.`);
+      toast?.info(`Certificate request for ${cert.studentName} rejected.`);
+      setCertificateRequests(getAllCertificateRequests());
+      setTimeout(() => setCertActionSuccess(''), 4000);
+    } catch (err) {
+      setCertActionError(err.message || 'Failed to reject certificate request');
+      toast?.error(err.message || 'Failed to reject certificate request');
+    }
+  };
+
   const handleApprove = (ticket) => {
     try {
       setActionError('');
