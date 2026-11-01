@@ -1637,11 +1637,11 @@ const Login = () => {
                           disabled={isSubmittingCert}
                         >
                           {isSubmittingCert ? (
-                            <span>Submitting to Office...</span>
+                            <span>Submitting...</span>
                           ) : (
                             <>
                               <Award size={18} />
-                              <span>Submit Request to Office</span>
+                              <span>Submit</span>
                             </>
                           )}
                         </button>
