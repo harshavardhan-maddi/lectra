@@ -128,6 +128,8 @@ const AODashboard = () => {
 
   // Certificate requests state
   const [certificateRequests, setCertificateRequests] = useState([]);
+  const [certActionSuccess, setCertActionSuccess] = useState('');
+  const [certActionError, setCertActionError] = useState('');
 
   // Sync tab with URL
   useEffect(() => {
