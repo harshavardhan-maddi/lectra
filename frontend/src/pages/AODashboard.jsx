@@ -8,7 +8,11 @@ import {
   getAllOutpasses, 
   subscribeToOutpasses, 
   aoApproveHodLeave, 
-  aoRejectHodLeave 
+  aoRejectHodLeave,
+  getAllCertificateRequests,
+  subscribeToCertificates,
+  aoAcceptCertificate,
+  aoRejectCertificate
 } from '../services/outpassService';
 import { 
   ShieldCheck, 
@@ -119,6 +123,12 @@ const AODashboard = () => {
   const [isUpdatingStaff, setIsUpdatingStaff] = useState(false);
   const [copiedId, setCopiedId] = useState('');
 
+  // AO Sub-tab for toggling between leaves and certificates
+  const [aoSubTab, setAoSubTab] = useState('leaves');
+
+  // Certificate requests state
+  const [certificateRequests, setCertificateRequests] = useState([]);
+
   // Sync tab with URL
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -223,8 +233,10 @@ const AODashboard = () => {
   useEffect(() => {
     loadTickets();
     loadOfficeStaff();
+    setCertificateRequests(getAllCertificateRequests());
     const unsub = subscribeToOutpasses(setTickets);
-    return () => unsub();
+    const unsubCerts = subscribeToCertificates(setCertificateRequests);
+    return () => { unsub(); unsubCerts(); };
   }, [token]);
 
   // Filter tickets for HOD and Office Staff applicants (routes to AO Login)
