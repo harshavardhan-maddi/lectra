@@ -1390,6 +1390,8 @@ export const applyHodLeave = async ({
 export const applyOfficeLeave = async ({
   officeUserId,
   officeName,
+  staffUserId,
+  staffName,
   department = 'Administrative Office',
   type = 'FACULTY_ONE_HOUR', // 'FACULTY_ONE_HOUR' | 'FACULTY_4PM' | 'FACULTY_OD'
   date,
@@ -1400,12 +1402,14 @@ export const applyOfficeLeave = async ({
     throw new Error('Please specify a valid and proper purpose for your request.');
   }
 
+  const finalUserId = officeUserId || staffUserId || 'OFFICE';
+  const finalName = officeName || staffName || 'Office Staff Member';
   const selectedDate = date || new Date().toISOString().slice(0, 10);
   const cleanDepartment = (department && department !== 'General') ? department : 'Administrative Office';
 
   // Quota validation: only regular permissions (1-Hour & 4PM) are capped at 2 per month
   if (type !== 'FACULTY_OD') {
-    const quota = getFacultyMonthlyLeaveUsage(officeUserId || officeName || 'OFFICE', selectedDate);
+    const quota = getFacultyMonthlyLeaveUsage(finalUserId || finalName || 'OFFICE', selectedDate);
     if (quota.isLimitExceeded) {
       throw new Error("your limit for leaves has been completed , consult principal.");
     }
@@ -1437,9 +1441,9 @@ export const applyOfficeLeave = async ({
     facultyType: 'OFFICE',
     type,
     permissionType: type,
-    facultyId: officeUserId || 'OFFICE',
-    facultyUserId: officeUserId || 'OFFICE',
-    facultyName: officeName || 'Office Staff Member',
+    facultyId: finalUserId,
+    facultyUserId: finalUserId,
+    facultyName: finalName,
     department: cleanDepartment,
     date: selectedDate,
     leaveTime: finalLeaveTime,
@@ -1447,8 +1451,8 @@ export const applyOfficeLeave = async ({
     purpose: purpose.trim(),
     reason: purpose.trim(),
     destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : type === 'FACULTY_OD' ? 'On Duty (OD)' : '1-Hour Permission',
-    rollNumber: officeUserId || 'OFFICE',
-    studentName: officeName || 'Office Staff Member',
+    rollNumber: finalUserId,
+    studentName: finalName,
     section: cleanDepartment,
     appliedAt: now.toISOString(),
     appliedDate: now.toLocaleDateString('en-GB'),

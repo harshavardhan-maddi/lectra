@@ -2272,7 +2272,7 @@ const FacultyDashboard = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-customText dark:text-customText-dark">
-                    {isHodUser ? 'Apply HOD Permission / Leave' : 'Apply Faculty Permission / Early Out'}
+                    {isHodUser ? 'Apply HOD Permission / Leave' : isOfficeStaff ? 'Apply Office Staff Permission / Leave' : 'Apply Faculty Permission / Early Out'}
                   </h3>
                   <p className="text-xs text-customText-muted">
                     {isHodUser 
@@ -2503,7 +2503,7 @@ const FacultyDashboard = () => {
                     <span>Submitting...</span>
                   ) : (
                     <>
-                      <span>{isHodUser ? 'Submit to AO' : 'Submit to HOD'}</span>
+                      <span>{isHodUser ? 'Submit to AO' : isOfficeStaff ? 'Submit to AO' : 'Submit to HOD'}</span>
                       <ArrowRight size={14} />
                     </>
                   )}

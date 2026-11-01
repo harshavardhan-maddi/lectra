@@ -244,7 +244,8 @@ const AODashboard = () => {
     t.applicantType === 'HOD' || 
     t.applicantType === 'OFFICE' || 
     t.facultyType === 'OFFICE' || 
-    t.status === 'FORWARDED_TO_AO'
+    t.status === 'FORWARDED_TO_AO' ||
+    (t.department && t.department.toLowerCase().includes('office') && t.status !== 'CLOSED')
   );
 
   const pendingTickets = aoTickets.filter(t => t.status === 'FORWARDED_TO_AO');
@@ -286,6 +287,7 @@ const AODashboard = () => {
       setActionSuccess(`Permission granted for ${ticket.facultyName || applicantRole}! Forwarded to Campus Security.`);
       toast?.success(`Permission granted for ${ticket.facultyName || applicantRole}! Forwarded to Campus Security.`);
       logActivity(user?.name, user?.role, 'Approve Leave', `Approved leave for ${ticket.facultyName || applicantRole} (${ticket.id})`, 'APPROVE');
+      setTickets(getAllOutpasses());
       setTimeout(() => setActionSuccess(''), 4000);
     } catch (err) {
       toast?.error(err.message || 'Failed to approve leave application');
@@ -1001,7 +1003,7 @@ const AODashboard = () => {
               onClick={() => setAoSubTab('leaves')}
               className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${aoSubTab === 'leaves' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-customText-muted hover:text-customText'}`}
             >
-              Staff & HOD Leaves (${pendingTickets.length})
+              Staff & HOD Leaves ({pendingTickets.length})
             </button>
             <button
               type="button"
@@ -1010,7 +1012,7 @@ const AODashboard = () => {
             >
               <span>Student Certificates (HOD Forwarded)</span>
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-mono">
-                ${(certificateRequests || []).filter(c => c.status === 'FORWARDED_TO_AO').length}
+                {(certificateRequests || []).filter(c => c.status === 'FORWARDED_TO_AO').length}
               </span>
             </button>
           </div>
