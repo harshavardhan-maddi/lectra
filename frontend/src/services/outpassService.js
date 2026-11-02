@@ -149,7 +149,7 @@ export const purgeExpiredUnprocessedRequests = (items) => {
                        item.status === 'ISSUED';
     const isRejected = item.status === 'REJECTED';
 
-    const isPendingCert = item.certificateName && (item.status === 'PENDING_HOD' || item.status === 'PENDING' || item.status === 'FORWARDED_TO_AO');
+    const isPendingCert = item.certificateName && (item.status === 'PENDING_HOD' || item.status === 'PENDING' || item.status === 'FORWARDED_TO_AO' || item.status === 'FORWARDED_TO_OFFICE');
     if (isAccepted || isRejected || isPendingCert) {
       return true; // Keep in history or active queue!
     }
@@ -193,7 +193,7 @@ export const getSeparatedCertificates = (certList) => {
 
   (certList || []).forEach(c => {
     if (!c) return;
-    const isAccepted = c.status === 'ACCEPTED' || c.status === 'APPROVED' || c.status === 'READY' || c.status === 'ISSUED';
+    const isAccepted = c.status === 'ACCEPTED' || c.status === 'APPROVED' || c.status === 'READY' || c.status === 'ISSUED' || c.status === 'FORWARDED_TO_OFFICE' || c.status === 'IN_PROGRESS';
     const isRejected = c.status === 'REJECTED';
     if (isAccepted) {
       accepted.push(c);
@@ -2196,6 +2196,59 @@ export const getStudentCertificateRequests = (rollNumber) => {
   return requests.filter(r => (r.rollNumber || '').toUpperCase() === clean);
 };
 
+export const deleteCertificateRequest = async (requestId) => {
+  const requests = getAllCertificateRequests();
+  const updated = requests.filter(r => r.id !== requestId);
+  await saveCertificateRequests(updated);
+  return true;
+};
+
+export const addCertificateTicketByOffice = async ({
+  rollNumber,
+  studentName,
+  section = '',
+  department = '',
+  certificateName,
+  reason = '',
+  status = 'FORWARDED_TO_OFFICE',
+  remarks = 'Added manually by Office'
+}) => {
+  const requests = getAllCertificateRequests();
+  const now = new Date();
+  const dateCompact = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const reqId = `CERT-${dateCompact}-${randomNum}`;
+  
+  const newRequest = {
+    id: reqId,
+    rollNumber: (rollNumber || '').trim().toUpperCase(),
+    studentName: (studentName || '').trim(),
+    section: section || '',
+    department: department || 'Administrative Office',
+    certificateName: (certificateName || 'Bonafide Certificate').trim(),
+    reason: (reason || '').trim() || 'Official academic certificate request',
+    status: status,
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    hodAction: {
+      status: 'FORWARDED_TO_OFFICE',
+      forwarded: true,
+      actionAt: now.toISOString(),
+      displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      displayDate: now.toLocaleDateString('en-GB'),
+      remarks: remarks || 'Forwarded by HOD to Office',
+      hodName: 'HOD / Department'
+    },
+    aoAction: null,
+    officeAction: null
+  };
+
+  const updated = [newRequest, ...requests.filter(r => r.id !== reqId)];
+  await saveCertificateRequests(updated);
+  return newRequest;
+};
+
 export const subscribeToCertificates = (callback) => {
   const handler = (e) => {
     callback(e.detail || getAllCertificateRequests());
@@ -2222,6 +2275,27 @@ export const hodAcceptCertificate = async (requestId, { hodName = 'Head of Depar
   req.hodAction = {
     status: 'ACCEPTED',
     granted: true,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    hodName
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+export const hodForwardCertificateToOffice = async (requestId, { hodName = 'Head of Department (HOD)', remarks = 'Reviewed and forwarded to Administrative Office for certificate issuance.' } = {}) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = 'FORWARDED_TO_OFFICE';
+  req.hodAction = {
+    status: 'FORWARDED_TO_OFFICE',
+    forwarded: true,
     actionAt: now.toISOString(),
     displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     displayDate: now.toLocaleDateString('en-GB'),

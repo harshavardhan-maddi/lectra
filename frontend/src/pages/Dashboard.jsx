@@ -76,6 +76,7 @@ import {
   subscribeToCertificates,
   hodAcceptCertificate,
   hodForwardCertificateToAO,
+  hodForwardCertificateToOffice,
   hodRejectCertificate,
   isHodDirectlyAcceptableCertificate
 } from '../services/outpassService';
@@ -503,6 +504,20 @@ const Dashboard = ({ initialTab }) => {
       setTimeout(() => setCertActionSuccess(''), 4500);
     } catch (err) {
       setCertActionError(err.message || 'Failed to accept certificate');
+    }
+  };
+
+  const handleForwardCertToOfficeHOD = async (cert) => {
+    try {
+      setCertActionError('');
+      await hodForwardCertificateToOffice(cert.id, {
+        hodName: user?.name || 'Head of Department (HOD)',
+        remarks: 'Reviewed by HOD and forwarded to Office Login.'
+      });
+      setCertActionSuccess(`Certificate request for ${cert.studentName} (${cert.certificateName}) forwarded to Office!`);
+      setTimeout(() => setCertActionSuccess(''), 4500);
+    } catch (err) {
+      setCertActionError(err.message || 'Failed to forward certificate to Office');
     }
   };
 
@@ -2668,7 +2683,7 @@ const Dashboard = ({ initialTab }) => {
                               {isDirectAccept ? (
                                 <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase border border-emerald-500/30 flex items-center gap-1">
                                   <BadgeCheck size={11} />
-                                  Eligible for Direct HOD Acceptance
+                                  HOD Approved • Forward to Office
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-black text-[10px] uppercase border border-indigo-500/30 flex items-center gap-1">
@@ -2715,11 +2730,11 @@ const Dashboard = ({ initialTab }) => {
                           {isDirectAccept ? (
                             <button
                               type="button"
-                              onClick={() => handleAcceptCertHOD(cert)}
+                              onClick={() => handleForwardCertToOfficeHOD(cert)}
                               className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
                             >
                               <BadgeCheck size={16} />
-                              <span>Accept Certificate (Grant Approval)</span>
+                              <span>Forward to Office</span>
                             </button>
                           ) : (
                             <button
