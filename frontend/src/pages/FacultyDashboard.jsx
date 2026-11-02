@@ -166,6 +166,7 @@ const FacultyDashboard = () => {
   const todayDate = getTodayDateString();
 
   // Faculty Leaves & Early Out States
+  const [facultyHistoryTab, setFacultyHistoryTab] = useState('ACCEPTED');
   const [facultyTickets, setFacultyTickets] = useState([]);
   const [selectedTicketForModal, setSelectedTicketForModal] = useState(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
