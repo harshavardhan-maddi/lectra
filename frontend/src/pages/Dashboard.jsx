@@ -2618,9 +2618,7 @@ const Dashboard = ({ initialTab }) => {
             {(() => {
               const deptCerts = (certificateRequests || []).filter(c => {
                 if (c.status !== 'PENDING_HOD' && c.status !== 'PENDING') return false;
-                if (user?.role === 'SUPER_ADMIN') return true;
-                if (!user?.department) return true;
-                return !c.department || c.department === user.department || c.department.toLowerCase().includes('emerging') || user.department.toLowerCase().includes('emerging');
+                return isTicketInUserDepartment(c, user);
               });
 
               if (deptCerts.length === 0) {

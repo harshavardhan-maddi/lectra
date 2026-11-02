@@ -703,7 +703,7 @@ export const submitOutpassApplication = async ({
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName,
     section,
-    department: department || 'Department of CSE(emerging Technologies)',
+    department: resolveStudentDepartment({ department, section, rollNumber }),
     studentMobile,
     parentMobile,
     maskedStudentMobile: maskPhoneNumber(studentMobile),
@@ -795,7 +795,7 @@ export const submitBlockMovementApplication = async ({
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName,
     section,
-    department: department || 'Engineering',
+    department: resolveStudentDepartment({ department, section, rollNumber }),
     presentBlock: presentBlock?.trim() || 'Current Block',
     destinationArea: destinationArea?.trim() || 'Campus Area',
     destination: destinationArea?.trim() || 'Campus Area',
@@ -952,39 +952,103 @@ export const subAdminGrantOutpass = (ticketId, { subAdminName = 'Sub Admin', rem
   });
 };
 
+// Helper: Get canonical branch key for precise department isolation
+export const getBranchKey = (deptStr = '', sectionStr = '', rollStr = '') => {
+  const d = String(deptStr || '').toLowerCase();
+  const s = String(sectionStr || '').toLowerCase();
+  const r = String(rollStr || '').toUpperCase();
+
+  // Emerging / AI / DS
+  if (d.includes('emerging') || s.includes('emerging') || s.includes('csm') || s.includes('csd') || s.includes('cso') || s.includes('aiml') || s.includes('ai&ml') || s.includes('data science') || s.includes('cyber')) {
+    return 'CSE_EMERGING';
+  }
+
+  // ECE
+  if (d.includes('electronics') || d.includes('ece') || s.includes('ece') || s.includes('electronics')) {
+    return 'ECE';
+  }
+
+  // EEE
+  if (d.includes('electrical') || d.includes('eee') || s.includes('eee') || s.includes('electrical')) {
+    return 'EEE';
+  }
+
+  // Mechanical
+  if (d.includes('mechanical') || d.includes('mech') || s.includes('mech') || s.includes('mechanical')) {
+    return 'MECH';
+  }
+
+  // Civil
+  if (d.includes('civil') || s.includes('civil')) {
+    return 'CIVIL';
+  }
+
+  // IT
+  if (d.includes('information technology') || d === 'it' || s.includes('it 2nd') || s.includes('it 3rd') || s.includes('it 4th') || s.includes('it-a') || s.includes('it-b')) {
+    return 'IT';
+  }
+
+  // General CSE
+  if (d.includes('computer') || d.includes('cse') || s.includes('cse')) {
+    return 'CSE';
+  }
+
+  // Roll Number branch code check (e.g. 21NE1A0401 -> 04 is ECE, 05 is CSE)
+  const branchMatch = r.match(/^[0-9]{2}[A-Z0-9]{2}[15][A-Z]([0-9]{2})/);
+  if (branchMatch) {
+    const code = branchMatch[1];
+    if (code === '01') return 'CIVIL';
+    if (code === '02') return 'EEE';
+    if (code === '03') return 'MECH';
+    if (code === '04') return 'ECE';
+    if (code === '05') return 'CSE';
+    if (code === '12') return 'IT';
+    if (['42', '44', '67', '66'].includes(code)) return 'CSE_EMERGING';
+  }
+
+  return d.replace(/^department of\s+/i, '').trim().toUpperCase() || 'UNKNOWN';
+};
+
+// Helper: Resolve student's true canonical department from their profile, section, and roll number
+export const resolveStudentDepartment = ({ department = '', section = '', rollNumber = '' } = {}) => {
+  const key = getBranchKey(department, section, rollNumber);
+  switch (key) {
+    case 'ECE': return 'Department of Electronics and Communication Engineering';
+    case 'EEE': return 'Department of Electrical and Electronics Engineering';
+    case 'MECH': return 'Department of Mechanical Engineering';
+    case 'CIVIL': return 'Department of Civil Engineering';
+    case 'IT': return 'Department of Information Technology';
+    case 'CSE_EMERGING': return 'Department of CSE(emerging Technologies)';
+    case 'CSE': return 'Department of Computer Science and Engineering';
+    default:
+      if (department && department !== 'Engineering' && department !== 'General') {
+        return department;
+      }
+      return 'Department of Computer Science and Engineering';
+  }
+};
+
 // Helper: Filter permission requests strictly by user's department for HOD, Sub Admin, and Absent Controller
 export const isTicketInUserDepartment = (ticket, user) => {
   if (!ticket) return false;
   // Super Admin can view all department requests
   if (user?.role === 'SUPER_ADMIN') return true;
-  if (!user || !user.department) return true;
+  if (!user || !user.department) return false;
 
-  const userDept = user.department.trim().toLowerCase();
+  const userKey = getBranchKey(user.department);
 
-  // Match against ticket department
-  if (ticket.department) {
-    const tDept = ticket.department.trim().toLowerCase();
-    if (tDept === userDept || userDept.includes(tDept) || tDept.includes(userDept)) {
-      return true;
+  // For students: prioritize section and rollNumber over generic department strings
+  let ticketKey;
+  if (ticket.applicantType !== 'FACULTY' && (ticket.section || ticket.rollNumber)) {
+    ticketKey = getBranchKey('', ticket.section, ticket.rollNumber);
+    if (ticketKey === 'UNKNOWN') {
+      ticketKey = getBranchKey(ticket.department);
     }
+  } else {
+    ticketKey = getBranchKey(ticket.department, ticket.section);
   }
 
-  // Match against section
-  if (ticket.section) {
-    const tSec = ticket.section.trim().toLowerCase();
-    if (tSec.includes(userDept) || userDept.includes(tSec)) {
-      return true;
-    }
-    // Check known department abbreviations
-    const deptKeywords = ['cse', 'ece', 'eee', 'mech', 'civil', 'it', 'ai', 'ds', 'cyber'];
-    for (const kw of deptKeywords) {
-      if (userDept.includes(kw) && tSec.includes(kw)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  return userKey === ticketKey;
 };
 
 // HOD rejects outpass
@@ -2048,7 +2112,7 @@ export const submitCertificateRequest = async ({
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName: studentName.trim(),
     section: section || '',
-    department: department || 'Department of CSE(emerging Technologies)',
+    department: resolveStudentDepartment({ department, section, rollNumber }),
     studentMobile: studentMobile || '',
     parentMobile: parentMobile || '',
     certificateName: certificateName.trim(),
