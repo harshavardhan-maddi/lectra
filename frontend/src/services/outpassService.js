@@ -318,6 +318,7 @@ export const syncHODStudents = (studentList) => {
         rollNumber: s.rollNumber.toUpperCase(),
         name: s.name,
         section: s.section,
+        department: s.department,
         studentMobile: s.studentMobile,
         parentMobile: s.parentMobile
       });
