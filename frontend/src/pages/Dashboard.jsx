@@ -500,7 +500,7 @@ const Dashboard = ({ initialTab }) => {
         hodName: user?.name || 'Head of Department (HOD)',
         remarks: 'Accepted directly by HOD.'
       });
-      setCertActionSuccess(`Certificate request for ${cert.studentName} (${cert.certificateName}) approved!`);
+      setCertActionSuccess(`Certificate request for ${cert.studentName} (${cert.certificateName}) has been directly accepted and closed with completed!`);
       setTimeout(() => setCertActionSuccess(''), 4500);
     } catch (err) {
       setCertActionError(err.message || 'Failed to accept certificate');
@@ -2726,26 +2726,34 @@ const Dashboard = ({ initialTab }) => {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
-                          {isDirectAccept ? (
-                            <button
-                              type="button"
-                              onClick={() => handleForwardCertToOfficeHOD(cert)}
-                              className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
-                            >
-                              <BadgeCheck size={16} />
-                              <span>Forward to Office</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleForwardCertToAOHOD(cert)}
-                              className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer active:scale-95"
-                            >
-                              <Send size={15} />
-                              <span>Forward to Administrative Officer (AO)</span>
-                            </button>
-                          )}
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptCertHOD(cert)}
+                            className="flex-1 min-w-[140px] py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+                            title="Directly accept and close with completed status"
+                          >
+                            <BadgeCheck size={15} />
+                            <span>Accept (Completed)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleForwardCertToAOHOD(cert)}
+                            className="flex-1 min-w-[140px] py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer active:scale-95"
+                            title="Forward request to Administrative Officer (AO)"
+                          >
+                            <Send size={15} />
+                            <span>Forward to AO</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleForwardCertToOfficeHOD(cert)}
+                            className="flex-1 min-w-[140px] py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer active:scale-95"
+                            title="Forward request to Office Login"
+                          >
+                            <Building size={15} />
+                            <span>Forward to Office</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleRejectCertHOD(cert)}

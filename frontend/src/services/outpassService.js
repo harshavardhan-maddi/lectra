@@ -146,7 +146,7 @@ export const purgeExpiredUnprocessedRequests = (items) => {
                        item.status === 'FACULTY_OUT' ||
                        item.status === 'APPROVED' ||
                        item.status === 'READY' ||
-                       item.status === 'ISSUED';
+                       item.status === 'ISSUED' || item.status === 'COMPLETED';
     const isRejected = item.status === 'REJECTED';
 
     const isPendingCert = item.certificateName && (item.status === 'PENDING_HOD' || item.status === 'PENDING' || item.status === 'FORWARDED_TO_AO' || item.status === 'FORWARDED_TO_OFFICE');
@@ -193,7 +193,7 @@ export const getSeparatedCertificates = (certList) => {
 
   (certList || []).forEach(c => {
     if (!c) return;
-    const isAccepted = c.status === 'ACCEPTED' || c.status === 'APPROVED' || c.status === 'READY' || c.status === 'ISSUED' || c.status === 'FORWARDED_TO_OFFICE' || c.status === 'IN_PROGRESS';
+    const isAccepted = c.status === 'ACCEPTED' || c.status === 'APPROVED' || c.status === 'READY' || c.status === 'ISSUED' || c.status === 'COMPLETED' || c.status === 'FORWARDED_TO_OFFICE' || c.status === 'IN_PROGRESS';
     const isRejected = c.status === 'REJECTED';
     if (isAccepted) {
       accepted.push(c);
