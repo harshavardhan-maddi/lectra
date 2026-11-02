@@ -139,6 +139,8 @@ const Dashboard = ({ initialTab }) => {
   const [outpassActionSuccess, setOutpassActionSuccess] = useState('');
   const [outpassActionError, setOutpassActionError] = useState('');
   const [certificateRequests, setCertificateRequests] = useState([]);
+  const [students, setStudents] = useState([]);
+
   const [historyTypeFilter, setHistoryTypeFilter] = useState('ACCEPTED'); // 'ACCEPTED' | 'REJECTED'
   const [certActionSuccess, setCertActionSuccess] = useState('');
   const [certActionError, setCertActionError] = useState('');
@@ -421,6 +423,7 @@ const Dashboard = ({ initialTab }) => {
   }, []);
 
   // Department-scoped permission requests for HOD / Sub Admin
+
   const deptTickets = useMemo(() => {
     return outpassTickets.filter(t => {
       if (isTicketInUserDepartment(t, user)) return true;
@@ -635,7 +638,7 @@ const Dashboard = ({ initialTab }) => {
   const [clearError, setClearError] = useState('');
 
   // HOD Student Registry States
-  const [students, setStudents] = useState([]);
+
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [searchStudentQuery, setSearchStudentQuery] = useState('');
   const [filterStudentSection, setFilterStudentSection] = useState('');
