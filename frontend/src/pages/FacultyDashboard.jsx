@@ -1726,21 +1726,21 @@ const FacultyDashboard = () => {
                     onClick={() => setFacultyHistoryTab('ACCEPTED')}
                     className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${facultyHistoryTab === 'ACCEPTED' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
                   >
-                    ✓ Accepted (${facultyTickets.filter(t => t.status === 'PERMISSION_GRANTED' || t.status === 'FACULTY_OUT' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED').length})
+                    ✓ Accepted ({facultyTickets.filter(t => t.status === 'PERMISSION_GRANTED' || t.status === 'FACULTY_OUT' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED').length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setFacultyHistoryTab('REJECTED')}
                     className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${facultyHistoryTab === 'REJECTED' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
                   >
-                    ✕ Rejected (${facultyTickets.filter(t => t.status === 'REJECTED').length})
+                    ✕ Rejected ({facultyTickets.filter(t => t.status === 'REJECTED').length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setFacultyHistoryTab('ALL')}
                     className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${facultyHistoryTab === 'ALL' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
                   >
-                    All (${facultyTickets.length})
+                    All ({facultyTickets.length})
                   </button>
                 </div>
               </div>
@@ -1784,7 +1784,7 @@ const FacultyDashboard = () => {
                   if (filteredFacTickets.length === 0) {
                     return (
                       <div className="p-8 text-center text-xs text-customText-muted">
-                        No ${facultyHistoryTab.toLowerCase()} permissions found.
+                        No {facultyHistoryTab.toLowerCase()} permissions found.
                       </div>
                     );
                   }

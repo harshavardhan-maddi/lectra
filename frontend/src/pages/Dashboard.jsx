@@ -2820,7 +2820,7 @@ const Dashboard = ({ initialTab }) => {
                       return (
                         <tr>
                           <td colSpan={7} className="p-6 text-center text-customText-muted text-xs">
-                            No ${historyTypeFilter.toLowerCase()} tickets found in department history.
+                            No {historyTypeFilter.toLowerCase()} tickets found in department history.
                           </td>
                         </tr>
                       );
