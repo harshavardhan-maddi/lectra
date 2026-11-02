@@ -422,8 +422,15 @@ const Dashboard = ({ initialTab }) => {
 
   // Department-scoped permission requests for HOD / Sub Admin
   const deptTickets = useMemo(() => {
-    return outpassTickets.filter(t => isTicketInUserDepartment(t, user));
-  }, [outpassTickets, user]);
+    return outpassTickets.filter(t => {
+      if (isTicketInUserDepartment(t, user)) return true;
+      if (t.rollNumber && students && students.length > 0) {
+        const clean = t.rollNumber.trim().toUpperCase();
+        return students.some(s => s.rollNumber && s.rollNumber.trim().toUpperCase() === clean);
+      }
+      return false;
+    });
+  }, [outpassTickets, user, students]);
 
   const handleOpenStudentLeaveHistory = (rollNumber, studentName, section) => {
     setStudentHistoryModalStudent({
@@ -2618,7 +2625,12 @@ const Dashboard = ({ initialTab }) => {
             {(() => {
               const deptCerts = (certificateRequests || []).filter(c => {
                 if (c.status !== 'PENDING_HOD' && c.status !== 'PENDING') return false;
-                return isTicketInUserDepartment(c, user);
+                if (isTicketInUserDepartment(c, user)) return true;
+                if (c.rollNumber && students && students.length > 0) {
+                  const clean = c.rollNumber.trim().toUpperCase();
+                  return students.some(s => s.rollNumber && s.rollNumber.trim().toUpperCase() === clean);
+                }
+                return false;
               });
 
               if (deptCerts.length === 0) {

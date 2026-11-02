@@ -101,8 +101,16 @@ const FacultyDashboard = () => {
   // HOD user detection: HOD applies permissions here with routing to AO -> Security
   const isHodUser = user?.role === 'HOD' || user?.role === 'SUB_ADMIN';
 
-  // All roles bypassed from student classroom attendance
-  const isBypassedAttendance = isNonTeaching || isOfficeStaff || isHodUser;
+  // STRICT REQUIREMENT: Except role Teaching, no other role can hit attendance, view call logs, make calls or mentorship! They only can apply leave.
+  const isTeachingFaculty = React.useMemo(() => {
+    if (user?.role !== 'FACULTY') return false;
+    if (isNonTeaching || isOfficeStaff || isHodUser) return false;
+    if (user?.facultyType === 'NON_TEACHING' || user?.facultyType === 'OFFICE') return false;
+    return true;
+  }, [user, isNonTeaching, isOfficeStaff, isHodUser]);
+
+  // All non-teaching roles are bypassed from classroom attendance, calls, and mentorship
+  const isBypassedAttendance = !isTeachingFaculty;
 
   const [activeTab, setActiveTab] = useState(
     isBypassedAttendance ? 'leaves' : (searchParams.get('tab') || 'attendance')

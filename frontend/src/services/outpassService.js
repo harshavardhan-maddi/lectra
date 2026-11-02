@@ -149,8 +149,9 @@ export const purgeExpiredUnprocessedRequests = (items) => {
                        item.status === 'ISSUED';
     const isRejected = item.status === 'REJECTED';
 
-    if (isAccepted || isRejected) {
-      return true; // Keep in history!
+    const isPendingCert = item.certificateName && (item.status === 'PENDING_HOD' || item.status === 'PENDING' || item.status === 'FORWARDED_TO_AO');
+    if (isAccepted || isRejected || isPendingCert) {
+      return true; // Keep in history or active queue!
     }
 
     // Item was from a previous day and was NEITHER accepted NOR forwarded.
@@ -363,6 +364,7 @@ export const lookupStudentByRollAndName = async (rollNumber) => {
         rollNumber: data.student.rollNumber,
         name: data.student.name,
         section: data.student.section,
+        department: data.student.department,
         studentMobile: data.student.studentMobile,
         parentMobile: data.student.parentMobile
       });
@@ -1012,6 +1014,15 @@ export const getBranchKey = (deptStr = '', sectionStr = '', rollStr = '') => {
 
 // Helper: Resolve student's true canonical department from their profile, section, and roll number
 export const resolveStudentDepartment = ({ department = '', section = '', rollNumber = '' } = {}) => {
+  if (rollNumber) {
+    try {
+      const dir = getStudentsDirectory();
+      const match = dir.find(s => s.rollNumber && s.rollNumber.toUpperCase() === rollNumber.trim().toUpperCase());
+      if (match?.department && match.department !== 'Engineering' && match.department !== 'General') {
+        return match.department;
+      }
+    } catch (e) {}
+  }
   const key = getBranchKey(department, section, rollNumber);
   switch (key) {
     case 'ECE': return 'Department of Electronics and Communication Engineering';
@@ -1039,7 +1050,22 @@ export const isTicketInUserDepartment = (ticket, user) => {
   const userDept = user.department.trim();
   const ticketDept = (ticket.department || '').trim();
 
-  // 1. Primary Authority: The department of the HOD who added the student
+  // 1. Check directory cache to see if the student belongs to user department
+  if (ticket.rollNumber) {
+    try {
+      const dir = getStudentsDirectory();
+      const matched = dir.find(st => st.rollNumber && st.rollNumber.toUpperCase() === ticket.rollNumber.trim().toUpperCase());
+      if (matched && matched.department) {
+        const mDept = matched.department.trim();
+        if (mDept.toLowerCase() === userDept.toLowerCase()) return true;
+        const uKey = getBranchKey(userDept);
+        const mKey = getBranchKey(mDept);
+        if (uKey !== 'UNKNOWN' && uKey === mKey) return true;
+      }
+    } catch (e) {}
+  }
+
+  // 2. Primary Authority: The department of the HOD who added the student
   if (ticketDept && ticketDept !== 'Engineering' && ticketDept !== 'General') {
     if (ticketDept.toLowerCase() === userDept.toLowerCase()) {
       return true;

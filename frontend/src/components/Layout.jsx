@@ -247,13 +247,12 @@ const Layout = ({ children }) => {
       } catch (e) {}
     }
 
+    const isTeachingOnly = !isNonTeaching && !isOfficeStaff && user?.facultyType !== 'NON_TEACHING' && user?.facultyType !== 'OFFICE';
     if (isOfficeStaff) {
-      // Office staff can ONLY apply permissions (routes to AO), cannot take attendance or make calls
       navLinks.push(
         { name: 'Office Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
       );
-    } else if (isNonTeaching) {
-      // Non-teaching faculty can ONLY apply permissions, cannot take attendance or make calls
+    } else if (isNonTeaching || !isTeachingOnly) {
       navLinks.push(
         { name: 'Faculty Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar }
       );
@@ -317,12 +316,13 @@ const Layout = ({ children }) => {
         } catch (e) {}
       }
 
+      const isTeachingOnly = !isNonTeaching && !isOfficeStaff && user?.facultyType !== 'NON_TEACHING' && user?.facultyType !== 'OFFICE';
       if (isOfficeStaff) {
         items.push(
           { name: 'Office Permissions', shortName: 'Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
           { name: 'Edit Profile', shortName: 'Profile', isProfile: true, icon: Settings }
         );
-      } else if (isNonTeaching) {
+      } else if (isNonTeaching || !isTeachingOnly) {
         items.push(
           { name: 'Faculty Permissions', shortName: 'Permissions', path: '/faculty-dashboard?tab=leaves', icon: Calendar },
           { name: 'Edit Profile', shortName: 'Profile', isProfile: true, icon: Settings }
