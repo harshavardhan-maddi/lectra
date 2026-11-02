@@ -292,29 +292,7 @@ router.post('/verify-outpass-student', async (req, res) => {
         rollNumber: student.rollNumber,
         name: student.name,
         section: student.section,
-        department: (() => {
-          const s = String(student.section || '').toUpperCase();
-          const r = String(student.rollNumber || '').toUpperCase();
-          if (s.includes('CSM') || s.includes('CSD') || s.includes('CSO') || s.includes('AIML')) return 'Department of CSE(emerging Technologies)';
-          if (s.includes('ECE') || s.includes('ELECTRONICS')) return 'Department of Electronics and Communication Engineering';
-          if (s.includes('EEE') || s.includes('ELECTRICAL')) return 'Department of Electrical and Electronics Engineering';
-          if (s.includes('MECH') || s.includes('MECHANICAL')) return 'Department of Mechanical Engineering';
-          if (s.includes('CIVIL')) return 'Department of Civil Engineering';
-          if (s.includes('IT')) return 'Department of Information Technology';
-          if (s.includes('CSE')) return 'Department of Computer Science and Engineering';
-          const bm = r.match(/^[0-9]{2}[A-Z0-9]{2}[15][A-Z]([0-9]{2})/);
-          if (bm) {
-            const c = bm[1];
-            if (c === '01') return 'Department of Civil Engineering';
-            if (c === '02') return 'Department of Electrical and Electronics Engineering';
-            if (c === '03') return 'Department of Mechanical Engineering';
-            if (c === '04') return 'Department of Electronics and Communication Engineering';
-            if (c === '05') return 'Department of Computer Science and Engineering';
-            if (c === '12') return 'Department of Information Technology';
-            if (['42', '44', '67', '66'].includes(c)) return 'Department of CSE(emerging Technologies)';
-          }
-          return student.department || 'Department of Computer Science and Engineering';
-        })(),
+        department: student.department || 'Department of CSE(emerging Technologies)',
         studentMobile: student.studentMobile,
         parentMobile: student.parentMobile,
         maskedStudentMobile: mask(student.studentMobile),

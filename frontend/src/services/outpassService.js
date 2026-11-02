@@ -703,7 +703,7 @@ export const submitOutpassApplication = async ({
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName,
     section,
-    department: resolveStudentDepartment({ department, section, rollNumber }),
+    department: (department && department !== 'Engineering' && department !== 'General') ? department : resolveStudentDepartment({ department, section, rollNumber }),
     studentMobile,
     parentMobile,
     maskedStudentMobile: maskPhoneNumber(studentMobile),
@@ -795,7 +795,7 @@ export const submitBlockMovementApplication = async ({
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName,
     section,
-    department: resolveStudentDepartment({ department, section, rollNumber }),
+    department: (department && department !== 'Engineering' && department !== 'General') ? department : resolveStudentDepartment({ department, section, rollNumber }),
     presentBlock: presentBlock?.trim() || 'Current Block',
     destinationArea: destinationArea?.trim() || 'Campus Area',
     destination: destinationArea?.trim() || 'Campus Area',
@@ -1035,20 +1035,30 @@ export const isTicketInUserDepartment = (ticket, user) => {
   if (user?.role === 'SUPER_ADMIN') return true;
   if (!user || !user.department) return false;
 
-  const userKey = getBranchKey(user.department);
+  const userDept = user.department.trim();
+  const ticketDept = (ticket.department || '').trim();
 
-  // For students: prioritize section and rollNumber over generic department strings
-  let ticketKey;
-  if (ticket.applicantType !== 'FACULTY' && (ticket.section || ticket.rollNumber)) {
-    ticketKey = getBranchKey('', ticket.section, ticket.rollNumber);
-    if (ticketKey === 'UNKNOWN') {
-      ticketKey = getBranchKey(ticket.department);
+  // 1. Primary Authority: The department of the HOD who added the student
+  if (ticketDept && ticketDept !== 'Engineering' && ticketDept !== 'General') {
+    if (ticketDept.toLowerCase() === userDept.toLowerCase()) {
+      return true;
     }
-  } else {
-    ticketKey = getBranchKey(ticket.department, ticket.section);
+    const userKey = getBranchKey(userDept);
+    const ticketDeptKey = getBranchKey(ticketDept);
+    if (userKey !== 'UNKNOWN' && userKey === ticketDeptKey) {
+      return true;
+    }
+    return false;
   }
 
-  return userKey === ticketKey;
+  // 2. Fallback only if ticket has NO department or generic department
+  const userKey = getBranchKey(userDept);
+  const fallbackKey = getBranchKey('', ticket.section, ticket.rollNumber);
+  if (userKey !== 'UNKNOWN' && userKey === fallbackKey) {
+    return true;
+  }
+
+  return false;
 };
 
 // HOD rejects outpass
@@ -2112,7 +2122,7 @@ export const submitCertificateRequest = async ({
     rollNumber: rollNumber.trim().toUpperCase(),
     studentName: studentName.trim(),
     section: section || '',
-    department: resolveStudentDepartment({ department, section, rollNumber }),
+    department: (department && department !== 'Engineering' && department !== 'General') ? department : resolveStudentDepartment({ department, section, rollNumber }),
     studentMobile: studentMobile || '',
     parentMobile: parentMobile || '',
     certificateName: certificateName.trim(),
