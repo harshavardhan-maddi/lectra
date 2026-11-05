@@ -463,6 +463,17 @@ export const saveOutpasses = async (tickets) => {
   // Dispatch custom event for same-tab updates (filtered for normal consumers)
   window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: toSave.filter(t => t.applicantType !== 'SYSTEM_CONFIG') }));
 
+  // Only send changed/active outpasses over the network.
+  // Do NOT send the massive SYS_CONFIG_CERTIFICATES or SYS_FACULTY_MENTOR_REGISTRY
+  // unless they were explicitly passed in tickets to be saved.
+  const networkTickets = toSave.filter(t => {
+    if (!t) return false;
+    if (t.applicantType === 'SYSTEM_CONFIG') {
+      return Array.isArray(tickets) && tickets.some(item => item && item.id === t.id);
+    }
+    return true;
+  });
+
   // Send to backend database so other devices (Absent Controller, HOD, Watchman, Mentors) receive it instantly
   try {
     const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
@@ -472,7 +483,7 @@ export const saveOutpasses = async (tickets) => {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
       },
-      body: JSON.stringify({ tickets: toSave })
+      body: JSON.stringify({ tickets: networkTickets })
     });
     if (res.ok) {
       const data = await res.json();
