@@ -359,7 +359,24 @@ router.post('/outpass/tickets', async (req, res) => {
     tickets.forEach(t => {
       if (t && t.id) {
         const prev = ticketMap.get(t.id) || {};
-        ticketMap.set(t.id, { ...prev, ...t });
+        if (t.id === 'SYS_CONFIG_CERTIFICATES' && Array.isArray(t.requests)) {
+          const existingCerts = Array.isArray(prev.requests) ? prev.requests : [];
+          const certMap = new Map();
+          existingCerts.forEach(c => { if (c && c.id) certMap.set(c.id, c); });
+          t.requests.forEach(c => {
+            if (c && c.id) {
+              const prevCert = certMap.get(c.id) || {};
+              certMap.set(c.id, { ...prevCert, ...c });
+            }
+          });
+          ticketMap.set(t.id, {
+            ...prev,
+            ...t,
+            requests: Array.from(certMap.values())
+          });
+        } else {
+          ticketMap.set(t.id, { ...prev, ...t });
+        }
       }
     });
 

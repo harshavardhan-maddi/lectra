@@ -530,6 +530,26 @@ export const syncOutpassesFromBackend = async () => {
           } catch (e) {}
         }
 
+        // Sync certificate requests across all campus devices
+        const sysCerts = data.tickets.find(t => t && t.id === 'SYS_CONFIG_CERTIFICATES');
+        if (sysCerts && Array.isArray(sysCerts.requests)) {
+          try {
+            const cached = localStorage.getItem('lectra_certificate_requests');
+            const localCerts = cached ? JSON.parse(cached) : [];
+            const certMap = new Map();
+            localCerts.forEach(c => { if (c && c.id) certMap.set(c.id, c); });
+            sysCerts.requests.forEach(c => {
+              if (c && c.id) {
+                const prev = certMap.get(c.id) || {};
+                certMap.set(c.id, { ...prev, ...c });
+              }
+            });
+            const merged = Array.from(certMap.values());
+            localStorage.setItem('lectra_certificate_requests', JSON.stringify(merged));
+            window.dispatchEvent(new CustomEvent('lectra_certificates_updated', { detail: merged }));
+          } catch (e) {}
+        }
+
         window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG') }));
         return data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG');
       }
@@ -2079,16 +2099,26 @@ export const getAllCertificateRequests = () => {
     const cached = localStorage.getItem(CERT_STORAGE_KEY);
     let localCerts = cached ? JSON.parse(cached) : [];
     
-    // Also check if synced from central tickets
-    const tickets = getAllOutpasses();
-    const syncTicket = tickets.find(t => t.id === SYS_CONFIG_CERT_ID);
-    if (syncTicket && syncTicket.requests && Array.isArray(syncTicket.requests)) {
-      // Merge: backend data takes precedence, merge by ID keeping newest version
-      const backendCerts = syncTicket.requests;
-      const mergedMap = new Map();
-      localCerts.forEach(c => mergedMap.set(c.id, c));
-      backendCerts.forEach(c => mergedMap.set(c.id, c)); // backend overwrites local
-      localCerts = Array.from(mergedMap.values());
+    // Read raw tickets storage directly (getAllOutpasses filters out SYSTEM_CONFIG)
+    const rawOutpasses = localStorage.getItem(STORAGE_KEY);
+    if (rawOutpasses) {
+      try {
+        const allTickets = JSON.parse(rawOutpasses);
+        if (Array.isArray(allTickets)) {
+          const syncTicket = allTickets.find(t => t && t.id === SYS_CONFIG_CERT_ID);
+          if (syncTicket && Array.isArray(syncTicket.requests)) {
+            const certMap = new Map();
+            localCerts.forEach(c => { if (c && c.id) certMap.set(c.id, c); });
+            syncTicket.requests.forEach(c => {
+              if (c && c.id) {
+                const prev = certMap.get(c.id) || {};
+                certMap.set(c.id, { ...prev, ...c });
+              }
+            });
+            localCerts = Array.from(certMap.values());
+          }
+        }
+      } catch (e) {}
     }
 
     const { filtered, changed } = purgeExpiredUnprocessedRequests(localCerts);
@@ -2137,8 +2167,10 @@ export const submitCertificateRequest = async ({
   studentMobile = '',
   parentMobile = '',
   certificateName,
-  reason = ''
+  reason = '',
+  purpose = ''
 }) => {
+  try { await syncOutpassesFromBackend(); } catch (e) {}
   if (isAfter410PM()) {
     throw new Error('Applications closed: Students cannot submit certificate requests after 4:10 PM.');
   }
@@ -2165,7 +2197,8 @@ export const submitCertificateRequest = async ({
     studentMobile: studentMobile || '',
     parentMobile: parentMobile || '',
     certificateName: certificateName.trim(),
-    reason: (reason || '').trim(),
+    reason: (reason || purpose || '').trim(),
+    purpose: (purpose || reason || '').trim(),
     status: 'PENDING_HOD', // Every certificate request comes to HOD first!
     isHodAcceptable: isDirectlyHod,
     appliedAt: now.toISOString(),

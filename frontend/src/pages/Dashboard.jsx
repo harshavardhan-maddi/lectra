@@ -417,12 +417,19 @@ const Dashboard = ({ initialTab }) => {
     const unsub = subscribeToOutpasses(setOutpassTickets);
     setCertificateRequests(getAllCertificateRequests());
     const unsubCerts = subscribeToCertificates(setCertificateRequests);
-    // Sync from backend for cross-device certificate visibility
-    syncOutpassesFromBackend().then(() => {
-      setOutpassTickets(getAllOutpasses());
-      setCertificateRequests(getAllCertificateRequests());
-    }).catch(() => {});
+
+    const refreshBackend = () => {
+      syncOutpassesFromBackend().then(() => {
+        setOutpassTickets(getAllOutpasses());
+        setCertificateRequests(getAllCertificateRequests());
+      }).catch(() => {});
+    };
+
+    refreshBackend();
+    const pollTimer = setInterval(refreshBackend, 5000);
+
     return () => {
+      clearInterval(pollTimer);
       unsub();
       unsubCerts();
     };
