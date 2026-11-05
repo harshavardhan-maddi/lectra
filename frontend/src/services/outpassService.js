@@ -488,6 +488,15 @@ export const saveOutpasses = async (tickets) => {
           } catch (e) {}
         }
 
+        // Sync certificate requests from backend for cross-device visibility
+        const sysCerts = data.tickets.find(t => t && t.id === 'SYS_CONFIG_CERTIFICATES' && t.applicantType === 'SYSTEM_CONFIG');
+        if (sysCerts && sysCerts.requests && Array.isArray(sysCerts.requests)) {
+          try {
+            localStorage.setItem('lectra_certificate_requests', JSON.stringify(sysCerts.requests));
+            window.dispatchEvent(new CustomEvent('lectra_certificates_updated', { detail: sysCerts.requests }));
+          } catch (e) {}
+        }
+
         window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG') }));
         return data.tickets.filter(t => t.applicantType !== 'SYSTEM_CONFIG');
       }
@@ -2074,9 +2083,12 @@ export const getAllCertificateRequests = () => {
     const tickets = getAllOutpasses();
     const syncTicket = tickets.find(t => t.id === SYS_CONFIG_CERT_ID);
     if (syncTicket && syncTicket.requests && Array.isArray(syncTicket.requests)) {
-      if (syncTicket.requests.length >= localCerts.length) {
-        localCerts = syncTicket.requests;
-      }
+      // Merge: backend data takes precedence, merge by ID keeping newest version
+      const backendCerts = syncTicket.requests;
+      const mergedMap = new Map();
+      localCerts.forEach(c => mergedMap.set(c.id, c));
+      backendCerts.forEach(c => mergedMap.set(c.id, c)); // backend overwrites local
+      localCerts = Array.from(mergedMap.values());
     }
 
     const { filtered, changed } = purgeExpiredUnprocessedRequests(localCerts);

@@ -417,6 +417,11 @@ const Dashboard = ({ initialTab }) => {
     const unsub = subscribeToOutpasses(setOutpassTickets);
     setCertificateRequests(getAllCertificateRequests());
     const unsubCerts = subscribeToCertificates(setCertificateRequests);
+    // Sync from backend for cross-device certificate visibility
+    syncOutpassesFromBackend().then(() => {
+      setOutpassTickets(getAllOutpasses());
+      setCertificateRequests(getAllCertificateRequests());
+    }).catch(() => {});
     return () => {
       unsub();
       unsubCerts();

@@ -6,7 +6,8 @@ import {
   updateCertificateStatus, 
   deleteCertificateRequest,
   addCertificateTicketByOffice,
-  subscribeToCertificates 
+  subscribeToCertificates,
+  syncOutpassesFromBackend 
 } from '../services/outpassService';
 import { 
   FileText, 
@@ -155,6 +156,10 @@ const OfficeDashboard = () => {
   useEffect(() => {
     loadRequests();
     loadOfficeStaff();
+    // Sync from backend for cross-device certificate visibility
+    syncOutpassesFromBackend().then(() => {
+      loadRequests();
+    }).catch(() => {});
     const unsub = subscribeToCertificates(setRequests);
     return () => unsub();
   }, [token]);
