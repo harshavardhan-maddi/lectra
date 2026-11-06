@@ -20,15 +20,24 @@ const authMiddleware = (req, res, next) => {
   )) {
     let role = 'FACULTY';
     let userId = token.replace(/^faculty-token-/, '');
+    let department = 'Department of CSE(emerging Technologies)';
     if (token.includes('watchman')) { role = 'WATCHMAN'; userId = 'watchman'; }
-    else if (token.includes('ao')) { role = 'AO'; userId = 'ao'; }
-    else if (token.includes('office')) { role = 'OFFICE'; userId = 'office'; }
+    else if (token.includes('ao')) { 
+      role = 'AO'; 
+      userId = 'ao'; 
+      department = 'Administrative Office';
+    }
+    else if (token.includes('office')) { 
+      role = 'OFFICE'; 
+      userId = 'office'; 
+      department = 'Administrative Office';
+    }
     req.user = {
       id: 70001,
       userId,
       role,
       name: userId,
-      department: 'Department of CSE(emerging Technologies)'
+      department
     };
     return next();
   }

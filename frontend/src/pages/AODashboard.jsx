@@ -12,7 +12,8 @@ import {
   getAllCertificateRequests,
   subscribeToCertificates,
   aoAcceptCertificate,
-  aoRejectCertificate
+  aoRejectCertificate,
+  syncOutpassesFromBackend
 } from '../services/outpassService';
 import { 
   ShieldCheck, 
@@ -146,10 +147,54 @@ const AODashboard = () => {
     setTickets(getAllOutpasses());
   };
 
+  const saveOfficeMetadataToBackend = async (metadata) => {
+    if (!token || !Array.isArray(metadata)) return;
+    try {
+      await fetch('/api/faculty/office-metadata', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ metadata })
+      });
+    } catch (e) {
+      console.warn('Backend office metadata save note:', e);
+    }
+  };
+
   const loadOfficeStaff = async () => {
     setStaffLoading(true);
     try {
-      // 1. Fetch from backend faculty table
+      // 1. Fetch metadata from backend database for multi-device sync
+      let metadataList = [];
+      if (token) {
+        try {
+          const metaRes = await fetch('/api/faculty/office-metadata', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (metaRes.ok) {
+            const remoteMeta = await metaRes.json();
+            if (Array.isArray(remoteMeta) && remoteMeta.length > 0) {
+              metadataList = remoteMeta;
+              localStorage.setItem('lectra_faculty_metadata', JSON.stringify(remoteMeta));
+            }
+          }
+        } catch (mErr) {
+          console.warn('Backend office metadata fetch error:', mErr);
+        }
+      }
+
+      // Fallback to local storage if remote metadata is not yet populated
+      if (metadataList.length === 0) {
+        try {
+          metadataList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+        } catch (e) {
+          metadataList = [];
+        }
+      }
+
+      // 2. Fetch from backend faculty table
       let backendList = [];
       if (token) {
         try {
@@ -162,14 +207,6 @@ const AODashboard = () => {
         } catch (e) {
           console.warn('Backend faculty fetch error:', e);
         }
-      }
-
-      // 2. Read metadata stored in localStorage
-      let metadataList = [];
-      try {
-        metadataList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
-      } catch (e) {
-        metadataList = [];
       }
 
       // 3. Filter for Office Staff: facultyType === 'OFFICE' or department === 'Administrative Office'
@@ -236,9 +273,25 @@ const AODashboard = () => {
     loadTickets();
     loadOfficeStaff();
     setCertificateRequests(getAllCertificateRequests());
+
+    // Live cross-device sync on mount and auto-poll every 5 seconds
+    const refreshData = () => {
+      syncOutpassesFromBackend().then(() => {
+        setTickets(getAllOutpasses());
+        setCertificateRequests(getAllCertificateRequests());
+      }).catch(() => {});
+    };
+
+    refreshData();
+    const pollTimer = setInterval(refreshData, 5000);
+
     const unsub = subscribeToOutpasses(setTickets);
     const unsubCerts = subscribeToCertificates(setCertificateRequests);
-    return () => { unsub(); unsubCerts(); };
+    return () => { 
+      clearInterval(pollTimer);
+      unsub(); 
+      unsubCerts(); 
+    };
   }, [token]);
 
   // Filter tickets for HOD and Office Staff applicants (routes to AO Login)
@@ -434,6 +487,7 @@ const AODashboard = () => {
         (item.name && item.name.toLowerCase() !== cleanName.toLowerCase())
       )];
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(updated));
+      await saveOfficeMetadataToBackend(updated);
 
       setAddStaffSuccess(`Office Staff "${cleanName}" added successfully! Login ID: ${cleanEmpId} | Password: nrtec@nec`);
       toast?.success(`Office Staff "${cleanName}" (${cleanEmpId}) created successfully!`);
@@ -694,6 +748,7 @@ const AODashboard = () => {
         )
       ];
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(merged));
+      await saveOfficeMetadataToBackend(merged);
 
       setBulkSuccess(`Successfully imported ${itemsToProcess.length} office staff members! All login accounts created with Login ID = Emp ID and default password nrtec@nec.`);
       toast?.success(`Successfully imported ${itemsToProcess.length} office staff members!`);
@@ -735,6 +790,7 @@ const AODashboard = () => {
         (item.name && item.name.toLowerCase() !== (staff.name || '').toLowerCase())
       );
       localStorage.setItem('lectra_faculty_metadata', JSON.stringify(updated));
+      await saveOfficeMetadataToBackend(updated);
 
       setActionSuccess(`Office staff "${staff.name}" removed successfully.`);
       toast?.info(`Office staff "${staff.name}" removed.`);

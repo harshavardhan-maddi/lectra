@@ -8,8 +8,8 @@ const getAllFaculty = async (req, res) => {
       if (req.query.department && req.query.department !== 'ALL') {
         where.department = req.query.department;
       }
-    } else if (req.user && req.user.role === 'AO') {
-      where.department = req.user.department || 'Administrative Office';
+    } else if (req.user && (req.user.role === 'AO' || req.user.role === 'OFFICE')) {
+      where.department = 'Administrative Office';
     } else if (req.user && req.user.role !== 'WATCHMAN') {
       where.department = req.user.department || 'Department of CSE(emerging Technologies)';
     }
@@ -122,7 +122,48 @@ const deleteFaculty = async (req, res) => {
   }
 };
 
+
+// Get office staff metadata from system setting
+const getOfficeMetadata = async (req, res) => {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'lectra_faculty_metadata' }
+    });
+    let list = [];
+    if (setting && setting.value) {
+      try { list = JSON.parse(setting.value); } catch (e) { list = []; }
+    }
+    res.json(list);
+  } catch (error) {
+    console.error('Error fetching office metadata:', error);
+    res.json([]);
+  }
+};
+
+// Save office staff metadata to system setting
+const saveOfficeMetadata = async (req, res) => {
+  try {
+    const { metadata } = req.body;
+    if (!Array.isArray(metadata)) {
+      return res.status(400).json({ success: false, message: 'Metadata array required' });
+    }
+
+    await prisma.systemSetting.upsert({
+      where: { key: 'lectra_faculty_metadata' },
+      update: { value: JSON.stringify(metadata) },
+      create: { key: 'lectra_faculty_metadata', value: JSON.stringify(metadata) }
+    });
+
+    res.json({ success: true, count: metadata.length });
+  } catch (error) {
+    console.error('Error saving office metadata:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
+  getOfficeMetadata,
+  saveOfficeMetadata,
   getAllFaculty,
   upsertFaculty,
   bulkUpsertFaculty,

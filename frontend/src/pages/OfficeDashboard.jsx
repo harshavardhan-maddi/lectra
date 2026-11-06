@@ -76,6 +76,33 @@ const OfficeDashboard = () => {
   const loadOfficeStaff = async () => {
     setStaffLoading(true);
     try {
+      // 1. Fetch metadata from backend database for multi-device sync
+      let metadataList = [];
+      if (token) {
+        try {
+          const metaRes = await fetch('/api/faculty/office-metadata', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (metaRes.ok) {
+            const remoteMeta = await metaRes.json();
+            if (Array.isArray(remoteMeta) && remoteMeta.length > 0) {
+              metadataList = remoteMeta;
+              localStorage.setItem('lectra_faculty_metadata', JSON.stringify(remoteMeta));
+            }
+          }
+        } catch (mErr) {
+          console.warn('Backend office metadata fetch error in Office Dashboard:', mErr);
+        }
+      }
+
+      if (metadataList.length === 0) {
+        try {
+          metadataList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
+        } catch (e) {
+          metadataList = [];
+        }
+      }
+
       let backendList = [];
       if (token) {
         try {
@@ -88,13 +115,6 @@ const OfficeDashboard = () => {
         } catch (e) {
           console.warn('Backend faculty fetch error in Office Dashboard:', e);
         }
-      }
-
-      let metadataList = [];
-      try {
-        metadataList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
-      } catch (e) {
-        metadataList = [];
       }
 
       const officeMetadata = metadataList.filter(m => 
