@@ -490,14 +490,15 @@ const Dashboard = ({ initialTab }) => {
     }
   };
 
-  const handleApproveFacultyLeaveHOD = (ticket, customTimeToLeave = null) => {
+  const handleApproveFacultyLeaveHOD = async (ticket, customTimeToLeave = null) => {
     try {
       setOutpassActionError('');
-      hodApproveFacultyLeave(ticket.id, {
+      await hodApproveFacultyLeave(ticket.id, {
         hodName: user?.name || 'Head of Department (HOD)',
         remarks: 'Accepted and forwarded to watchman login.',
         timeToLeave: customTimeToLeave || ticket.leaveTime
       });
+      setOutpassTickets(getAllOutpasses());
       setOutpassActionSuccess(`Permission accepted! ${ticket.facultyName || ticket.studentName}'s ${ticket.type === 'FACULTY_EARLY_OUT' ? 'early out pass' : 'leave application'} has been forwarded to the Watchman role login.`);
       setTimeout(() => setOutpassActionSuccess(''), 4500);
     } catch (err) {

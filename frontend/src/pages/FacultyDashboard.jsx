@@ -2372,7 +2372,7 @@ const FacultyDashboard = () => {
                       <span className="font-black">4:00 PM Permission</span>
                     </div>
                     <span className={`text-[10px] ${leaveType === 'FACULTY_4PM' ? 'text-white/80' : 'text-slate-400'}`}>
-                      Departure at 4 PM (Closed)
+                      Departure at 4 PM (Apply before 6 PM)
                     </span>
                   </button>
 
@@ -2463,7 +2463,7 @@ const FacultyDashboard = () => {
                   </div>
                 ) : leaveType === 'FACULTY_4PM' ? (
                   <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-800 dark:text-blue-300 font-medium leading-relaxed">
-                    <strong>4:00 PM Permission:</strong> Scheduled departure is 4:00 PM itself. No in-time entry or return is required. The permission closes automatically when Security sends you out.
+                    <strong>4:00 PM Permission:</strong> Can be applied anytime before 6:00 PM everyday. Scheduled departure is 4:00 PM itself. HOD can forward to watchman at any time. No in-time return is required; closes when Security sends you out.
                   </div>
                 ) : (
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">

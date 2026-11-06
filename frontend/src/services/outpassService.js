@@ -1329,12 +1329,23 @@ export const applyFacultyLeave = async ({
   if (type === 'FACULTY_4PM') {
     // 4 PM permission is fixed to 4:00 PM itself
     finalLeaveTime = '04:00 PM';
+    // Faculty can apply the 4 PM permission anytime before 6:00 PM everyday
+    const currentParts = getKolkataDateParts();
+    const targetKey = normalizeDateKey(selectedDate);
+    if (!targetKey || targetKey === currentParts.dateKey) {
+      const currentMinutes = currentParts.hour * 60 + currentParts.minute;
+      if (currentMinutes >= 18 * 60) {
+        throw new Error('Applications closed: 4:00 PM permission requests cannot be submitted after 6:00 PM.');
+      }
+    } else if (targetKey < currentParts.dateKey) {
+      throw new Error('Cannot submit permission for a past date.');
+    }
   } else if (type === 'FACULTY_OD') {
     finalLeaveTime = leaveTime && leaveTime.trim() ? leaveTime.trim() : 'On Duty (Full Day)';
   }
 
-  // Prevent selecting past departure time on today's date
-  if (type !== 'FACULTY_OD' && finalLeaveTime && isPastTimeToday(finalLeaveTime, selectedDate)) {
+  // Prevent selecting past departure time on today's date (4PM permission is allowed before 6:00 PM, OD is full-day)
+  if (type !== 'FACULTY_OD' && type !== 'FACULTY_4PM' && finalLeaveTime && isPastTimeToday(finalLeaveTime, selectedDate)) {
     throw new Error(`Cannot submit permission for a past time (${finalLeaveTime}). Please select current or future time.`);
   } else if (type === 'FACULTY_ONE_HOUR') {
     if (!leaveTime || !leaveTime.trim()) {
@@ -1684,7 +1695,7 @@ export const aoRejectHodLeave = (ticketId, { aoName = 'Administrative Officer (A
 };
 
 // HOD accepts Faculty Leave / Early Out & forwards to Watchman role login
-export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department (HOD)', remarks = 'Accepted and forwarded to watchman login.', timeToLeave = null } = {}) => {
+export const hodApproveFacultyLeave = async (ticketId, { hodName = 'Head of Department (HOD)', remarks = 'Accepted and forwarded to watchman login.', timeToLeave = null } = {}) => {
   const tickets = getAllOutpasses();
   const ticket = tickets.find(t => t.id === ticketId);
   if (!ticket) throw new Error('Leave application not found');
@@ -1709,7 +1720,7 @@ export const hodApproveFacultyLeave = (ticketId, { hodName = 'Head of Department
     timeToLeave: ticket.leaveTime
   };
 
-  saveOutpasses(tickets);
+  await saveOutpasses(tickets);
   return ticket;
 };
 
