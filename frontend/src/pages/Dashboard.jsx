@@ -2744,7 +2744,7 @@ const Dashboard = ({ initialTab }) => {
                               </span>
                               {cert.section && (cert.section.includes('Passed Out') || cert.section.includes('Alumni')) ? (
                                 <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-black text-[10px] border border-amber-500/20">
-                                  🎓 Passed Out / Alumni
+                                  🎓 {cert.section}
                                 </span>
                               ) : (
                                 <span className="text-xs text-customText-muted font-medium">

@@ -46,66 +46,50 @@ import {
   isHodDirectlyAcceptableCertificate
 } from '../services/outpassService';
 
-export const COLLEGE_DEPARTMENTS_HOD = [
+export const COLLEGE_DEPARTMENTS = [
   {
     department: 'Department of CSE(emerging Technologies)',
-    shortName: 'CSE (Emerging Tech - AIML, DS, CS, IOT)',
-    hodName: 'Dr. Rajesh Sharma (HOD)'
+    label: 'CSE(Emerging Technologies)'
   },
   {
     department: 'Department of Computer Science and Engineering',
-    shortName: 'CSE (Computer Science & Engineering)',
-    hodName: 'Dr. S. V. N. Srinivasu (HOD)'
+    label: 'Computer Science and Engineering'
   },
   {
     department: 'Department of Information Technology',
-    shortName: 'IT (Information Technology)',
-    hodName: 'Dr. B. Jhansi Rani (HOD)'
+    label: 'Information Technology'
   },
   {
     department: 'Department of Electronics and Communication Engineering',
-    shortName: 'ECE (Electronics & Communication Engineering)',
-    hodName: 'Dr. V. V. K. D. V. Prasad (HOD)'
+    label: 'Electronics and Communication Engineering'
   },
   {
     department: 'Department of Electrical and Electronics Engineering',
-    shortName: 'EEE (Electrical & Electronics Engineering)',
-    hodName: 'Dr. P. Lakshmanan (HOD)'
+    label: 'Electrical and Electronics Engineering'
   },
   {
     department: 'Department of Mechanical Engineering',
-    shortName: 'MECH (Mechanical Engineering)',
-    hodName: 'Dr. B. Venkata Siva (HOD)'
+    label: 'Mechanical Engineering'
   },
   {
     department: 'Department of Civil Engineering',
-    shortName: 'CIVIL (Civil Engineering)',
-    hodName: 'Dr. K. P. Lakshman Rao (HOD)'
+    label: 'Civil Engineering'
   },
   {
     department: 'Department of Basic Sciences and Humanities',
-    shortName: 'BS&H (Basic Sciences & Humanities / 1st Year)',
-    hodName: 'Dr. K. Ephraim Babu (HOD)'
+    label: 'Basic Sciences and Humanities'
   },
   {
     department: 'Department of MCA',
-    shortName: 'MCA (Master of Computer Applications)',
-    hodName: 'Dr. M. S. R. Krishna (HOD)'
+    label: 'MCA'
   },
   {
     department: 'Department of MBA',
-    shortName: 'MBA (Master of Business Administration)',
-    hodName: 'Dr. S. Sibaram Patro (HOD)'
+    label: 'MBA'
   }
 ];
 
-export const getDepartmentHODName = (deptName) => {
-  if (!deptName) return '';
-  const match = COLLEGE_DEPARTMENTS_HOD.find(
-    (d) => d.department.toLowerCase() === deptName.trim().toLowerCase()
-  );
-  return match ? match.hodName : 'Head of Department (HOD)';
-};
+export const CSE_EMERGING_BRANCHES = ['AI', 'AIML', 'CS', 'DS'];
 
 const Login = () => {
   const { login, authenticateWithBiometrics } = useAuth();
@@ -179,6 +163,7 @@ const Login = () => {
   const [certNotFoundMode, setCertNotFoundMode] = useState(false);
   const [certNotFoundStep, setCertNotFoundStep] = useState('SELECT_DEPT'); // 'SELECT_DEPT' | 'ENTER_DETAILS'
   const [certSelectedDept, setCertSelectedDept] = useState('');
+  const [certManualBranch, setCertManualBranch] = useState('');
   const [certManualName, setCertManualName] = useState('');
   const [certManualRoll, setCertManualRoll] = useState('');
   const [certManualParentPhone, setCertManualParentPhone] = useState('');
@@ -476,6 +461,7 @@ const Login = () => {
     setCertNotFoundStep('SELECT_DEPT');
     setCertManualRoll(certRollInput.trim().toUpperCase());
     setCertSelectedDept('');
+    setCertManualBranch('');
     setCertManualName('');
     setCertManualParentPhone('');
     setCertManualStudentPhone('');
@@ -492,6 +478,14 @@ const Login = () => {
     }
     if (!certSelectedDept) {
       setCertManualError('Please select your department.');
+      return;
+    }
+    if (!certManualBranch) {
+      setCertManualError(
+        certSelectedDept === 'Department of CSE(emerging Technologies)'
+          ? 'Please select your branch (AI, AIML, CS, or DS).'
+          : 'Please enter your branch.'
+      );
       return;
     }
     if (!certManualName.trim()) {
@@ -528,10 +522,11 @@ const Login = () => {
 
     setIsSubmittingCert(true);
     try {
+      const branchLabel = certManualBranch ? `Passed Out / Alumni (${certManualBranch})` : 'Passed Out / Alumni';
       const newCert = await submitCertificateRequest({
         rollNumber: cleanRoll,
         studentName: certManualName.trim(),
-        section: 'Passed Out / Alumni',
+        section: branchLabel,
         department: certSelectedDept,
         certificateName: certificateName.trim(),
         purpose: certificatePurpose.trim(),
@@ -599,6 +594,7 @@ const Login = () => {
     setCertNotFoundMode(false);
     setCertNotFoundStep('SELECT_DEPT');
     setCertSelectedDept('');
+    setCertManualBranch('');
     setCertManualName('');
     setCertManualRoll('');
     setCertManualParentPhone('');
@@ -1719,52 +1715,26 @@ const Login = () => {
                         <select
                           value={certSelectedDept}
                           onChange={(e) => {
-                            setCertSelectedDept(e.target.value);
+                            const val = e.target.value;
+                            setCertSelectedDept(val);
+                            if (val === 'Department of CSE(emerging Technologies)') {
+                              setCertManualBranch('AIML');
+                            } else {
+                              setCertManualBranch('');
+                            }
                             if (certManualError) setCertManualError('');
                           }}
                           className="glass-input text-xs sm:text-sm font-semibold py-3 w-full"
                           autoFocus
                         >
                           <option value="">-- Choose Your Department --</option>
-                          {COLLEGE_DEPARTMENTS_HOD.map((dept) => (
+                          {COLLEGE_DEPARTMENTS.map((dept) => (
                             <option key={dept.department} value={dept.department}>
-                              {dept.shortName}
+                              {dept.label}
                             </option>
                           ))}
                         </select>
                       </div>
-
-                      {/* HOD Confirmation Card (shown once department is selected) */}
-                      {certSelectedDept && (
-                        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 space-y-3 animate-fade-in">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                              Respective Head of Department (HOD)
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 text-[10px] font-black">
-                              Direct Route
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shrink-0">
-                              👨‍🏫
-                            </div>
-                            <div>
-                              <h4 className="font-black text-sm text-customText dark:text-customText-dark">
-                                {getDepartmentHODName(certSelectedDept)}
-                              </h4>
-                              <p className="text-xs text-customText-muted font-medium">
-                                {certSelectedDept}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="pt-1 text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed bg-blue-500/5 p-2.5 rounded-xl border border-blue-500/10">
-                            Please confirm: Your certificate application will be forwarded directly to <strong>{getDepartmentHODName(certSelectedDept)}</strong> for clearance.
-                          </div>
-                        </div>
-                      )}
 
                       {/* Navigation Buttons */}
                       <div className="flex gap-3 pt-2">
@@ -1792,27 +1762,24 @@ const Login = () => {
                           }}
                           className="btn-primary flex-1 py-3 text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-lg shadow-primary/25 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <span>Confirm HOD & Proceed</span>
+                          <span>Proceed</span>
                           <ArrowRight size={17} />
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* PASSED OUT / NOT FOUND SUB-FLOW: STEP 2 - Enter Name, Roll, Parent Phone, Cert Name & Purpose */}
+                  {/* PASSED OUT / NOT FOUND SUB-FLOW: STEP 2 - Enter Branch, Name, Roll, Parent Phone, Cert Name & Purpose */}
                   {certStep === 1 && certNotFoundMode && certNotFoundStep === 'ENTER_DETAILS' && (
                     <form onSubmit={handleSubmitPassedOutCertificate} className="space-y-4 animate-fade-in">
-                      {/* Confirmed Route Banner */}
+                      {/* Department Banner */}
                       <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
                         <div>
                           <span className="text-[10px] uppercase font-bold text-customText-muted block mb-0.5">
-                            Forwarding To Respective HOD:
+                            Selected Department:
                           </span>
                           <span className="font-black text-customText dark:text-customText-dark">
-                            {getDepartmentHODName(certSelectedDept)}
-                          </span>
-                          <span className="text-[11px] text-customText-muted block">
-                            {certSelectedDept} • <span className="text-amber-600 dark:text-amber-400 font-bold">Passed Out / Alumni</span>
+                            {COLLEGE_DEPARTMENTS.find(d => d.department === certSelectedDept)?.label || certSelectedDept}
                           </span>
                         </div>
                         <button
@@ -1820,7 +1787,7 @@ const Login = () => {
                           onClick={() => setCertNotFoundStep('SELECT_DEPT')}
                           className="px-2.5 py-1 rounded-lg bg-slate-200/60 dark:bg-slate-800 text-[11px] font-bold text-primary hover:underline cursor-pointer shrink-0"
                         >
-                          Change HOD
+                          Change Department
                         </button>
                       </div>
 
@@ -1831,6 +1798,51 @@ const Login = () => {
                           <span>{certManualError}</span>
                         </div>
                       )}
+
+                      {/* Branch Selection */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                          Branch *
+                        </label>
+                        {certSelectedDept === 'Department of CSE(emerging Technologies)' ? (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-4 gap-2">
+                              {CSE_EMERGING_BRANCHES.map((b) => (
+                                <button
+                                  key={b}
+                                  type="button"
+                                  onClick={() => {
+                                    setCertManualBranch(b);
+                                    if (certManualError) setCertManualError('');
+                                  }}
+                                  className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
+                                    certManualBranch === b
+                                      ? 'bg-primary text-white border-primary shadow-sm shadow-primary/30'
+                                      : 'bg-slate-50 dark:bg-slate-800/60 text-customText hover:bg-primary/10 border-slate-200 dark:border-slate-700'
+                                  }`}
+                                >
+                                  {b}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-[11px] text-customText-muted">
+                              Select your specialization branch: <strong>AI</strong>, <strong>AIML</strong>, <strong>CS</strong>, or <strong>DS</strong>
+                            </p>
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={certManualBranch}
+                            onChange={(e) => {
+                              setCertManualBranch(e.target.value.toUpperCase());
+                              if (certManualError) setCertManualError('');
+                            }}
+                            placeholder="Enter branch (e.g. CSE, ECE, EEE, MECH, CIVIL...)"
+                            className="glass-input text-xs sm:text-sm font-bold uppercase py-2.5 w-full tracking-wider"
+                            required
+                          />
+                        )}
+                      </div>
 
                       {/* Student Full Name */}
                       <div>
@@ -1978,11 +1990,11 @@ const Login = () => {
                           disabled={isSubmittingCert}
                         >
                           {isSubmittingCert ? (
-                            <span>Sending Request to HOD...</span>
+                            <span>Forwarding to HOD...</span>
                           ) : (
                             <>
                               <Award size={18} />
-                              <span>Confirm & Send Request to HOD</span>
+                              <span>Forward to HOD</span>
                             </>
                           )}
                         </button>
