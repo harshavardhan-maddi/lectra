@@ -2726,7 +2726,7 @@ const Dashboard = ({ initialTab }) => {
                               {isDirectAccept ? (
                                 <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase border border-emerald-500/30 flex items-center gap-1">
                                   <BadgeCheck size={11} />
-                                  HOD Approved • Forward to Office
+                                  HOD Direct Accept Allowed
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-black text-[10px] uppercase border border-indigo-500/30 flex items-center gap-1">
@@ -2794,15 +2794,6 @@ const Dashboard = ({ initialTab }) => {
                           >
                             <Send size={15} />
                             <span>Forward to AO</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleForwardCertToOfficeHOD(cert)}
-                            className="flex-1 min-w-[140px] py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer active:scale-95"
-                            title="Forward request to Office Login"
-                          >
-                            <Building size={15} />
-                            <span>Forward to Office</span>
                           </button>
                           <button
                             type="button"

@@ -336,10 +336,10 @@ const AODashboard = () => {
       setCertActionError('');
       await aoAcceptCertificate(cert.id, {
         aoName: user?.name || 'Administrative Officer (AO)',
-        remarks: 'Certificate request approved by Administrative Officer (AO).'
+        remarks: 'Certificate request approved by Administrative Officer (AO). Forwarded to Office to issue.'
       });
-      setCertActionSuccess(`Certificate for ${cert.studentName} (${cert.rollNumber}) approved successfully!`);
-      toast?.success(`Certificate for ${cert.studentName} approved!`);
+      setCertActionSuccess(`Certificate for ${cert.studentName} (${cert.rollNumber}) approved and forwarded to Office!`);
+      toast?.success(`Certificate for ${cert.studentName} approved and forwarded to Office!`);
       setCertificateRequests(getAllCertificateRequests());
       setTimeout(() => setCertActionSuccess(''), 4000);
     } catch (err) {
@@ -1204,7 +1204,7 @@ const AODashboard = () => {
                             className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
                           >
                             <CheckCircle2 size={16} />
-                            <span>Approve & Accept Certificate</span>
+                            <span>Approve & Forward to Office</span>
                           </button>
                           <button
                             type="button"

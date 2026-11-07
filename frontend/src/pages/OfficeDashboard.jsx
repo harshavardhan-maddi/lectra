@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import logo from '../neclogo.png';
 import { 
@@ -191,22 +191,33 @@ const OfficeDashboard = () => {
     };
   }, [token]);
 
-  // Certificate categories
-  const forwardedRequests = requests.filter(r => 
-    r.status === 'FORWARDED_TO_OFFICE' || 
-    r.status === 'ACCEPTED' || 
-    r.status === 'PENDING'
-  );
-  const inProgressRequests = requests.filter(r => r.status === 'IN_PROGRESS' || r.status === 'APPROVED');
-  const readyRequests = requests.filter(r => r.status === 'READY');
-  const issuedRequests = requests.filter(r => r.status === 'ISSUED');
+  // Only requests where AO has clicked Accept come to Office login
+  const aoApprovedRequests = useMemo(() => {
+    return requests.filter(r => {
+      if (!r) return false;
+      // AO must have approved/accepted the request:
+      const isAoAccepted = r.status === 'ACCEPTED' || (r.aoAction && r.aoAction.granted);
+      // Or already processed/issued by Office
+      const isOfficeIssued = r.status === 'ISSUED';
+      const isOfficeActive = r.status === 'IN_PROGRESS' || r.status === 'READY';
+      const isOfficeManual = r.status === 'FORWARDED_TO_OFFICE';
+      return isAoAccepted || isOfficeIssued || isOfficeActive || isOfficeManual;
+    });
+  }, [requests]);
 
-  const filteredRequests = requests.filter(r => {
-    if (activeTab === 'FORWARDED' && !(r.status === 'FORWARDED_TO_OFFICE' || r.status === 'ACCEPTED' || r.status === 'PENDING')) return false;
+  // Certificate categories (Only after AO approval)
+  const forwardedRequests = aoApprovedRequests.filter(r => 
+    r.status === 'ACCEPTED' || r.status === 'FORWARDED_TO_OFFICE'
+  );
+  const inProgressRequests = aoApprovedRequests.filter(r => r.status === 'IN_PROGRESS' || r.status === 'APPROVED');
+  const readyRequests = aoApprovedRequests.filter(r => r.status === 'READY');
+  const issuedRequests = aoApprovedRequests.filter(r => r.status === 'ISSUED');
+
+  const filteredRequests = aoApprovedRequests.filter(r => {
+    if (activeTab === 'FORWARDED' && !(r.status === 'ACCEPTED' || r.status === 'FORWARDED_TO_OFFICE')) return false;
     if (activeTab === 'IN_PROGRESS' && (r.status !== 'IN_PROGRESS' && r.status !== 'APPROVED')) return false;
     if (activeTab === 'READY' && r.status !== 'READY') return false;
     if (activeTab === 'ISSUED' && r.status !== 'ISSUED') return false;
-    if (activeTab === 'REJECTED' && r.status !== 'REJECTED') return false;
 
     const q = searchQuery.toLowerCase();
     const roll = (r.rollNumber || '').toLowerCase();
@@ -414,11 +425,11 @@ const OfficeDashboard = () => {
 
         {/* Counter KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mt-6">
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
-              Forwarded by HOD
+          <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20">
+            <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 dark:text-teal-400 block mb-1">
+              AO Approved • Ready to Issue
             </span>
-            <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
               {forwardedRequests.length}
             </span>
           </div>
@@ -443,7 +454,7 @@ const OfficeDashboard = () => {
 
           <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
             <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block mb-1">
-              Provided / Finalized
+              Issued & Closed
             </span>
             <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
               {issuedRequests.length}
@@ -500,12 +511,11 @@ const OfficeDashboard = () => {
           <div className="glass-card p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-full md:w-auto overflow-x-auto">
               {[
-                { id: 'ALL', label: `All Requests (${requests.length})` },
+                { id: 'ALL', label: `All Requests (${aoApprovedRequests.length})` },
                 { id: 'FORWARDED', label: `Ready to Issue (${forwardedRequests.length})` },
                 { id: 'IN_PROGRESS', label: `In Progress (${inProgressRequests.length})` },
                 { id: 'READY', label: `Ready for Counter (${readyRequests.length})` },
-                { id: 'ISSUED', label: `Issued / Closed (${issuedRequests.length})` },
-                { id: 'REJECTED', label: 'Rejected' }
+                { id: 'ISSUED', label: `Issued / Closed (${issuedRequests.length})` }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -541,15 +551,15 @@ const OfficeDashboard = () => {
                   <CheckCircle2 size={32} />
                 </div>
                 <h3 className="text-base font-black text-customText dark:text-customText-dark">
-                  No certificate tickets found
+                  No certificate requests awaiting issue
                 </h3>
                 <p className="text-xs text-customText-muted max-w-md mx-auto">
-                  When HOD forwards certificates, they appear here instantly for finalization. You can also add or delete tickets manually.
+                  When the Administrative Officer (AO) accepts forwarded student certificate requests, they will appear here live across devices ready for Office issuance.
                 </p>
               </div>
             ) : (
               filteredRequests.map(req => {
-                const isForwarded = req.status === 'FORWARDED_TO_OFFICE' || req.status === 'ACCEPTED' || req.status === 'PENDING';
+                const isForwarded = req.status === 'FORWARDED_TO_OFFICE' || req.status === 'ACCEPTED';
                 const isInProgress = req.status === 'IN_PROGRESS' || req.status === 'APPROVED';
                 const isReady = req.status === 'READY';
                 const isIssued = req.status === 'ISSUED';
