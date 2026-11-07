@@ -46,6 +46,67 @@ import {
   isHodDirectlyAcceptableCertificate
 } from '../services/outpassService';
 
+export const COLLEGE_DEPARTMENTS_HOD = [
+  {
+    department: 'Department of CSE(emerging Technologies)',
+    shortName: 'CSE (Emerging Tech - AIML, DS, CS, IOT)',
+    hodName: 'Dr. Rajesh Sharma (HOD)'
+  },
+  {
+    department: 'Department of Computer Science and Engineering',
+    shortName: 'CSE (Computer Science & Engineering)',
+    hodName: 'Dr. S. V. N. Srinivasu (HOD)'
+  },
+  {
+    department: 'Department of Information Technology',
+    shortName: 'IT (Information Technology)',
+    hodName: 'Dr. B. Jhansi Rani (HOD)'
+  },
+  {
+    department: 'Department of Electronics and Communication Engineering',
+    shortName: 'ECE (Electronics & Communication Engineering)',
+    hodName: 'Dr. V. V. K. D. V. Prasad (HOD)'
+  },
+  {
+    department: 'Department of Electrical and Electronics Engineering',
+    shortName: 'EEE (Electrical & Electronics Engineering)',
+    hodName: 'Dr. P. Lakshmanan (HOD)'
+  },
+  {
+    department: 'Department of Mechanical Engineering',
+    shortName: 'MECH (Mechanical Engineering)',
+    hodName: 'Dr. B. Venkata Siva (HOD)'
+  },
+  {
+    department: 'Department of Civil Engineering',
+    shortName: 'CIVIL (Civil Engineering)',
+    hodName: 'Dr. K. P. Lakshman Rao (HOD)'
+  },
+  {
+    department: 'Department of Basic Sciences and Humanities',
+    shortName: 'BS&H (Basic Sciences & Humanities / 1st Year)',
+    hodName: 'Dr. K. Ephraim Babu (HOD)'
+  },
+  {
+    department: 'Department of MCA',
+    shortName: 'MCA (Master of Computer Applications)',
+    hodName: 'Dr. M. S. R. Krishna (HOD)'
+  },
+  {
+    department: 'Department of MBA',
+    shortName: 'MBA (Master of Business Administration)',
+    hodName: 'Dr. S. Sibaram Patro (HOD)'
+  }
+];
+
+export const getDepartmentHODName = (deptName) => {
+  if (!deptName) return '';
+  const match = COLLEGE_DEPARTMENTS_HOD.find(
+    (d) => d.department.toLowerCase() === deptName.trim().toLowerCase()
+  );
+  return match ? match.hodName : 'Head of Department (HOD)';
+};
+
 const Login = () => {
   const { login, authenticateWithBiometrics } = useAuth();
   const navigate = useNavigate();
@@ -113,6 +174,16 @@ const Login = () => {
   const [isSubmittingCert, setIsSubmittingCert] = useState(false);
   const [submittedCert, setSubmittedCert] = useState(null);
   const [statusCertificates, setStatusCertificates] = useState([]);
+
+  // Passed-out / Not Found student states
+  const [certNotFoundMode, setCertNotFoundMode] = useState(false);
+  const [certNotFoundStep, setCertNotFoundStep] = useState('SELECT_DEPT'); // 'SELECT_DEPT' | 'ENTER_DETAILS'
+  const [certSelectedDept, setCertSelectedDept] = useState('');
+  const [certManualName, setCertManualName] = useState('');
+  const [certManualRoll, setCertManualRoll] = useState('');
+  const [certManualParentPhone, setCertManualParentPhone] = useState('');
+  const [certManualStudentPhone, setCertManualStudentPhone] = useState('');
+  const [certManualError, setCertManualError] = useState('');
 
   // Student Live Application Status & History Viewer States
   const [statusRollInput, setStatusRollInput] = useState('');
@@ -368,6 +439,7 @@ const Login = () => {
   const handleVerifyCertStudent = async (e) => {
     e.preventDefault();
     setCertVerifyError('');
+    setCertManualError('');
     const clean = certRollInput.trim().toUpperCase();
     if (!clean) {
       setCertVerifyError('Please enter your College Roll Number.');
@@ -377,15 +449,102 @@ const Login = () => {
     try {
       const result = await lookupStudentByRollAndName(clean);
       if (!result.success) {
-        setCertVerifyError(result.error);
+        // Roll number not found in active student registry (passed out or unregistered)
+        // Transition directly to the "You are not found or you are passed out" flow
+        setCertNotFoundMode(true);
+        setCertNotFoundStep('SELECT_DEPT');
+        setCertManualRoll(clean);
+        setCertSelectedDept('');
+        setCertManualName('');
+        setCertManualParentPhone('');
+        setCertManualStudentPhone('');
+        setCertManualError('');
         return;
       }
       setCertMatchedStudent(result.student);
+      setCertNotFoundMode(false);
       setCertStep(2);
     } catch (err) {
       setCertVerifyError(err.message || 'Error verifying student with registry.');
     } finally {
       setIsVerifyingCert(false);
+    }
+  };
+
+  const handleOpenPassedOutFlow = () => {
+    setCertNotFoundMode(true);
+    setCertNotFoundStep('SELECT_DEPT');
+    setCertManualRoll(certRollInput.trim().toUpperCase());
+    setCertSelectedDept('');
+    setCertManualName('');
+    setCertManualParentPhone('');
+    setCertManualStudentPhone('');
+    setCertManualError('');
+    setCertVerifyError('');
+  };
+
+  const handleSubmitPassedOutCertificate = async (e) => {
+    e.preventDefault();
+    setCertManualError('');
+    if (isAfter410PM()) {
+      setCertManualError('Applications are closed for today. Certificate requests cannot be submitted after 4:10 PM.');
+      return;
+    }
+    if (!certSelectedDept) {
+      setCertManualError('Please select your department.');
+      return;
+    }
+    if (!certManualName.trim()) {
+      setCertManualError('Please enter your full name.');
+      return;
+    }
+    if (!certManualRoll.trim()) {
+      setCertManualError('Please enter your roll number.');
+      return;
+    }
+    const cleanRoll = certManualRoll.trim().toUpperCase();
+    if (!certManualParentPhone.trim()) {
+      setCertManualError('Please enter your parent mobile number.');
+      return;
+    }
+    const cleanParentPhone = certManualParentPhone.trim().replace(/\D/g, '');
+    if (cleanParentPhone.length < 10) {
+      setCertManualError('Please enter a valid 10-digit parent mobile number.');
+      return;
+    }
+    if (!certificateName.trim()) {
+      setCertManualError('Please specify the Certificate Name.');
+      return;
+    }
+    const certLower = certificateName.trim().toLowerCase();
+    if (certLower.includes('transfer') || certLower === 'tc') {
+      setCertManualError('Transfer Certificate (TC) can only be applied offline at the Administrative Office. Please visit the office in person.');
+      return;
+    }
+    if (!certificatePurpose.trim()) {
+      setCertManualError('Please state the purpose for requesting this certificate.');
+      return;
+    }
+
+    setIsSubmittingCert(true);
+    try {
+      const newCert = await submitCertificateRequest({
+        rollNumber: cleanRoll,
+        studentName: certManualName.trim(),
+        section: 'Passed Out / Alumni',
+        department: certSelectedDept,
+        certificateName: certificateName.trim(),
+        purpose: certificatePurpose.trim(),
+        studentMobile: certManualStudentPhone.trim() || cleanParentPhone,
+        parentMobile: cleanParentPhone
+      });
+      setSubmittedCert(newCert);
+      setCertNotFoundMode(false);
+      setCertStep(3);
+    } catch (err) {
+      setCertManualError(err.message || 'Failed to submit certificate request');
+    } finally {
+      setIsSubmittingCert(false);
     }
   };
 
@@ -437,6 +596,14 @@ const Login = () => {
     setCertVerifyError('');
     setCertStep(1);
     setSubmittedCert(null);
+    setCertNotFoundMode(false);
+    setCertNotFoundStep('SELECT_DEPT');
+    setCertSelectedDept('');
+    setCertManualName('');
+    setCertManualRoll('');
+    setCertManualParentPhone('');
+    setCertManualStudentPhone('');
+    setCertManualError('');
   };
 
   // Out of Block Permission Handlers
@@ -1433,14 +1600,16 @@ const Login = () => {
                           Request Student Certificate
                         </h2>
                         <p className="text-xs text-customText-muted dark:text-customText-mutedDark">
-                          {certStep === 1 && 'Enter your roll number to fetch student particulars from registry.'}
+                          {certStep === 1 && !certNotFoundMode && 'Enter your roll number to fetch student particulars from registry.'}
+                          {certStep === 1 && certNotFoundMode && certNotFoundStep === 'SELECT_DEPT' && 'You are not found or passed out. Select your department to forward.'}
+                          {certStep === 1 && certNotFoundMode && certNotFoundStep === 'ENTER_DETAILS' && 'Enter your particulars to submit request to HOD.'}
                           {certStep === 2 && 'Enter the certificate name and purpose for the College Office.'}
                           {certStep === 3 && 'Certificate request forwarded to College Office.'}
                         </p>
                       </div>
                     </div>
 
-                    {certStep > 1 && (
+                    {(certStep > 1 || certNotFoundMode) && (
                       <button
                         type="button"
                         onClick={handleResetCertApplication}
@@ -1454,7 +1623,7 @@ const Login = () => {
                   </div>
 
                   {/* Error banner */}
-                  {certVerifyError && (
+                  {certVerifyError && !certNotFoundMode && (
                     <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl flex items-center gap-2 animate-pulse">
                       <AlertCircle size={16} className="shrink-0" />
                       <span>{certVerifyError}</span>
@@ -1462,7 +1631,7 @@ const Login = () => {
                   )}
 
                   {/* CERT STEP 1: Enter Roll Number */}
-                  {certStep === 1 && (
+                  {certStep === 1 && !certNotFoundMode && (
                     <form onSubmit={handleVerifyCertStudent} className="space-y-5">
                       <div className="space-y-4">
                         <div>
@@ -1501,6 +1670,323 @@ const Login = () => {
                           </>
                         )}
                       </button>
+
+                      <div className="pt-2 text-center">
+                        <button
+                          type="button"
+                          onClick={handleOpenPassedOutFlow}
+                          className="text-xs font-bold text-primary hover:underline cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <span>Passed out / Alumni student or not found in registry? Click here</span>
+                          <ArrowRight size={13} />
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* PASSED OUT / NOT FOUND SUB-FLOW: STEP 1 - Select Department & Confirm HOD */}
+                  {certStep === 1 && certNotFoundMode && certNotFoundStep === 'SELECT_DEPT' && (
+                    <div className="space-y-5 animate-fade-in">
+                      {/* Notice Banner */}
+                      <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 space-y-1.5">
+                        <div className="flex items-center gap-2 font-black text-sm text-amber-800 dark:text-amber-300">
+                          <AlertCircle size={18} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                          <span>You are not found or you are passed out</span>
+                        </div>
+                        <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+                          {certManualRoll ? (
+                            <>Roll number <strong className="font-mono">{certManualRoll}</strong> was not found in the current active student registry. </>
+                          ) : (
+                            <>You were not found in the active student registry or you are an alumni / passed out student. </>
+                          )}
+                          Please select your department below to forward your certificate application to your respective Head of Department (HOD).
+                        </p>
+                      </div>
+
+                      {/* Manual Error */}
+                      {certManualError && (
+                        <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl flex items-center gap-2">
+                          <AlertCircle size={15} className="shrink-0" />
+                          <span>{certManualError}</span>
+                        </div>
+                      )}
+
+                      {/* Department Select */}
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                          Select Your Department *
+                        </label>
+                        <select
+                          value={certSelectedDept}
+                          onChange={(e) => {
+                            setCertSelectedDept(e.target.value);
+                            if (certManualError) setCertManualError('');
+                          }}
+                          className="glass-input text-xs sm:text-sm font-semibold py-3 w-full"
+                          autoFocus
+                        >
+                          <option value="">-- Choose Your Department --</option>
+                          {COLLEGE_DEPARTMENTS_HOD.map((dept) => (
+                            <option key={dept.department} value={dept.department}>
+                              {dept.shortName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* HOD Confirmation Card (shown once department is selected) */}
+                      {certSelectedDept && (
+                        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 space-y-3 animate-fade-in">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                              Respective Head of Department (HOD)
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 text-[10px] font-black">
+                              Direct Route
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shrink-0">
+                              👨‍🏫
+                            </div>
+                            <div>
+                              <h4 className="font-black text-sm text-customText dark:text-customText-dark">
+                                {getDepartmentHODName(certSelectedDept)}
+                              </h4>
+                              <p className="text-xs text-customText-muted font-medium">
+                                {certSelectedDept}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="pt-1 text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed bg-blue-500/5 p-2.5 rounded-xl border border-blue-500/10">
+                            Please confirm: Your certificate application will be forwarded directly to <strong>{getDepartmentHODName(certSelectedDept)}</strong> for clearance.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Navigation Buttons */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCertNotFoundMode(false);
+                            setCertVerifyError('');
+                            setCertManualError('');
+                          }}
+                          className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!certSelectedDept}
+                          onClick={() => {
+                            if (!certSelectedDept) {
+                              setCertManualError('Please select your department to proceed.');
+                              return;
+                            }
+                            setCertManualError('');
+                            setCertNotFoundStep('ENTER_DETAILS');
+                          }}
+                          className="btn-primary flex-1 py-3 text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-lg shadow-primary/25 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span>Confirm HOD & Proceed</span>
+                          <ArrowRight size={17} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PASSED OUT / NOT FOUND SUB-FLOW: STEP 2 - Enter Name, Roll, Parent Phone, Cert Name & Purpose */}
+                  {certStep === 1 && certNotFoundMode && certNotFoundStep === 'ENTER_DETAILS' && (
+                    <form onSubmit={handleSubmitPassedOutCertificate} className="space-y-4 animate-fade-in">
+                      {/* Confirmed Route Banner */}
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-customText-muted block mb-0.5">
+                            Forwarding To Respective HOD:
+                          </span>
+                          <span className="font-black text-customText dark:text-customText-dark">
+                            {getDepartmentHODName(certSelectedDept)}
+                          </span>
+                          <span className="text-[11px] text-customText-muted block">
+                            {certSelectedDept} • <span className="text-amber-600 dark:text-amber-400 font-bold">Passed Out / Alumni</span>
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCertNotFoundStep('SELECT_DEPT')}
+                          className="px-2.5 py-1 rounded-lg bg-slate-200/60 dark:bg-slate-800 text-[11px] font-bold text-primary hover:underline cursor-pointer shrink-0"
+                        >
+                          Change HOD
+                        </button>
+                      </div>
+
+                      {/* Manual Error */}
+                      {certManualError && (
+                        <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl flex items-center gap-2">
+                          <AlertCircle size={15} className="shrink-0" />
+                          <span>{certManualError}</span>
+                        </div>
+                      )}
+
+                      {/* Student Full Name */}
+                      <div>
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                          Your Full Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={certManualName}
+                          onChange={(e) => {
+                            setCertManualName(e.target.value);
+                            if (certManualError) setCertManualError('');
+                          }}
+                          placeholder="e.g. Ramesh Kumar"
+                          className="glass-input text-xs sm:text-sm font-bold py-2.5 w-full"
+                          autoFocus
+                          required
+                        />
+                      </div>
+
+                      {/* Roll Number & Parent Phone */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                            Your Roll Number *
+                          </label>
+                          <input
+                            type="text"
+                            value={certManualRoll}
+                            onChange={(e) => {
+                              setCertManualRoll(e.target.value.toUpperCase());
+                              if (certManualError) setCertManualError('');
+                            }}
+                            placeholder="e.g. 20NE1A0501"
+                            className="glass-input text-xs sm:text-sm font-mono uppercase font-bold py-2.5 w-full tracking-wider"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                            Parent Mobile Number *
+                          </label>
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            value={certManualParentPhone}
+                            onChange={(e) => {
+                              setCertManualParentPhone(e.target.value.replace(/\D/g, ''));
+                              if (certManualError) setCertManualError('');
+                            }}
+                            placeholder="10-digit mobile number"
+                            className="glass-input text-xs sm:text-sm font-mono font-bold py-2.5 w-full"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Student Mobile (Optional) */}
+                      <div>
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider mb-1.5">
+                          Student Contact Mobile (Optional)
+                        </label>
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          value={certManualStudentPhone}
+                          onChange={(e) => setCertManualStudentPhone(e.target.value.replace(/\D/g, ''))}
+                          placeholder="10-digit mobile number"
+                          className="glass-input text-xs sm:text-sm font-mono font-bold py-2.5 w-full"
+                        />
+                      </div>
+
+                      {/* Certificate Name Input */}
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                          Certificate Name / Type *
+                        </label>
+                        <input
+                          type="text"
+                          value={certificateName}
+                          onChange={(e) => {
+                            setCertificateName(e.target.value);
+                            if (certManualError) setCertManualError('');
+                          }}
+                          placeholder="e.g. Bonafide Certificate, Study & Conduct, Custodian, TC..."
+                          className="glass-input text-xs sm:text-sm font-semibold py-2.5 w-full"
+                          required
+                        />
+
+                        {/* Quick Certificate Chips */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {[
+                            'Bonafide Certificate',
+                            'Bus Pass Certificate',
+                            'Study & Conduct Certificate',
+                            'Custodian Certificate',
+                            'Fee Estimation Certificate',
+                            'No Objection Certificate (NOC)',
+                            'Medium of Instruction'
+                          ].map((certChip) => (
+                            <button
+                              key={certChip}
+                              type="button"
+                              onClick={() => setCertificateName(certChip)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-primary/10 hover:text-primary text-[11px] font-semibold text-customText-muted transition-colors cursor-pointer"
+                            >
+                              + {certChip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Purpose */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                          Purpose / Reason for Certificate *
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={certificatePurpose}
+                          onChange={(e) => {
+                            setCertificatePurpose(e.target.value);
+                            if (certManualError) setCertManualError('');
+                          }}
+                          placeholder="State the purpose (e.g. Higher studies application, Bank loan, Government recruitment, Passport verification...)"
+                          className="glass-input text-xs py-2.5 resize-none w-full"
+                          required
+                        />
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setCertNotFoundStep('SELECT_DEPT')}
+                          className="btn-secondary py-3 px-5 text-xs font-bold cursor-pointer"
+                          disabled={isSubmittingCert}
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn-primary flex-1 py-3 text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-lg shadow-primary/25 cursor-pointer"
+                          disabled={isSubmittingCert}
+                        >
+                          {isSubmittingCert ? (
+                            <span>Sending Request to HOD...</span>
+                          ) : (
+                            <>
+                              <Award size={18} />
+                              <span>Confirm & Send Request to HOD</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </form>
                   )}
 
@@ -1672,6 +2158,15 @@ const Login = () => {
                           <span className="font-black">{submittedCert.studentName} ({submittedCert.rollNumber})</span>
                         </div>
                         <div className="flex justify-between">
+                          <span className="text-customText-muted font-bold">Department / Route:</span>
+                          <span className="font-bold text-customText dark:text-customText-dark">
+                            {submittedCert.department || 'College Department'}
+                            {submittedCert.section && (
+                              <span className="text-xs text-customText-muted font-normal ml-1">({submittedCert.section})</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
                           <span className="text-customText-muted font-bold">Certificate Requested:</span>
                           <span className="font-bold text-primary">{submittedCert.certificateName}</span>
                         </div>
@@ -1682,7 +2177,7 @@ const Login = () => {
                         <div className="flex justify-between">
                           <span className="text-customText-muted font-bold">Status:</span>
                           <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 font-bold border border-amber-500/20 text-[11px]">
-                            Forwarded to Office (Pending Review)
+                            Forwarded to HOD (Pending Review)
                           </span>
                         </div>
                       </div>

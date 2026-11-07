@@ -2742,9 +2742,15 @@ const Dashboard = ({ initialTab }) => {
                               <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-xs font-bold text-customText">
                                 {cert.rollNumber}
                               </span>
-                              <span className="text-xs text-customText-muted font-medium">
-                                {cert.section || 'Student'}
-                              </span>
+                              {cert.section && (cert.section.includes('Passed Out') || cert.section.includes('Alumni')) ? (
+                                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-black text-[10px] border border-amber-500/20">
+                                  🎓 Passed Out / Alumni
+                                </span>
+                              ) : (
+                                <span className="text-xs text-customText-muted font-medium">
+                                  {cert.section || 'Student'}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <span className="text-xs font-mono text-customText-muted">
@@ -2762,9 +2768,10 @@ const Dashboard = ({ initialTab }) => {
                             <span className="text-[10px] font-bold text-customText-muted uppercase block">Stated Purpose / Reason:</span>
                             <p className="font-semibold text-customText dark:text-customText-dark italic">"{cert.reason || cert.purpose}"</p>
                           </div>
-                          <div className="flex items-center justify-between text-[11px] text-customText-muted pt-1 border-t border-slate-200/50 dark:border-slate-800/50">
+                          <div className="flex items-center justify-between text-[11px] text-customText-muted pt-1 border-t border-slate-200/50 dark:border-slate-800/50 flex-wrap gap-2">
                             <span><strong>Applied Date:</strong> {cert.appliedDate}</span>
                             <span><strong>Student Mobile:</strong> {cert.studentMobile || 'N/A'}</span>
+                            {cert.parentMobile && <span><strong>Parent:</strong> {cert.parentMobile}</span>}
                           </div>
                         </div>
 
