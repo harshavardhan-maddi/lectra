@@ -3,6 +3,8 @@
 
 const STORAGE_KEY = 'lectra_outpass_tickets';
 const STUDENTS_CACHE_KEY = 'lectra_outpass_students_directory';
+const SYS_CONFIG_OFFICE_STAFF_ID = 'SYS_CONFIG_OFFICE_STAFF';
+const OFFICE_STAFF_CACHE_KEY = 'lectra_office_staff_registry';
 
 // ==========================================
 // DATE & TIME HELPERS (Asia/Kolkata timezone)
@@ -558,6 +560,28 @@ export const syncOutpassesFromBackend = async () => {
             const merged = Array.from(certMap.values());
             localStorage.setItem('lectra_certificate_requests', JSON.stringify(merged));
             window.dispatchEvent(new CustomEvent('lectra_certificates_updated', { detail: merged }));
+          } catch (e) {}
+        }
+
+        // Sync office staff registry across all campus devices
+        const sysOffice = data.tickets.find(t => t && t.id === SYS_CONFIG_OFFICE_STAFF_ID);
+        if (sysOffice && Array.isArray(sysOffice.staff)) {
+          try {
+            localStorage.setItem(OFFICE_STAFF_CACHE_KEY, JSON.stringify(sysOffice.staff));
+            // Also keep faculty metadata in sync
+            const cachedMeta = localStorage.getItem('lectra_faculty_metadata');
+            const localMeta = cachedMeta ? JSON.parse(cachedMeta) : [];
+            const metaMap = new Map();
+            localMeta.forEach(m => {
+              const k = (m.empid || m.name || '').toLowerCase();
+              if (k) metaMap.set(k, m);
+            });
+            sysOffice.staff.forEach(s => {
+              const k = (s.empid || s.name || '').toLowerCase();
+              if (k) metaMap.set(k, { ...metaMap.get(k), ...s });
+            });
+            localStorage.setItem('lectra_faculty_metadata', JSON.stringify(Array.from(metaMap.values())));
+            window.dispatchEvent(new CustomEvent('lectra_office_staff_updated', { detail: sysOffice.staff }));
           } catch (e) {}
         }
 
@@ -2456,4 +2480,47 @@ export const aoRejectCertificate = async (requestId, { aoName = 'Administrative 
 
   await saveCertificateRequests(requests);
   return req;
+};
+
+// ===================================================
+// OFFICE STAFF REGISTRY — Multi-Device Sync via Outpass Tickets Store
+// ===================================================
+
+export const getOfficeStaffFromSync = () => {
+  try {
+    const raw = localStorage.getItem(OFFICE_STAFF_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const saveOfficeStaffToSync = async (staffList) => {
+  if (!Array.isArray(staffList)) return;
+  try {
+    localStorage.setItem(OFFICE_STAFF_CACHE_KEY, JSON.stringify(staffList));
+    window.dispatchEvent(new CustomEvent('lectra_office_staff_updated', { detail: staffList }));
+
+    const syncTicket = {
+      id: SYS_CONFIG_OFFICE_STAFF_ID,
+      applicantType: 'SYSTEM_CONFIG',
+      type: 'OFFICE_STAFF_REGISTRY',
+      staff: staffList,
+      updatedAt: new Date().toISOString()
+    };
+
+    const rawAll = localStorage.getItem(STORAGE_KEY);
+    const allTickets = rawAll ? JSON.parse(rawAll) : [];
+    const filtered = allTickets.filter(t => t && t.id !== SYS_CONFIG_OFFICE_STAFF_ID);
+    filtered.push(syncTicket);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+
+    await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      body: JSON.stringify({ tickets: [syncTicket] })
+    });
+  } catch (e) {
+    console.warn('Office staff sync warning:', e);
+  }
 };

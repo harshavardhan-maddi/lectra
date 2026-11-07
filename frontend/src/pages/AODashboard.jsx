@@ -13,7 +13,9 @@ import {
   subscribeToCertificates,
   aoAcceptCertificate,
   aoRejectCertificate,
-  syncOutpassesFromBackend
+  syncOutpassesFromBackend,
+  getOfficeStaffFromSync,
+  saveOfficeStaffToSync
 } from '../services/outpassService';
 import { 
   ShieldCheck, 
@@ -148,7 +150,13 @@ const AODashboard = () => {
   };
 
   const saveOfficeMetadataToBackend = async (metadata) => {
-    if (!token || !Array.isArray(metadata)) return;
+    if (!Array.isArray(metadata)) return;
+    try {
+      await saveOfficeStaffToSync(metadata);
+    } catch (e) {
+      console.warn('Sync ticket office save note:', e);
+    }
+    if (!token) return;
     try {
       await fetch('/api/faculty/office-metadata', {
         method: 'POST',
@@ -166,8 +174,15 @@ const AODashboard = () => {
   const loadOfficeStaff = async () => {
     setStaffLoading(true);
     try {
-      // 1. Fetch metadata from backend database for multi-device sync
+      // 1. Fetch metadata from backend database or central sync ticket store
       let metadataList = [];
+
+      // Primary source for multi-device sync: get from outpass sync store
+      const syncedStaff = getOfficeStaffFromSync();
+      if (Array.isArray(syncedStaff) && syncedStaff.length > 0) {
+        metadataList = [...syncedStaff];
+      }
+
       if (token) {
         try {
           const metaRes = await fetch('/api/faculty/office-metadata', {
@@ -176,8 +191,18 @@ const AODashboard = () => {
           if (metaRes.ok) {
             const remoteMeta = await metaRes.json();
             if (Array.isArray(remoteMeta) && remoteMeta.length > 0) {
-              metadataList = remoteMeta;
-              localStorage.setItem('lectra_faculty_metadata', JSON.stringify(remoteMeta));
+              // Merge remote with synced
+              const existingMap = new Map();
+              metadataList.forEach(item => {
+                const k = (item.empid || item.name || '').toLowerCase();
+                if (k) existingMap.set(k, item);
+              });
+              remoteMeta.forEach(item => {
+                const k = (item.empid || item.name || '').toLowerCase();
+                if (k) existingMap.set(k, { ...existingMap.get(k), ...item });
+              });
+              metadataList = Array.from(existingMap.values());
+              localStorage.setItem('lectra_faculty_metadata', JSON.stringify(metadataList));
             }
           }
         } catch (mErr) {
@@ -185,7 +210,7 @@ const AODashboard = () => {
         }
       }
 
-      // Fallback to local storage if remote metadata is not yet populated
+      // Fallback to local storage if not yet populated
       if (metadataList.length === 0) {
         try {
           metadataList = JSON.parse(localStorage.getItem('lectra_faculty_metadata') || '[]');
@@ -287,10 +312,17 @@ const AODashboard = () => {
 
     const unsub = subscribeToOutpasses(setTickets);
     const unsubCerts = subscribeToCertificates(setCertificateRequests);
+
+    const handleOfficeStaffUpdate = () => {
+      loadOfficeStaff();
+    };
+    window.addEventListener('lectra_office_staff_updated', handleOfficeStaffUpdate);
+
     return () => { 
       clearInterval(pollTimer);
       unsub(); 
       unsubCerts(); 
+      window.removeEventListener('lectra_office_staff_updated', handleOfficeStaffUpdate);
     };
   }, [token]);
 

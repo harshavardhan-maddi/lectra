@@ -7,7 +7,8 @@ import {
   deleteCertificateRequest,
   addCertificateTicketByOffice,
   subscribeToCertificates,
-  syncOutpassesFromBackend 
+  syncOutpassesFromBackend,
+  getOfficeStaffFromSync
 } from '../services/outpassService';
 import { 
   FileText, 
@@ -76,8 +77,14 @@ const OfficeDashboard = () => {
   const loadOfficeStaff = async () => {
     setStaffLoading(true);
     try {
-      // 1. Fetch metadata from backend database for multi-device sync
+      // 1. Fetch metadata from outpass sync store / backend database for multi-device sync
       let metadataList = [];
+
+      const syncedStaff = getOfficeStaffFromSync();
+      if (Array.isArray(syncedStaff) && syncedStaff.length > 0) {
+        metadataList = [...syncedStaff];
+      }
+
       if (token) {
         try {
           const metaRes = await fetch('/api/faculty/office-metadata', {
@@ -86,8 +93,17 @@ const OfficeDashboard = () => {
           if (metaRes.ok) {
             const remoteMeta = await metaRes.json();
             if (Array.isArray(remoteMeta) && remoteMeta.length > 0) {
-              metadataList = remoteMeta;
-              localStorage.setItem('lectra_faculty_metadata', JSON.stringify(remoteMeta));
+              const existingMap = new Map();
+              metadataList.forEach(item => {
+                const k = (item.empid || item.name || '').toLowerCase();
+                if (k) existingMap.set(k, item);
+              });
+              remoteMeta.forEach(item => {
+                const k = (item.empid || item.name || '').toLowerCase();
+                if (k) existingMap.set(k, { ...existingMap.get(k), ...item });
+              });
+              metadataList = Array.from(existingMap.values());
+              localStorage.setItem('lectra_faculty_metadata', JSON.stringify(metadataList));
             }
           }
         } catch (mErr) {
@@ -185,9 +201,16 @@ const OfficeDashboard = () => {
     refreshData();
     const pollTimer = setInterval(refreshData, 3500);
     const unsub = subscribeToCertificates(setRequests);
+
+    const handleOfficeStaffUpdate = () => {
+      loadOfficeStaff();
+    };
+    window.addEventListener('lectra_office_staff_updated', handleOfficeStaffUpdate);
+
     return () => {
       clearInterval(pollTimer);
       unsub();
+      window.removeEventListener('lectra_office_staff_updated', handleOfficeStaffUpdate);
     };
   }, [token]);
 
