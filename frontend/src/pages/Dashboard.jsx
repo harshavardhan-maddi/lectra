@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import logo from '../neclogo.png';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -32,6 +33,7 @@ import {
   Lock,
   Settings,
   FileText,
+  Printer,
   BadgeCheck,
   DoorOpen,
   RefreshCw,
@@ -142,7 +144,9 @@ const Dashboard = ({ initialTab }) => {
   const [certificateRequests, setCertificateRequests] = useState([]);
   const [students, setStudents] = useState([]);
 
-  const [historyTypeFilter, setHistoryTypeFilter] = useState('ACCEPTED'); // 'ACCEPTED' | 'REJECTED'
+  const [historyTypeFilter, setHistoryTypeFilter] = useState('ACCEPTED'); // 'ACCEPTED' | 'REJECTED' | 'CERTIFICATES'
+  const [selectedCertHistoryModal, setSelectedCertHistoryModal] = useState(null);
+  const [studentModalActiveTab, setStudentModalActiveTab] = useState('outpasses'); // 'outpasses' | 'certificates'
   const [certActionSuccess, setCertActionSuccess] = useState('');
   const [certActionError, setCertActionError] = useState('');
 
@@ -436,6 +440,32 @@ const Dashboard = ({ initialTab }) => {
   }, []);
 
   // Department-scoped permission requests for HOD / Sub Admin
+
+  // Filtered certificate requests for department history (multi-device synced)
+  const deptCertHistory = useMemo(() => {
+    return (certificateRequests || [])
+      .filter(c => {
+        if (!c) return false;
+        if (user?.role === 'SUPER_ADMIN') {
+          if (selectedDepartment && selectedDepartment !== 'ALL') {
+            return isTicketInUserDepartment(c, { role: 'HOD', department: selectedDepartment });
+          }
+          return true;
+        }
+        if (isTicketInUserDepartment(c, user)) return true;
+        if (c.department && user?.department) {
+          const uDept = user.department.trim().toLowerCase();
+          const cDept = c.department.trim().toLowerCase();
+          if (uDept === cDept || uDept.includes(cDept) || cDept.includes(uDept)) return true;
+        }
+        if (c.rollNumber && students && students.length > 0) {
+          const clean = c.rollNumber.trim().toUpperCase();
+          return students.some(s => s.rollNumber && s.rollNumber.trim().toUpperCase() === clean);
+        }
+        return false;
+      })
+      .sort((a, b) => new Date(b.appliedAt || b.updatedAt || 0) - new Date(a.appliedAt || a.updatedAt || 0));
+  }, [certificateRequests, user, students, selectedDepartment]);
 
   const deptTickets = useMemo(() => {
     return outpassTickets.filter(t => {
@@ -2790,20 +2820,28 @@ const Dashboard = ({ initialTab }) => {
                 <h4 className="text-sm font-black text-customText dark:text-customText-dark uppercase tracking-wider">
                   Department Permission & Clearance History
                 </h4>
-                <div className="flex gap-1.5 mt-1.5">
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
                   <button
                     type="button"
                     onClick={() => setHistoryTypeFilter('ACCEPTED')}
                     className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${historyTypeFilter === 'ACCEPTED' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
                   >
-                    ✓ Accepted History
+                    ✓ Accepted Outpasses
                   </button>
                   <button
                     type="button"
                     onClick={() => setHistoryTypeFilter('REJECTED')}
                     className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${historyTypeFilter === 'REJECTED' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
                   >
-                    ✕ Rejected History
+                    ✕ Rejected Outpasses
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('CERTIFICATES')}
+                    className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${historyTypeFilter === 'CERTIFICATES' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-customText-muted hover:text-customText'}`}
+                  >
+                    <Award size={13} />
+                    <span>Certificates History ({deptCertHistory.length})</span>
                   </button>
                 </div>
               </div>
@@ -2813,6 +2851,7 @@ const Dashboard = ({ initialTab }) => {
                   onClick={async () => {
                     const tickets = await syncOutpassesFromBackend();
                     setOutpassTickets(tickets);
+                    setCertificateRequests(getAllCertificateRequests());
                   }}
                   className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-customText-muted flex items-center gap-1.5 transition-colors cursor-pointer"
                   title="Sync latest live tickets from database"
@@ -2835,18 +2874,136 @@ const Dashboard = ({ initialTab }) => {
             <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[10px] font-bold text-customText-muted uppercase">
-                  <tr>
-                    <th className="p-3">Ref ID</th>
-                    <th className="p-3">Applicant / Type</th>
-                    <th className="p-3">Stated Purpose</th>
-                    <th className="p-3">Parent Call / Stage</th>
-                    <th className="p-3">HOD Status</th>
-                    <th className="p-3">Gate Exit</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
+                  {historyTypeFilter === 'CERTIFICATES' ? (
+                    <tr>
+                      <th className="p-3">Ref ID</th>
+                      <th className="p-3">Student Details</th>
+                      <th className="p-3">Certificate & Purpose</th>
+                      <th className="p-3">Applied At</th>
+                      <th className="p-3">HOD / Current Status</th>
+                      <th className="p-3">Acted At</th>
+                      <th className="p-3 text-right">Slip & Details</th>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <th className="p-3">Ref ID</th>
+                      <th className="p-3">Applicant / Type</th>
+                      <th className="p-3">Stated Purpose</th>
+                      <th className="p-3">Parent Call / Stage</th>
+                      <th className="p-3">HOD Status</th>
+                      <th className="p-3">Gate Exit</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  )}
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {(() => {
+                  {historyTypeFilter === 'CERTIFICATES' ? (
+                    deptCertHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-customText-muted text-xs">
+                          <Award size={24} className="mx-auto mb-2 text-slate-400" />
+                          No student certificate requests found in department history.
+                        </td>
+                      </tr>
+                    ) : (
+                      deptCertHistory.map((c) => {
+                        const isAccepted = c.status === 'ACCEPTED' || c.status === 'APPROVED' || c.status === 'COMPLETED';
+                        const isRejected = c.status === 'REJECTED';
+                        const isForwardedAO = c.status === 'FORWARDED_TO_AO';
+                        const isForwardedOffice = c.status === 'FORWARDED_TO_OFFICE';
+                        const isIssued = c.status === 'ISSUED';
+                        const isReady = c.status === 'READY' || c.status === 'READY_FOR_PICKUP';
+
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors">
+                            <td className="p-3 font-mono font-bold text-primary">{c.id}</td>
+                            <td className="p-3">
+                              <span className="font-bold block text-customText dark:text-customText-dark">{c.studentName}</span>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-customText-muted font-mono">{c.rollNumber} • {c.section || c.department}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenStudentLeaveHistory(c.rollNumber, c.studentName, c.section)}
+                                  className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                  title="View Student's Full History"
+                                >
+                                  <History size={10} /> History
+                                </button>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-black text-xs text-primary flex items-center gap-1">
+                                📜 {c.certificateName}
+                              </span>
+                              <span className="text-[11px] text-customText-muted italic block truncate max-w-xs mt-0.5">
+                                "{c.reason || c.purpose || 'Academic requirement'}"
+                              </span>
+                            </td>
+                            <td className="p-3 text-[11px]">
+                              <span className="text-customText-muted block">{c.appliedDate}</span>
+                              <span className="font-mono text-[10px] text-customText-muted">{c.appliedTime}</span>
+                            </td>
+                            <td className="p-3">
+                              {isAccepted ? (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase border border-emerald-500/30 inline-flex items-center gap-1">
+                                  <BadgeCheck size={11} /> Accepted by HOD
+                                </span>
+                              ) : isRejected ? (
+                                <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-300 font-black text-[10px] uppercase border border-rose-500/30 inline-flex items-center gap-1">
+                                  <X size={11} /> Rejected
+                                </span>
+                              ) : isForwardedAO ? (
+                                <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-black text-[10px] uppercase border border-indigo-500/30 inline-flex items-center gap-1">
+                                  <Send size={11} /> Forwarded to AO
+                                </span>
+                              ) : isForwardedOffice ? (
+                                <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-300 font-black text-[10px] uppercase border border-blue-500/30 inline-flex items-center gap-1">
+                                  <Building size={11} /> Forwarded to Office
+                                </span>
+                              ) : isIssued ? (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-black text-[10px] uppercase inline-flex items-center gap-1">
+                                  <CheckCircle2 size={11} /> Issued by Office
+                                </span>
+                              ) : isReady ? (
+                                <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase border border-amber-500/30 inline-flex items-center gap-1">
+                                  <Clock size={11} /> Ready for Pickup
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-customText-muted font-black text-[10px] uppercase inline-flex items-center gap-1">
+                                  <Clock size={11} /> Pending HOD
+                                </span>
+                              )}
+                              {c.hodAction?.remarks && (
+                                <span className="block text-[10px] text-customText-muted italic mt-0.5 truncate max-w-[150px]">
+                                  Note: {c.hodAction.remarks}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-[11px]">
+                              {c.hodAction?.actionAt ? (
+                                <span className="font-mono text-[10px] text-customText-muted">
+                                  {c.hodAction.displayDate || c.hodAction.actionAt.slice(0, 10)} {c.hodAction.displayTime || ''}
+                                </span>
+                              ) : (
+                                <span className="text-customText-muted text-[10px] italic">Not acted</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCertHistoryModal(c)}
+                                className="p-1.5 px-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                title="View Certificate Slip & Full Particulars"
+                              >
+                                <FileText size={13} />
+                                <span>Slip</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )
+                  ) : (() => {
                     const filteredDeptHistory = deptTickets.filter(t => {
                       const isAccepted = t.status === 'PERMISSION_GRANTED' || t.status === 'SENT_OUT' || t.status === 'ACCEPTED' || t.status === 'FACULTY_OUT';
                       const isRejected = t.status === 'REJECTED';
@@ -3485,6 +3642,161 @@ const Dashboard = ({ initialTab }) => {
       )}
 
       {/* HOD View: Student Leave History Modal */}
+      
+      {/* Certificate Request History & Slip Modal for HOD / Super Admin */}
+      {selectedCertHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+          <div className="glass-card w-full max-w-xl p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-5 modal-card-fullscreen max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                  <Award size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-customText dark:text-customText-dark">
+                    Student Certificate Request Slip
+                  </h3>
+                  <span className="text-xs font-mono font-bold text-primary">
+                    Ref ID: {selectedCertHistoryModal.id}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCertHistoryModal(null)}
+                className="p-2 rounded-xl text-customText-muted hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Printable Slip Container */}
+            <div id="printable-cert-slip" className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-4 text-xs">
+              <div className="text-center pb-3 border-b border-slate-200 dark:border-slate-800">
+                <img src={logo} alt="NEC Logo" className="h-10 mx-auto object-contain mb-1.5" />
+                <h4 className="font-black text-sm uppercase tracking-wide text-customText dark:text-customText-dark">
+                  Narasaraopeta Engineering College (Autonomous)
+                </h4>
+                <p className="text-[10px] text-customText-muted font-medium">
+                  Kotappakonda Road, Yellamanda (P.O), Narasaraopet - 522601
+                </p>
+                <span className="inline-block mt-1 px-3 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-wider">
+                  Official Certificate Request Record
+                </span>
+              </div>
+
+              {/* Student Particulars */}
+              <div className="grid grid-cols-2 gap-3 py-2 border-b border-slate-200 dark:border-slate-800 text-[11px]">
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Student Name:</span>
+                  <span className="font-black text-customText dark:text-customText-dark text-xs">{selectedCertHistoryModal.studentName}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Roll Number:</span>
+                  <span className="font-mono font-black text-primary text-xs">{selectedCertHistoryModal.rollNumber}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Branch / Section:</span>
+                  <span className="font-semibold text-customText dark:text-customText-dark">{selectedCertHistoryModal.section || 'General'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Department:</span>
+                  <span className="font-semibold text-customText dark:text-customText-dark">{selectedCertHistoryModal.department || 'Engineering'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Applied Date & Time:</span>
+                  <span className="font-semibold text-customText dark:text-customText-dark">{selectedCertHistoryModal.appliedDate} at {selectedCertHistoryModal.appliedTime}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Student Mobile:</span>
+                  <span className="font-mono text-customText dark:text-customText-dark">{selectedCertHistoryModal.studentMobile || 'Registered'}</span>
+                </div>
+              </div>
+
+              {/* Certificate Requested & Stated Purpose */}
+              <div className="space-y-2 py-2 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Certificate Requested:</span>
+                  <span className="font-black text-sm text-primary">📜 {selectedCertHistoryModal.certificateName}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-customText-muted uppercase font-bold block">Stated Purpose / Reason:</span>
+                  <p className="font-medium text-customText dark:text-customText-dark italic bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    "{selectedCertHistoryModal.reason || selectedCertHistoryModal.purpose || 'Academic requirement'}"
+                  </p>
+                </div>
+              </div>
+
+              {/* Progression & Actions Record */}
+              <div className="space-y-2 text-[11px]">
+                <span className="text-[10px] text-customText-muted uppercase font-bold block">Approval & Clearance History:</span>
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-customText dark:text-customText-dark">Current Status:</span>
+                    <span className={`px-2 py-0.5 rounded-md font-black text-[10px] uppercase ${
+                      selectedCertHistoryModal.status === 'ACCEPTED' || selectedCertHistoryModal.status === 'COMPLETED' || selectedCertHistoryModal.status === 'APPROVED'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : selectedCertHistoryModal.status === 'REJECTED'
+                        ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                        : selectedCertHistoryModal.status === 'FORWARDED_TO_AO'
+                        ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
+                        : selectedCertHistoryModal.status === 'FORWARDED_TO_OFFICE'
+                        ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
+                        : selectedCertHistoryModal.status === 'ISSUED'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                    }`}>
+                      {selectedCertHistoryModal.status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  {selectedCertHistoryModal.hodAction && (
+                    <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-customText-muted">
+                      <div><strong>HOD Action:</strong> {selectedCertHistoryModal.hodAction.status || (selectedCertHistoryModal.hodAction.granted ? 'Accepted' : 'Processed')} by {selectedCertHistoryModal.hodAction.hodName || 'Head of Department'}</div>
+                      {selectedCertHistoryModal.hodAction.remarks && <div><strong>Remarks:</strong> {selectedCertHistoryModal.hodAction.remarks}</div>}
+                      <div><strong>Action Time:</strong> {selectedCertHistoryModal.hodAction.displayDate || ''} {selectedCertHistoryModal.hodAction.displayTime || ''}</div>
+                    </div>
+                  )}
+                  {selectedCertHistoryModal.aoAction && (
+                    <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-customText-muted">
+                      <div><strong>AO Action:</strong> {selectedCertHistoryModal.aoAction.status} by {selectedCertHistoryModal.aoAction.aoName || 'Administrative Officer'}</div>
+                      {selectedCertHistoryModal.aoAction.remarks && <div><strong>Remarks:</strong> {selectedCertHistoryModal.aoAction.remarks}</div>}
+                      <div><strong>Action Time:</strong> {selectedCertHistoryModal.aoAction.displayDate || ''} {selectedCertHistoryModal.aoAction.displayTime || ''}</div>
+                    </div>
+                  )}
+                  {selectedCertHistoryModal.officeAction && (
+                    <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-customText-muted">
+                      <div><strong>Office Action:</strong> {selectedCertHistoryModal.officeAction.status} by {selectedCertHistoryModal.officeAction.processedBy || 'College Office'}</div>
+                      {selectedCertHistoryModal.officeAction.remarks && <div><strong>Office Remarks:</strong> {selectedCertHistoryModal.officeAction.remarks}</div>}
+                      <div><strong>Action Time:</strong> {selectedCertHistoryModal.officeAction.displayDate || ''} {selectedCertHistoryModal.officeAction.displayTime || ''}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-customText flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Printer size={15} />
+                <span>Print Slip</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCertHistoryModal(null)}
+                className="py-2.5 px-5 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-black shadow-md shadow-primary/20 transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {studentHistoryModalStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-wrapper-fullscreen">
           <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8 max-h-[90vh] flex flex-col modal-card-fullscreen">
@@ -3546,7 +3858,75 @@ const Dashboard = ({ initialTab }) => {
                     </div>
                   </div>
 
-                  {historyList.length === 0 ? (
+                  {studentModalActiveTab === 'certificates' ? (
+                    studentCerts.length === 0 ? (
+                      <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2">
+                        <Award size={32} className="mx-auto text-slate-400" />
+                        <h4 className="font-bold text-sm text-customText dark:text-customText-dark">
+                          No Certificate Requests on Record
+                        </h4>
+                        <p className="text-xs text-customText-muted">
+                          This student has not submitted any certificate requests yet.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-customText-muted">
+                          Certificate Requests History ({studentCerts.length})
+                        </h4>
+                        {studentCerts.map((cert) => {
+                          const isAccepted = cert.status === 'ACCEPTED' || cert.status === 'APPROVED' || cert.status === 'COMPLETED';
+                          const isRejected = cert.status === 'REJECTED';
+                          const isForwardedAO = cert.status === 'FORWARDED_TO_AO';
+                          const isForwardedOffice = cert.status === 'FORWARDED_TO_OFFICE';
+
+                          return (
+                            <div
+                              key={cert.id}
+                              className="p-4 rounded-2xl border bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 space-y-2.5"
+                            >
+                              <div className="flex items-start justify-between gap-2 flex-wrap">
+                                <div>
+                                  <span className="text-xs font-mono font-black text-primary block">{cert.id}</span>
+                                  <span className="font-black text-sm text-customText dark:text-customText-dark">📜 {cert.certificateName}</span>
+                                </div>
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                  isAccepted
+                                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                    : isRejected
+                                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                                    : isForwardedAO
+                                    ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
+                                    : isForwardedOffice
+                                    ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
+                                    : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                }`}>
+                                  {cert.status.replace(/_/g, ' ')}
+                                </span>
+                              </div>
+
+                              <div className="text-xs text-customText dark:text-customText-dark">
+                                <span className="text-customText-muted">Purpose: </span>
+                                <span className="font-medium italic">"{cert.reason || cert.purpose}"</span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-customText-muted pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                                <span>Applied: {cert.appliedDate} at {cert.appliedTime}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCertHistoryModal(cert)}
+                                  className="text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <FileText size={12} />
+                                  <span>View Slip</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  ) : historyList.length === 0 ? (
                     <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2">
                       <CheckCircle2 size={32} className="mx-auto text-slate-400" />
                       <h4 className="font-bold text-sm text-customText dark:text-customText-dark">
