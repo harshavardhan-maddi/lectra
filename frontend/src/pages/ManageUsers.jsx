@@ -483,6 +483,8 @@ const ManageUsers = () => {
                 if (u.role === 'FACULTY') roleBadge = 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/10';
                 if (u.role === 'ABSENT_CONTROLLER') roleBadge = 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/10';
                 if (u.role === 'WATCHMAN' || u.role === 'SECURITY_HEAD') roleBadge = 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30';
+                if (u.role === 'OFFICE') roleBadge = 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30 font-bold';
+                if (u.role === 'AO') roleBadge = 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border border-teal-500/30 font-bold';
 
                 return (
                   <tr key={u.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/10">
@@ -652,6 +654,8 @@ const ManageUsers = () => {
                       {isSuperAdmin && (
                         <>
                           <option value="HOD">HOD (Head of Department)</option>
+                          <option value="AO">🏛️ AO (Administrative Officer)</option>
+                          <option value="OFFICE">🏢 Office (Certificates Issue Desk)</option>
                           <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
                           <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
                         </>
@@ -813,6 +817,8 @@ const ManageUsers = () => {
                       {isSuperAdmin && (
                         <>
                           <option value="HOD">HOD (Head of Department)</option>
+                          <option value="AO">🏛️ AO (Administrative Officer)</option>
+                          <option value="OFFICE">🏢 Office (Certificates Issue Desk)</option>
                           <option value="SECURITY_HEAD">Security Head (Campus Gate)</option>
                           <option value="SUPER_ADMIN">⚡ Super Admin (Full Control)</option>
                         </>

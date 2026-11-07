@@ -176,12 +176,19 @@ const OfficeDashboard = () => {
   useEffect(() => {
     loadRequests();
     loadOfficeStaff();
-    // Sync from backend for cross-device certificate visibility
-    syncOutpassesFromBackend().then(() => {
-      loadRequests();
-    }).catch(() => {});
+    // Live multi-device sync on mount and auto-poll every 3.5 seconds
+    const refreshData = () => {
+      syncOutpassesFromBackend().then(() => {
+        loadRequests();
+      }).catch(() => {});
+    };
+    refreshData();
+    const pollTimer = setInterval(refreshData, 3500);
     const unsub = subscribeToCertificates(setRequests);
-    return () => unsub();
+    return () => {
+      clearInterval(pollTimer);
+      unsub();
+    };
   }, [token]);
 
   // Certificate categories
@@ -308,15 +315,21 @@ const OfficeDashboard = () => {
     }
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, req) => {
     switch (status) {
-      case 'FORWARDED_TO_OFFICE':
       case 'ACCEPTED':
+        return (
+          <span className="px-3 py-1 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300 font-black text-xs border border-teal-500/20 flex items-center gap-1.5">
+            <BadgeCheck size={12} className="text-teal-600" />
+            AO Approved • Ready to Issue
+          </span>
+        );
+      case 'FORWARDED_TO_OFFICE':
       case 'PENDING':
         return (
-          <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-xs border border-amber-500/20 flex items-center gap-1.5">
-            <Clock size={12} className="animate-spin" style={{ animationDuration: '3s' }} />
-            Forwarded by HOD • Pending Finalize
+          <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-black text-xs border border-amber-500/20 flex items-center gap-1.5">
+            <Clock size={12} />
+            Forwarded by HOD • Ready to Issue
           </span>
         );
       case 'APPROVED':
@@ -338,7 +351,7 @@ const OfficeDashboard = () => {
         return (
           <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black text-xs border border-emerald-500/20 flex items-center gap-1.5">
             <CheckCircle2 size={12} />
-            Certificate Provided & Finalized
+            Certificate Issued (Closed)
           </span>
         );
       case 'REJECTED':
@@ -487,11 +500,11 @@ const OfficeDashboard = () => {
           <div className="glass-card p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-full md:w-auto overflow-x-auto">
               {[
-                { id: 'ALL', label: `All Tickets (${requests.length})` },
-                { id: 'FORWARDED', label: `Forwarded by HOD (${forwardedRequests.length})` },
-                { id: 'IN_PROGRESS', label: `Preparing (${inProgressRequests.length})` },
-                { id: 'READY', label: `Ready for Pickup (${readyRequests.length})` },
-                { id: 'ISSUED', label: `Finalized / Provided (${issuedRequests.length})` },
+                { id: 'ALL', label: `All Requests (${requests.length})` },
+                { id: 'FORWARDED', label: `Ready to Issue (${forwardedRequests.length})` },
+                { id: 'IN_PROGRESS', label: `In Progress (${inProgressRequests.length})` },
+                { id: 'READY', label: `Ready for Counter (${readyRequests.length})` },
+                { id: 'ISSUED', label: `Issued / Closed (${issuedRequests.length})` },
                 { id: 'REJECTED', label: 'Rejected' }
               ].map(tab => (
                 <button
@@ -610,11 +623,17 @@ const OfficeDashboard = () => {
                           </span>
                         </div>
 
-                        {/* HOD / Office Action Trail */}
+                        {/* HOD / AO / Office Action Trail */}
                         {req.hodAction && (
                           <div className="text-[11px] text-customText-muted flex items-center gap-2 pt-0.5">
                             <span className="font-bold text-primary">HOD Remarks:</span>
                             <span>{req.hodAction.remarks || req.hodAction.status} ({req.hodAction.displayDate || ''} {req.hodAction.displayTime || ''})</span>
+                          </div>
+                        )}
+                        {req.aoAction && (
+                          <div className="text-[11px] text-teal-800 dark:text-teal-300 flex items-center gap-2 pt-0.5 font-semibold">
+                            <span className="font-bold text-teal-600 dark:text-teal-400">✓ AO Clearance:</span>
+                            <span>{req.aoAction.remarks || 'Approved by AO'} ({req.aoAction.aoName || 'Administrative Officer'} • {req.aoAction.displayDate || ''} {req.aoAction.displayTime || ''})</span>
                           </div>
                         )}
                         {req.officeAction && (
@@ -627,36 +646,24 @@ const OfficeDashboard = () => {
 
                       {/* Right Actions */}
                       <div className="flex flex-wrap lg:flex-col items-center lg:items-end justify-end gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800">
-                        {/* Primary Quick Actions for Finalizing Certificate */}
-                        {isForwarded && (
+                        {/* Primary Quick Action for Office: Issued */}
+                        {!isIssued && req.status !== 'REJECTED' && (
                           <button
-                            onClick={() => handleQuickStatusUpdate(req, 'ISSUED', 'Successfully finalized and provided the requested certificate to student.')}
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                            title="Click and finalize that office has successfully provided certificate"
+                            type="button"
+                            onClick={() => handleQuickStatusUpdate(req, 'ISSUED', 'Certificate issued to student by Administrative Office.')}
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                            title="Click to issue certificate to student and close this request"
                           >
                             <BadgeCheck size={16} />
-                            <span>Finalize & Provide Certificate</span>
+                            <span>Issued</span>
                           </button>
                         )}
 
-                        {isInProgress && (
-                          <button
-                            onClick={() => handleQuickStatusUpdate(req, 'ISSUED', 'Successfully finalized and provided the requested certificate to student.')}
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                          >
-                            <CheckCircle2 size={14} />
-                            <span>Finalize & Issue</span>
-                          </button>
-                        )}
-
-                        {isReady && (
-                          <button
-                            onClick={() => handleQuickStatusUpdate(req, 'ISSUED', 'Successfully handed over certificate to student at counter.')}
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                          >
-                            <CheckCircle2 size={14} />
-                            <span>Mark Issued to Student</span>
-                          </button>
+                        {isIssued && (
+                          <span className="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-xs border border-emerald-500/30 flex items-center gap-1.5">
+                            <CheckCircle2 size={13} />
+                            <span>Issued & Closed</span>
+                          </span>
                         )}
 
                         <div className="flex items-center gap-1.5">

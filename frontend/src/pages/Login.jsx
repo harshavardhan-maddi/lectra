@@ -480,12 +480,9 @@ const Login = () => {
       setCertManualError('Please select your department.');
       return;
     }
-    if (!certManualBranch) {
-      setCertManualError(
-        certSelectedDept === 'Department of CSE(emerging Technologies)'
-          ? 'Please select your branch (AI, AIML, CS, or DS).'
-          : 'Please enter your branch.'
-      );
+    const isEmerging = certSelectedDept === 'Department of CSE(emerging Technologies)';
+    if (isEmerging && (!certManualBranch || !CSE_EMERGING_BRANCHES.includes(certManualBranch))) {
+      setCertManualError('Please select your branch (AI, AIML, CS, or DS).');
       return;
     }
     if (!certManualName.trim()) {
@@ -522,7 +519,7 @@ const Login = () => {
 
     setIsSubmittingCert(true);
     try {
-      const branchLabel = certManualBranch ? `Passed Out / Alumni (${certManualBranch})` : 'Passed Out / Alumni';
+      const branchLabel = isEmerging && certManualBranch ? `Passed Out / Alumni (${certManualBranch})` : 'Passed Out / Alumni';
       const newCert = await submitCertificateRequest({
         rollNumber: cleanRoll,
         studentName: certManualName.trim(),
@@ -1799,12 +1796,12 @@ const Login = () => {
                         </div>
                       )}
 
-                      {/* Branch Selection */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
-                          Branch *
-                        </label>
-                        {certSelectedDept === 'Department of CSE(emerging Technologies)' ? (
+                      {/* Branch Selection (ONLY for CSE Emerging Technologies) */}
+                      {certSelectedDept === 'Department of CSE(emerging Technologies)' && (
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-customText-muted dark:text-customText-mutedDark uppercase tracking-wider">
+                            Branch *
+                          </label>
                           <div className="space-y-2">
                             <div className="grid grid-cols-4 gap-2">
                               {CSE_EMERGING_BRANCHES.map((b) => (
@@ -1829,20 +1826,8 @@ const Login = () => {
                               Select your specialization branch: <strong>AI</strong>, <strong>AIML</strong>, <strong>CS</strong>, or <strong>DS</strong>
                             </p>
                           </div>
-                        ) : (
-                          <input
-                            type="text"
-                            value={certManualBranch}
-                            onChange={(e) => {
-                              setCertManualBranch(e.target.value.toUpperCase());
-                              if (certManualError) setCertManualError('');
-                            }}
-                            placeholder="Enter branch (e.g. CSE, ECE, EEE, MECH, CIVIL...)"
-                            className="glass-input text-xs sm:text-sm font-bold uppercase py-2.5 w-full tracking-wider"
-                            required
-                          />
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       {/* Student Full Name */}
                       <div>
