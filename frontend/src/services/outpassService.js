@@ -1298,10 +1298,10 @@ export const getFacultyMonthlyLeaveUsage = (facultyIdentifier, targetDateStr = n
   const remaining = Math.max(0, limit - count);
   const isLimitExceeded = count >= limit;
 
-  // On Duty (OD) permissions - Does not deduct from regular permissions count
+  // On Duty (OD) permissions - Unlimited for all staff & faculty, strictly does not deduct from 2/month regular permissions
   const odTickets = facultyMonthTickets.filter(t => t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_OD');
   const odCount = odTickets.length;
-  const isOdLimitExceeded = false; // OD is not restricted by the 1/month limit
+  const isOdLimitExceeded = false; // OD permissions are unlimited and do not affect regular 2/month quota
 
   return {
     count,

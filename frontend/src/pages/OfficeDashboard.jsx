@@ -1620,9 +1620,9 @@ const OfficeDashboard = () => {
                 </span>
               </div>
 
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-3 gap-2 text-center">
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-4 gap-2 text-center">
                 <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900">
-                  <span className="text-[9px] uppercase font-bold text-customText-muted block mb-0.5">Used</span>
+                  <span className="text-[9px] uppercase font-bold text-customText-muted block mb-0.5">Regular Used</span>
                   <span className="text-base font-black text-slate-800 dark:text-slate-200">
                     {selectedFacultyQuotaModal.quota.count}
                   </span>
@@ -1645,6 +1645,14 @@ const OfficeDashboard = () => {
                     {selectedFacultyQuotaModal.quota.remaining}
                   </span>
                 </div>
+
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                  <span className="text-[9px] uppercase font-bold text-purple-700 dark:text-purple-400 block mb-0.5">OD Used</span>
+                  <span className="text-base font-black text-purple-600 dark:text-purple-400">
+                    {selectedFacultyQuotaModal.quota.odCount || 0}
+                  </span>
+                  <span className="text-[8px] font-bold text-purple-500 block">Unlimited</span>
+                </div>
               </div>
 
               <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
@@ -1653,7 +1661,10 @@ const OfficeDashboard = () => {
                 </span>
                 <p className="text-[11px] text-customText-muted">
                   Quota cycle: <strong>{selectedFacultyQuotaModal.quota.monthName || selectedFacultyQuotaModal.quota.monthKey}</strong>.
-                  Faculty members have a standard maximum allowance of 2 permissions (1-Hour / 4:00 PM) per calendar month. On Duty (OD) permissions do not consume this monthly quota.
+                  Staff members have a standard maximum allowance of 2 regular permissions (1-Hour / 4:00 PM) per calendar month.
+                  <strong className="text-emerald-600 dark:text-emerald-400 block mt-1">
+                    On Duty (OD) permissions are UNLIMITED and do not reflect or deduct from the 2 per month permission allowance.
+                  </strong>
                 </p>
               </div>
             </div>

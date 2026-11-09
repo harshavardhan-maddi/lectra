@@ -1654,8 +1654,8 @@ const FacultyDashboard = () => {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-customText-muted">
                   OD (On Duty) Permissions
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/10 text-amber-600 border border-amber-500/30">
-                  Separate Quota
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  Unlimited
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
@@ -1665,7 +1665,7 @@ const FacultyDashboard = () => {
                 <span className="text-sm font-bold text-customText-muted">Taken this month</span>
               </div>
               <p className="text-[10px] text-customText-muted">
-                OD permissions do not cut your 2 monthly permission count.
+                OD permissions are unlimited and do not deduct from your 2 monthly permissions.
               </p>
             </div>
 
@@ -2304,10 +2304,10 @@ const FacultyDashboard = () => {
               
               {/* Quota Notice inside Modal */}
               {leaveType === 'FACULTY_OD' ? (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs flex items-center justify-between">
-                  <span className="text-amber-800 dark:text-amber-300 font-bold">On Duty (OD) Permission:</span>
-                  <span className="font-bold text-amber-700 dark:text-amber-300">
-                    Does not deduct from your 2 regular monthly permissions
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs flex items-center justify-between">
+                  <span className="text-emerald-800 dark:text-emerald-300 font-bold">On Duty (OD) Permission:</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                    Unlimited • Does not reflect or deduct from your 2 monthly permissions
                   </span>
                 </div>
               ) : (
@@ -2467,7 +2467,7 @@ const FacultyDashboard = () => {
                   </div>
                 ) : (
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
-                    <strong>On Duty (OD):</strong> Does not deduct from your 2 regular monthly permissions. Gate clearance is granted by Security upon approval.
+                    <strong>On Duty (OD):</strong> Unlimited allowance. Does not reflect or deduct from your 2 regular monthly permissions. Gate clearance is granted by Security upon approval.
                   </div>
                 )}
               </div>
