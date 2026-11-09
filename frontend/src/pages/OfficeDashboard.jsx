@@ -8,8 +8,12 @@ import {
   addCertificateTicketByOffice,
   subscribeToCertificates,
   syncOutpassesFromBackend,
-  getOfficeStaffFromSync
+  getOfficeStaffFromSync,
+  getAllOutpasses,
+  subscribeToOutpasses,
+  getFacultyMonthlyLeaveUsage
 } from '../services/outpassService';
+import { COLLEGE_DEPARTMENTS } from './Login';
 import { 
   FileText, 
   Search, 
@@ -32,14 +36,29 @@ import {
   Plus,
   BadgeCheck,
   Phone,
-  Briefcase
+  Briefcase,
+  Calendar,
+  FileSpreadsheet,
+  Download,
+  Filter,
+  Eye
 } from 'lucide-react';
 
 const OfficeDashboard = () => {
   const { user, token } = useAuth();
   
-  // Main view switcher: 'certificates' | 'staff'
+  // Main view switcher: 'certificates' | 'staff' | 'facultyPermissions'
   const [mainView, setMainView] = useState('certificates');
+
+  // Faculty Permissions Report State
+  const [outpassTickets, setOutpassTickets] = useState([]);
+  const [permFilterMode, setPermFilterMode] = useState('daily'); // 'daily' | 'range' | 'all'
+  const [permSelectedDate, setPermSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [permStartDate, setPermStartDate] = useState('');
+  const [permEndDate, setPermEndDate] = useState('');
+  const [permSelectedDept, setPermSelectedDept] = useState('ALL');
+  const [permSearchQuery, setPermSearchQuery] = useState('');
+  const [selectedFacultyQuotaModal, setSelectedFacultyQuotaModal] = useState(null);
 
   // Certificate requests state
   const [requests, setRequests] = useState([]);
@@ -192,15 +211,18 @@ const OfficeDashboard = () => {
   useEffect(() => {
     loadRequests();
     loadOfficeStaff();
+    setOutpassTickets(getAllOutpasses());
     // Live multi-device sync on mount and auto-poll every 3.5 seconds
     const refreshData = () => {
       syncOutpassesFromBackend().then(() => {
         loadRequests();
+        setOutpassTickets(getAllOutpasses());
       }).catch(() => {});
     };
     refreshData();
     const pollTimer = setInterval(refreshData, 3500);
     const unsub = subscribeToCertificates(setRequests);
+    const unsubOutpasses = subscribeToOutpasses(setOutpassTickets);
 
     const handleOfficeStaffUpdate = () => {
       loadOfficeStaff();
@@ -210,6 +232,7 @@ const OfficeDashboard = () => {
     return () => {
       clearInterval(pollTimer);
       unsub();
+      unsubOutpasses();
       window.removeEventListener('lectra_office_staff_updated', handleOfficeStaffUpdate);
     };
   }, [token]);
@@ -275,6 +298,349 @@ const OfficeDashboard = () => {
     } catch (err) {
       setActionError(err.message || 'Failed to update certificate status');
     }
+  };
+
+  // Faculty & Staff Permissions List Filter
+  const facultyPermissionTickets = useMemo(() => {
+    return outpassTickets.filter(t => {
+      if (!t) return false;
+      const isFaculty = t.applicantType === 'FACULTY' || t.applicantType === 'HOD' || t.applicantType === 'OFFICE' || t.facultyType === 'OFFICE' || t.facultyType === 'TEACHING' || t.facultyType === 'NON_TEACHING';
+      const isPermissionType = t.type === 'FACULTY_ONE_HOUR' || t.type === 'FACULTY_4PM' || t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_ONE_HOUR' || t.permissionType === 'FACULTY_4PM' || t.permissionType === 'FACULTY_OD';
+      return isFaculty || isPermissionType;
+    });
+  }, [outpassTickets]);
+
+  const filteredFacultyPermissions = useMemo(() => {
+    return facultyPermissionTickets.filter(t => {
+      // 1. Department filter
+      if (permSelectedDept !== 'ALL') {
+        const ticketDept = (t.department || '').toLowerCase();
+        const selDept = permSelectedDept.toLowerCase();
+        if (!ticketDept.includes(selDept) && !selDept.includes(ticketDept)) {
+          return false;
+        }
+      }
+
+      // 2. Date filter mode
+      const ticketDate = t.date || (t.appliedAt ? t.appliedAt.slice(0, 10) : '');
+      if (permFilterMode === 'daily') {
+        if (permSelectedDate && ticketDate !== permSelectedDate) return false;
+      } else if (permFilterMode === 'range') {
+        if (permStartDate && ticketDate < permStartDate) return false;
+        if (permEndDate && ticketDate > permEndDate) return false;
+      }
+
+      // 3. Search query
+      if (permSearchQuery.trim()) {
+        const q = permSearchQuery.toLowerCase();
+        const name = (t.facultyName || t.studentName || '').toLowerCase();
+        const empId = (t.facultyUserId || t.rollNumber || '').toLowerCase();
+        const dept = (t.department || '').toLowerCase();
+        const type = (t.type || t.permissionType || '').toLowerCase();
+        const purpose = (t.purpose || t.reason || '').toLowerCase();
+        const id = (t.id || '').toLowerCase();
+        return name.includes(q) || empId.includes(q) || dept.includes(q) || type.includes(q) || purpose.includes(q) || id.includes(q);
+      }
+
+      return true;
+    });
+  }, [facultyPermissionTickets, permFilterMode, permSelectedDate, permStartDate, permEndDate, permSelectedDept, permSearchQuery]);
+
+  // Export Faculty Permissions to CSV/Excel
+  const handleExportPermissionsExcel = () => {
+    if (filteredFacultyPermissions.length === 0) {
+      alert('No permission records found for the selected filter criteria.');
+      return;
+    }
+
+    const headers = [
+      'Sl No',
+      'Pass ID',
+      'Date',
+      'Faculty/Staff Name',
+      'Employee ID',
+      'Department',
+      'Permission Type',
+      'Leave / Out Time',
+      'In Time',
+      'Purpose / Reason',
+      'Approval Status',
+      'Remaining Monthly Leaves'
+    ];
+
+    const rows = filteredFacultyPermissions.map((t, idx) => {
+      const isOd = t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_OD';
+      const isOneHour = t.type === 'FACULTY_ONE_HOUR' || t.permissionType === 'FACULTY_ONE_HOUR';
+      const typeLabel = isOd ? 'On Duty (OD)' : isOneHour ? '1-Hour Permission' : '4:00 PM Permission';
+      
+      const facultyId = t.facultyUserId || t.facultyName || t.rollNumber;
+      const quota = getFacultyMonthlyLeaveUsage(facultyId, t.date || t.appliedAt);
+
+      const statusLabel = t.status === 'SENT_OUT'
+        ? (t.inTime ? `Returned (In: ${t.inTime})` : 'Departed / Closed')
+        : t.status === 'FACULTY_OUT'
+        ? 'Outside (Pending Return)'
+        : t.status === 'PERMISSION_GRANTED'
+        ? 'Approved (At Security Gate)'
+        : t.status === 'FORWARDED_TO_AO'
+        ? 'Awaiting AO Approval'
+        : t.status === 'FORWARDED_TO_HOD'
+        ? 'Awaiting HOD Approval'
+        : t.status === 'REJECTED'
+        ? 'Rejected'
+        : t.status || 'Pending';
+
+      return [
+        idx + 1,
+        t.id,
+        t.date || t.appliedDate || '',
+        t.facultyName || t.studentName || 'Faculty',
+        t.facultyUserId || t.rollNumber || 'N/A',
+        t.department || 'N/A',
+        typeLabel,
+        t.leaveTime || t.outTime || 'N/A',
+        t.inTime || 'N/A',
+        (t.purpose || t.reason || '').replace(/"/g, '""'),
+        statusLabel,
+        quota.remaining
+      ];
+    });
+
+    const csvContent = '\uFEFF' + [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateLabel = permFilterMode === 'daily'
+      ? (permSelectedDate || 'daily')
+      : permFilterMode === 'range'
+      ? `${permStartDate || 'start'}_to_${permEndDate || 'end'}`
+      : 'all_dates';
+    link.href = blobUrl;
+    link.setAttribute('download', `Faculty_Permissions_Report_${dateLabel}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  };
+
+  // Printable HTML Window for PDF Download
+  const handlePrintPermissionsPDF = () => {
+    if (filteredFacultyPermissions.length === 0) {
+      alert('No permission records found for the selected filter criteria to generate PDF.');
+      return;
+    }
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('Please allow popups to generate and print PDF reports.');
+      return;
+    }
+
+    const filterDescription = permFilterMode === 'daily'
+      ? `Date: ${permSelectedDate || new Date().toISOString().slice(0, 10)}`
+      : permFilterMode === 'range'
+      ? `Date Range: ${permStartDate || 'Start'} to ${permEndDate || 'End'}`
+      : 'All Recorded Dates';
+
+    const deptDescription = permSelectedDept === 'ALL' ? 'All Departments' : permSelectedDept;
+
+    const tableRows = filteredFacultyPermissions.map((t, idx) => {
+      const isOd = t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_OD';
+      const isOneHour = t.type === 'FACULTY_ONE_HOUR' || t.permissionType === 'FACULTY_ONE_HOUR';
+      const typeLabel = isOd ? 'On Duty (OD)' : isOneHour ? '1-Hour Timing' : '4:00 PM Permission';
+      
+      const facultyId = t.facultyUserId || t.facultyName || t.rollNumber;
+      const quota = getFacultyMonthlyLeaveUsage(facultyId, t.date || t.appliedAt);
+
+      const statusBadge = t.status === 'SENT_OUT'
+        ? (t.inTime ? `Returned (${t.inTime})` : 'Departed / Closed')
+        : t.status === 'FACULTY_OUT'
+        ? 'Outside (Pending Return)'
+        : t.status === 'PERMISSION_GRANTED'
+        ? 'Approved (Gate Ready)'
+        : t.status === 'REJECTED'
+        ? 'Rejected'
+        : 'Pending';
+
+      return `
+        <tr>
+          <td style="text-align:center;font-weight:600;">${idx + 1}</td>
+          <td style="font-family:monospace;font-weight:700;">${t.id}</td>
+          <td>${t.date || t.appliedDate || ''}</td>
+          <td>
+            <strong>${t.facultyName || t.studentName || 'Faculty'}</strong><br/>
+            <small style="color:#64748b;font-family:monospace;">ID: ${t.facultyUserId || t.rollNumber || 'N/A'}</small>
+          </td>
+          <td>${t.department || 'N/A'}</td>
+          <td><span style="font-weight:600;color:#0f172a;">${typeLabel}</span></td>
+          <td><strong>${t.leaveTime || t.outTime || 'N/A'}</strong></td>
+          <td>${t.inTime || '-'}</td>
+          <td style="max-width:200px;">${t.purpose || t.reason || '-'}</td>
+          <td><strong>${statusBadge}</strong></td>
+          <td style="text-align:center;font-weight:bold;color:${quota.remaining === 0 ? '#dc2626' : '#16a34a'};">${quota.remaining} / 2 left</td>
+        </tr>
+      `;
+    }).join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Faculty Permissions Official Report - Administrative Office</title>
+          <style>
+            @page {
+              size: A4 landscape;
+              margin: 12mm 10mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              color: #1e293b;
+              margin: 0;
+              padding: 10px;
+              font-size: 11px;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #0284c7;
+              padding-bottom: 10px;
+              margin-bottom: 12px;
+            }
+            .title {
+              font-size: 18px;
+              font-weight: 800;
+              color: #0369a1;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin: 0;
+            }
+            .subtitle {
+              font-size: 11px;
+              color: #475569;
+              margin: 3px 0;
+              font-weight: 600;
+            }
+            .report-name {
+              font-size: 13px;
+              font-weight: 700;
+              color: #0f172a;
+              margin-top: 6px;
+              text-transform: uppercase;
+            }
+            .meta-bar {
+              display: flex;
+              justify-content: space-between;
+              background: #f1f5f9;
+              padding: 8px 12px;
+              border-radius: 6px;
+              margin-bottom: 12px;
+              font-size: 11px;
+              font-weight: 600;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 4px;
+            }
+            th {
+              background-color: #0f172a;
+              color: #ffffff;
+              font-size: 10px;
+              text-transform: uppercase;
+              padding: 7px 6px;
+              border: 1px solid #cbd5e1;
+              text-align: left;
+            }
+            td {
+              padding: 6px;
+              border: 1px solid #e2e8f0;
+              font-size: 10.5px;
+              vertical-align: middle;
+            }
+            tr:nth-child(even) {
+              background-color: #f8fafc;
+            }
+            .footer {
+              margin-top: 24px;
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-end;
+              padding-top: 18px;
+              font-size: 11px;
+              font-weight: 600;
+            }
+            .sign-box {
+              text-align: center;
+              width: 180px;
+              border-top: 1.5px solid #0f172a;
+              padding-top: 6px;
+            }
+            @media print {
+              .no-print { display: none !important; }
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="title">Narasaraopeta Engineering College (Autonomous)</h1>
+            <p class="subtitle">Kotappakonda Road, Yellamanda (P.O), Narasaraopet - 522601, Andhra Pradesh</p>
+            <div class="report-name">Administrative Office • Faculty & Staff Permissions Log & Quota Report</div>
+          </div>
+
+          <div class="meta-bar">
+            <div><strong>Filter:</strong> ${filterDescription}</div>
+            <div><strong>Department:</strong> ${deptDescription}</div>
+            <div><strong>Total Records:</strong> ${filteredFacultyPermissions.length}</div>
+            <div><strong>Generated At:</strong> ${new Date().toLocaleString('en-GB')}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width:30px;text-align:center;">#</th>
+                <th style="width:75px;">Pass ID</th>
+                <th style="width:75px;">Date</th>
+                <th>Faculty / Staff</th>
+                <th>Department</th>
+                <th>Permission Type</th>
+                <th style="width:65px;">Out Time</th>
+                <th style="width:60px;">In Time</th>
+                <th>Stated Reason</th>
+                <th style="width:85px;">Status</th>
+                <th style="width:80px;text-align:center;">Remained</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <div>
+              <p style="margin:0;color:#64748b;font-size:10px;">Computer Generated Official Report • Administrative Office Portal</p>
+              <p style="margin:2px 0 0 0;color:#64748b;font-size:10px;">Generated by: ${user?.name || 'Administrative Office'}</p>
+            </div>
+            <div class="sign-box">
+              Verified by Administrative Officer (AO)
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWin.document.open();
+    printWin.document.write(htmlContent);
+    printWin.document.close();
   };
 
   const handleCustomStatusSubmit = async (e) => {
@@ -487,7 +853,7 @@ const OfficeDashboard = () => {
       </div>
 
       {/* Main View Navigation Switcher */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => setMainView('certificates')}
           className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer ${
@@ -498,6 +864,18 @@ const OfficeDashboard = () => {
         >
           <FileText size={16} />
           <span>Certificate Tickets ({requests.length})</span>
+        </button>
+
+        <button
+          onClick={() => setMainView('facultyPermissions')}
+          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer ${
+            mainView === 'facultyPermissions'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 scale-[1.02]'
+              : 'bg-white/80 dark:bg-slate-800/80 text-customText-muted hover:text-customText border border-slate-200 dark:border-slate-800'
+          }`}
+        >
+          <Clock size={16} />
+          <span>Faculty Permissions Report ({filteredFacultyPermissions.length})</span>
         </button>
 
         <button
@@ -837,6 +1215,456 @@ const OfficeDashboard = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* VIEW 3: FACULTY PERMISSIONS & STAFF REPORT */}
+      {mainView === 'facultyPermissions' && (
+        <div className="space-y-4">
+          {/* Filter & Export Card */}
+          <div className="glass-card p-5 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-black text-customText dark:text-customText-dark flex items-center gap-2">
+                  <Clock size={18} className="text-blue-600" />
+                  <span>Faculty & Staff Permissions Report</span>
+                </h3>
+                <p className="text-xs text-customText-muted">
+                  Audit daily permissions, filter by department or date range, check remained permission counts, and download official reports.
+                </p>
+              </div>
+
+              {/* Download Buttons (Excel & PDF) */}
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <button
+                  onClick={handleExportPermissionsExcel}
+                  disabled={filteredFacultyPermissions.length === 0}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="Download Excel Spreadsheet (.CSV)"
+                >
+                  <FileSpreadsheet size={15} />
+                  <span>Download Excel</span>
+                </button>
+
+                <button
+                  onClick={handlePrintPermissionsPDF}
+                  disabled={filteredFacultyPermissions.length === 0}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-sm flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="Generate & Download PDF"
+                >
+                  <Printer size={15} />
+                  <span>Download PDF</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-1">
+              {/* Date Filter Mode Selector */}
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-customText-muted mb-1.5">
+                  Report Mode
+                </label>
+                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setPermFilterMode('daily')}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      permFilterMode === 'daily'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-customText-muted hover:text-customText'
+                    }`}
+                  >
+                    Daily
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPermFilterMode('range')}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      permFilterMode === 'range'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-customText-muted hover:text-customText'
+                    }`}
+                  >
+                    Date Range
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPermFilterMode('all')}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      permFilterMode === 'all'
+                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-customText-muted hover:text-customText'
+                    }`}
+                  >
+                    All
+                  </button>
+                </div>
+              </div>
+
+              {/* Date Selector based on mode */}
+              {permFilterMode === 'daily' && (
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-customText-muted mb-1.5">
+                    Selected Date
+                  </label>
+                  <div className="relative">
+                    <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-customText-muted" />
+                    <input
+                      type="date"
+                      value={permSelectedDate}
+                      onChange={(e) => setPermSelectedDate(e.target.value)}
+                      className="w-full glass-input text-xs pl-8 py-2 font-medium"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {permFilterMode === 'range' && (
+                <div className="sm:col-span-1 lg:col-span-2 grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-customText-muted mb-1.5">
+                      From Date
+                    </label>
+                    <input
+                      type="date"
+                      value={permStartDate}
+                      onChange={(e) => setPermStartDate(e.target.value)}
+                      className="w-full glass-input text-xs py-2 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-customText-muted mb-1.5">
+                      To Date
+                    </label>
+                    <input
+                      type="date"
+                      value={permEndDate}
+                      onChange={(e) => setPermEndDate(e.target.value)}
+                      className="w-full glass-input text-xs py-2 font-medium"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Department Filter */}
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-customText-muted mb-1.5">
+                  Filter Department
+                </label>
+                <div className="relative">
+                  <Building size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-customText-muted" />
+                  <select
+                    value={permSelectedDept}
+                    onChange={(e) => setPermSelectedDept(e.target.value)}
+                    className="w-full glass-input text-xs pl-8 py-2 font-medium truncate"
+                  >
+                    <option value="ALL">All College Departments</option>
+                    <option value="Administrative Office">Administrative Office</option>
+                    {COLLEGE_DEPARTMENTS.map(d => (
+                      <option key={d.department} value={d.department}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Search input */}
+              <div className={permFilterMode === 'all' ? 'sm:col-span-2' : ''}>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-customText-muted mb-1.5">
+                  Search Faculty / Staff
+                </label>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-customText-muted" />
+                  <input
+                    type="text"
+                    placeholder="Search name, ID, reason, type..."
+                    value={permSearchQuery}
+                    onChange={(e) => setPermSearchQuery(e.target.value)}
+                    className="w-full glass-input text-xs pl-8 py-2 font-medium"
+                  />
+                  {permSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setPermSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-customText-muted hover:text-customText"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Stats Summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <span className="text-[10px] font-black uppercase tracking-wider text-customText-muted block mb-0.5">
+                Total Permissions
+              </span>
+              <span className="text-xl font-black text-customText dark:text-customText-dark">
+                {filteredFacultyPermissions.length}
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+              <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400 block mb-0.5">
+                1-Hour Permissions
+              </span>
+              <span className="text-xl font-black text-blue-600 dark:text-blue-400">
+                {filteredFacultyPermissions.filter(t => t.type === 'FACULTY_ONE_HOUR' || t.permissionType === 'FACULTY_ONE_HOUR').length}
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-0.5">
+                4:00 PM Permissions
+              </span>
+              <span className="text-xl font-black text-amber-600 dark:text-amber-400">
+                {filteredFacultyPermissions.filter(t => t.type === 'FACULTY_4PM' || t.permissionType === 'FACULTY_4PM').length}
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20">
+              <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-400 block mb-0.5">
+                On Duty (OD)
+              </span>
+              <span className="text-xl font-black text-purple-600 dark:text-purple-400">
+                {filteredFacultyPermissions.filter(t => t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_OD').length}
+              </span>
+            </div>
+          </div>
+
+          {/* Permissions Table List */}
+          <div className="glass-card rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+            {filteredFacultyPermissions.length === 0 ? (
+              <div className="p-12 text-center space-y-2">
+                <Clock size={36} className="mx-auto text-customText-muted opacity-40" />
+                <h4 className="text-sm font-black text-customText dark:text-customText-dark">
+                  No faculty permission records found
+                </h4>
+                <p className="text-xs text-customText-muted max-w-sm mx-auto">
+                  Try adjusting your date selection, department filter, or search term above.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-black tracking-wider text-customText-muted">
+                      <th className="py-3 px-3.5 text-center">#</th>
+                      <th className="py-3 px-3.5">Date & ID</th>
+                      <th className="py-3 px-3.5">Faculty / Staff Member</th>
+                      <th className="py-3 px-3.5">Department</th>
+                      <th className="py-3 px-3.5">Permission Type</th>
+                      <th className="py-3 px-3.5">Timings (Out / In)</th>
+                      <th className="py-3 px-3.5">Stated Purpose</th>
+                      <th className="py-3 px-3.5">Status</th>
+                      <th className="py-3 px-3.5 text-center">Remained Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredFacultyPermissions.map((t, idx) => {
+                      const isOd = t.type === 'FACULTY_OD' || t.permissionType === 'FACULTY_OD';
+                      const isOneHour = t.type === 'FACULTY_ONE_HOUR' || t.permissionType === 'FACULTY_ONE_HOUR';
+                      const facultyId = t.facultyUserId || t.facultyName || t.rollNumber;
+                      const quota = getFacultyMonthlyLeaveUsage(facultyId, t.date || t.appliedAt);
+
+                      return (
+                        <tr key={t.id || idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors">
+                          <td className="py-3 px-3.5 text-center font-bold text-customText-muted text-[11px]">
+                            {idx + 1}
+                          </td>
+
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            <span className="font-bold text-customText dark:text-customText-dark block">
+                              {t.date || t.appliedDate || 'N/A'}
+                            </span>
+                            <span className="font-mono text-[10px] text-customText-muted">
+                              {t.id}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3.5">
+                            <span className="font-black text-customText dark:text-customText-dark block">
+                              {t.facultyName || t.studentName || 'Faculty Member'}
+                            </span>
+                            <span className="font-mono text-[10px] text-blue-600 dark:text-blue-400">
+                              ID: {t.facultyUserId || t.rollNumber || 'N/A'}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3.5">
+                            <span className="text-[11px] font-medium text-customText-muted block max-w-[160px] truncate" title={t.department}>
+                              {t.department || 'Administrative Office'}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black inline-block ${
+                              isOd 
+                                ? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20'
+                                : isOneHour
+                                ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20'
+                                : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+                            }`}>
+                              {isOd ? 'On Duty (OD)' : isOneHour ? '1-Hour Timing' : '4:00 PM Permission'}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            <div className="text-[11px]">
+                              <span className="font-bold text-customText dark:text-customText-dark">
+                                Out: {t.leaveTime || t.outTime || 'N/A'}
+                              </span>
+                              {t.inTime && (
+                                <span className="block text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                  In: {t.inTime}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3.5">
+                            <span className="text-[11px] text-customText dark:text-customText-dark block max-w-[180px] truncate" title={t.purpose || t.reason}>
+                              {t.purpose || t.reason || 'Personal / Official work'}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            {t.status === 'SENT_OUT' ? (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] border border-emerald-500/20">
+                                {t.inTime ? 'Returned' : 'Closed'}
+                              </span>
+                            ) : t.status === 'FACULTY_OUT' ? (
+                              <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold text-[10px] border border-amber-500/20">
+                                Outside
+                              </span>
+                            ) : t.status === 'PERMISSION_GRANTED' ? (
+                              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-400 font-bold text-[10px] border border-blue-500/20">
+                                Gate Ready
+                              </span>
+                            ) : t.status === 'REJECTED' ? (
+                              <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-400 font-bold text-[10px] border border-rose-500/20">
+                                Rejected
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-customText-muted font-bold text-[10px]">
+                                {t.status || 'Pending'}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedFacultyQuotaModal({ ticket: t, quota })}
+                              className={`px-2 py-1 rounded-lg text-[11px] font-black inline-flex items-center gap-1 cursor-pointer transition-all hover:scale-105 ${
+                                quota.remaining === 0
+                                  ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
+                                  : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                              }`}
+                              title="Click to view detailed quota breakdown"
+                            >
+                              <span>{quota.remaining} / 2 left</span>
+                              <Eye size={11} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: FACULTY MONTHLY REMAINED QUOTA DETAIL MODAL */}
+      {selectedFacultyQuotaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in modal-wrapper-fullscreen">
+          <div className="glass-card w-full max-w-md p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl space-y-4 modal-card-fullscreen">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Clock size={18} className="text-blue-600" />
+                <h3 className="text-base font-black text-customText dark:text-customText-dark">
+                  Faculty Leave Quota Details
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedFacultyQuotaModal(null)}
+                className="p-1 rounded-lg text-customText-muted hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
+              <div>
+                <span className="text-[10px] text-customText-muted uppercase block font-bold">Faculty Member</span>
+                <span className="font-black text-sm text-customText dark:text-customText-dark">
+                  {selectedFacultyQuotaModal.ticket.facultyName || selectedFacultyQuotaModal.ticket.studentName}
+                </span>
+                <span className="font-mono text-[10px] text-blue-600 dark:text-blue-400 block">
+                  Employee ID: {selectedFacultyQuotaModal.ticket.facultyUserId || selectedFacultyQuotaModal.ticket.rollNumber || 'N/A'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-customText-muted uppercase block font-bold">Department</span>
+                <span className="font-semibold text-customText dark:text-customText-dark">
+                  {selectedFacultyQuotaModal.ticket.department || 'Administrative Office'}
+                </span>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-3 gap-2 text-center">
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900">
+                  <span className="text-[9px] uppercase font-bold text-customText-muted block mb-0.5">Used</span>
+                  <span className="text-base font-black text-slate-800 dark:text-slate-200">
+                    {selectedFacultyQuotaModal.quota.count}
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                  <span className="text-[9px] uppercase font-bold text-blue-700 dark:text-blue-400 block mb-0.5">Monthly Limit</span>
+                  <span className="text-base font-black text-blue-600 dark:text-blue-400">
+                    2
+                  </span>
+                </div>
+
+                <div className={`p-2.5 rounded-xl ${
+                  selectedFacultyQuotaModal.quota.remaining === 0
+                    ? 'bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400'
+                    : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  <span className="text-[9px] uppercase font-bold block mb-0.5">Remained</span>
+                  <span className="text-base font-black">
+                    {selectedFacultyQuotaModal.quota.remaining}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] text-customText-muted uppercase block font-bold mb-1">
+                  Month Cycle & Notes
+                </span>
+                <p className="text-[11px] text-customText-muted">
+                  Quota cycle: <strong>{selectedFacultyQuotaModal.quota.monthName || selectedFacultyQuotaModal.quota.monthKey}</strong>.
+                  Faculty members have a standard maximum allowance of 2 permissions (1-Hour / 4:00 PM) per calendar month. On Duty (OD) permissions do not consume this monthly quota.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSelectedFacultyQuotaModal(null)}
+              className="w-full btn-secondary py-2.5 text-xs font-bold"
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
 
