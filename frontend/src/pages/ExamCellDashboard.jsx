@@ -74,6 +74,11 @@ const ExamCellDashboard = () => {
   // === Exam Cell Staff Directory ===
   const [examCellStaffList, setExamCellStaffList] = useState([]);
   const [staffLoading, setStaffLoading] = useState(false);
+  // === Bulk CSV Upload state ===
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [bulkCsvText, setBulkCsvText] = useState('');
+  const [bulkError, setBulkError] = useState('');
+  const [bulkSuccess, setBulkSuccess] = useState('');
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
