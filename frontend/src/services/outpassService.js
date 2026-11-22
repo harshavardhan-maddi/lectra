@@ -5,6 +5,8 @@ const STORAGE_KEY = 'lectra_outpass_tickets';
 const STUDENTS_CACHE_KEY = 'lectra_outpass_students_directory';
 const SYS_CONFIG_OFFICE_STAFF_ID = 'SYS_CONFIG_OFFICE_STAFF';
 const OFFICE_STAFF_CACHE_KEY = 'lectra_office_staff_registry';
+const SYS_CONFIG_EXAM_CELL_STAFF_ID = 'SYS_CONFIG_EXAM_CELL_STAFF';
+const EXAM_CELL_STAFF_CACHE_KEY = 'lectra_exam_cell_staff_registry';
 
 // ==========================================
 // DATE & TIME HELPERS (Asia/Kolkata timezone)
@@ -124,6 +126,21 @@ export const isHodDirectlyAcceptableCertificate = (certName = '') => {
     lower.includes('custodian') ||
     lower.includes('bus pass') ||
     lower.includes('bonafi')
+  );
+};
+
+// Check if certificate is a Marks Memo / Grade Sheet / Transcript (routes from HOD to Exam Cell)
+export const isMarksMemoCertificate = (certName = '') => {
+  if (!certName || typeof certName !== 'string') return false;
+  const lower = certName.toLowerCase();
+  return (
+    lower.includes('marks') ||
+    lower.includes('memo') ||
+    lower.includes('grade') ||
+    lower.includes('transcript') ||
+    lower.includes('od (original degree)') ||
+    lower.includes('cmm') ||
+    lower.includes('pc (provisional')
   );
 };
 
@@ -582,6 +599,27 @@ export const syncOutpassesFromBackend = async () => {
             });
             localStorage.setItem('lectra_faculty_metadata', JSON.stringify(Array.from(metaMap.values())));
             window.dispatchEvent(new CustomEvent('lectra_office_staff_updated', { detail: sysOffice.staff }));
+          } catch (e) {}
+        }
+
+        // Sync exam cell staff registry across all campus devices
+        const sysExamCell = data.tickets.find(t => t && t.id === SYS_CONFIG_EXAM_CELL_STAFF_ID);
+        if (sysExamCell && Array.isArray(sysExamCell.staff)) {
+          try {
+            localStorage.setItem(EXAM_CELL_STAFF_CACHE_KEY, JSON.stringify(sysExamCell.staff));
+            const cachedMeta = localStorage.getItem('lectra_faculty_metadata');
+            const localMeta = cachedMeta ? JSON.parse(cachedMeta) : [];
+            const metaMap = new Map();
+            localMeta.forEach(m => {
+              const k = (m.empid || m.name || '').toLowerCase();
+              if (k) metaMap.set(k, m);
+            });
+            sysExamCell.staff.forEach(s => {
+              const k = (s.empid || s.name || '').toLowerCase();
+              if (k) metaMap.set(k, { ...metaMap.get(k), ...s });
+            });
+            localStorage.setItem('lectra_faculty_metadata', JSON.stringify(Array.from(metaMap.values())));
+            window.dispatchEvent(new CustomEvent('lectra_exam_cell_staff_updated', { detail: sysExamCell.staff }));
           } catch (e) {}
         }
 
@@ -2483,8 +2521,360 @@ export const aoRejectCertificate = async (requestId, { aoName = 'Administrative 
 };
 
 // ===================================================
-// OFFICE STAFF REGISTRY — Multi-Device Sync via Outpass Tickets Store
+// HOD FORWARD CERTIFICATE TO EXAM CELL (Marks Memos, Transcripts, Grade Sheets)
 // ===================================================
+
+export const hodForwardCertificateToExamCell = async (requestId, { hodName = 'Head of Department (HOD)', remarks = 'Verified and forwarded to Examination Cell for Marks Memo / Certificate issuance.' } = {}) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = 'FORWARDED_TO_EXAM_CELL';
+  req.hodAction = {
+    status: 'FORWARDED_TO_EXAM_CELL',
+    forwarded: true,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    hodName
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+// Exam Cell status update
+export const examCellUpdateCertificateStatus = async (requestId, { status, remarks = '', processedBy = 'Examination Cell' }) => {
+  const requests = getAllCertificateRequests();
+  const req = requests.find(r => r.id === requestId);
+  if (!req) throw new Error('Certificate request not found');
+
+  const now = new Date();
+  req.status = status;
+  req.examCellAction = {
+    status,
+    updatedAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks,
+    processedBy
+  };
+
+  await saveCertificateRequests(requests);
+  return req;
+};
+
+// ===================================================
+// EXAM CELL HEAD & STAFF PERMISSIONS
+// ===================================================
+
+// Exam Cell Head applies for leave/permission -> Routes directly to AO (like HOD)
+export const applyExamCellHeadLeave = async ({
+  headUserId,
+  headName,
+  department = 'Examination Cell',
+  type = 'FACULTY_ONE_HOUR',
+  date,
+  leaveTime,
+  purpose
+}) => {
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Please specify a valid and proper purpose for your request.');
+  }
+
+  const selectedDate = date || new Date().toISOString().slice(0, 10);
+  const cleanDepartment = 'Examination Cell';
+
+  if (type !== 'FACULTY_OD') {
+    const quota = getFacultyMonthlyLeaveUsage(headUserId || headName || 'EXAM_CELL_HEAD', selectedDate);
+    if (quota.isLimitExceeded) {
+      throw new Error("your limit for leaves has been completed , consult principal.");
+    }
+  }
+
+  let finalLeaveTime = leaveTime;
+  if (type === 'FACULTY_4PM') {
+    finalLeaveTime = '04:00 PM';
+  } else if (type === 'FACULTY_OD') {
+    finalLeaveTime = leaveTime && leaveTime.trim() ? leaveTime.trim() : 'On Duty (Full Day)';
+  } else if (type === 'FACULTY_ONE_HOUR') {
+    if (!leaveTime || !leaveTime.trim()) {
+      throw new Error('Please specify what time you need to be out for the 1-hour permission.');
+    }
+    finalLeaveTime = leaveTime.trim();
+  } else if (!finalLeaveTime || !finalLeaveTime.trim()) {
+    finalLeaveTime = '04:00 PM';
+  }
+
+  const now = new Date();
+  const dateCompact = selectedDate.replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const prefix = type === 'FACULTY_4PM' ? 'NEC-ECH-4PM' : type === 'FACULTY_OD' ? 'NEC-ECH-OD' : 'NEC-ECH-1HR';
+  const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
+
+  const newTicket = {
+    id: ticketId,
+    applicantType: 'EXAM_CELL_HEAD',
+    facultyType: 'EXAM_CELL',
+    role: 'EXAM_CELL',
+    type,
+    permissionType: type,
+    facultyId: headUserId || 'EXAM_CELL_HEAD',
+    facultyUserId: headUserId || 'EXAM_CELL_HEAD',
+    facultyName: headName || 'Exam Cell Head',
+    department: cleanDepartment,
+    date: selectedDate,
+    leaveTime: finalLeaveTime,
+    outTime: finalLeaveTime,
+    purpose: purpose.trim(),
+    reason: purpose.trim(),
+    destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : type === 'FACULTY_OD' ? 'On Duty (OD)' : '1-Hour Permission',
+    rollNumber: headUserId || 'EXAM_CELL_HEAD',
+    studentName: headName || 'Exam Cell Head',
+    section: cleanDepartment,
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    status: 'FORWARDED_TO_AO',
+    pendingReturn: false,
+    returned: false,
+    closed: false,
+    inTime: null,
+    hodAction: null,
+    aoAction: null,
+    watchmanAction: null
+  };
+
+  const currentTickets = getAllOutpasses();
+  const updatedLocal = [newTicket, ...currentTickets.filter(t => t.id !== newTicket.id)];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLocal));
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: updatedLocal }));
+
+  try {
+    const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({ tickets: [newTicket] })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
+      }
+    }
+  } catch (e) {
+    console.warn('Network sync note on Exam Cell Head leave submit:', e);
+  }
+
+  return newTicket;
+};
+
+// Exam Cell Staff applies for leave/permission -> Routes to Exam Cell Head (FORWARDED_TO_EXAM_CELL)
+export const applyExamCellStaffLeave = async ({
+  staffUserId,
+  staffName,
+  department = 'Examination Cell',
+  type = 'FACULTY_ONE_HOUR',
+  date,
+  leaveTime,
+  purpose
+}) => {
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Please specify a valid and proper purpose for your request.');
+  }
+
+  const selectedDate = date || new Date().toISOString().slice(0, 10);
+  const cleanDepartment = 'Examination Cell';
+
+  if (type !== 'FACULTY_OD') {
+    const quota = getFacultyMonthlyLeaveUsage(staffUserId || staffName || 'EXAM_CELL_STAFF', selectedDate);
+    if (quota.isLimitExceeded) {
+      throw new Error("your limit for leaves has been completed , consult principal.");
+    }
+  }
+
+  let finalLeaveTime = leaveTime;
+  if (type === 'FACULTY_4PM') {
+    finalLeaveTime = '04:00 PM';
+  } else if (type === 'FACULTY_OD') {
+    finalLeaveTime = leaveTime && leaveTime.trim() ? leaveTime.trim() : 'On Duty (Full Day)';
+  } else if (type === 'FACULTY_ONE_HOUR') {
+    if (!leaveTime || !leaveTime.trim()) {
+      throw new Error('Please specify what time you need to be out for the 1-hour permission.');
+    }
+    finalLeaveTime = leaveTime.trim();
+  } else if (!finalLeaveTime || !finalLeaveTime.trim()) {
+    finalLeaveTime = '04:00 PM';
+  }
+
+  const now = new Date();
+  const dateCompact = selectedDate.replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const prefix = type === 'FACULTY_4PM' ? 'NEC-ECS-4PM' : type === 'FACULTY_OD' ? 'NEC-ECS-OD' : 'NEC-ECS-1HR';
+  const ticketId = `${prefix}-${dateCompact}-${randomNum}`;
+
+  const newTicket = {
+    id: ticketId,
+    applicantType: 'EXAM_CELL_STAFF',
+    facultyType: 'EXAM_CELL',
+    role: 'EXAM_CELL_STAFF',
+    type,
+    permissionType: type,
+    facultyId: staffUserId || 'EXAM_CELL_STAFF',
+    facultyUserId: staffUserId || 'EXAM_CELL_STAFF',
+    facultyName: staffName || 'Exam Cell Staff',
+    department: cleanDepartment,
+    date: selectedDate,
+    leaveTime: finalLeaveTime,
+    outTime: finalLeaveTime,
+    purpose: purpose.trim(),
+    reason: purpose.trim(),
+    destination: type === 'FACULTY_4PM' ? 'Departure at 4:00 PM' : type === 'FACULTY_OD' ? 'On Duty (OD)' : '1-Hour Permission',
+    rollNumber: staffUserId || 'EXAM_CELL_STAFF',
+    studentName: staffName || 'Exam Cell Staff',
+    section: cleanDepartment,
+    appliedAt: now.toISOString(),
+    appliedDate: now.toLocaleDateString('en-GB'),
+    appliedTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    status: 'FORWARDED_TO_EXAM_CELL',
+    pendingReturn: false,
+    returned: false,
+    closed: false,
+    inTime: null,
+    examCellAction: null,
+    aoAction: null,
+    watchmanAction: null
+  };
+
+  const currentTickets = getAllOutpasses();
+  const updatedLocal = [newTicket, ...currentTickets.filter(t => t.id !== newTicket.id)];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLocal));
+  window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: updatedLocal }));
+
+  try {
+    const res = await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({ tickets: [newTicket] })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tickets));
+        window.dispatchEvent(new CustomEvent('lectra_outpass_updated', { detail: data.tickets }));
+      }
+    }
+  } catch (e) {
+    console.warn('Network sync note on Exam Cell Staff leave submit:', e);
+  }
+
+  return newTicket;
+};
+
+// Exam Cell Head approves Staff leave -> Sets PERMISSION_GRANTED and forwards to security
+export const examCellApproveStaffLeave = async (ticketId, { examCellHeadName = 'Exam Cell Head', remarks = 'Permission accepted by Exam Cell Head. Forwarded to campus security.', timeToLeave = null } = {}) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) throw new Error('Exam cell leave application not found');
+
+  const now = new Date();
+  ticket.status = 'PERMISSION_GRANTED'; // Forwarded to Security
+  if (timeToLeave) {
+    ticket.leaveTime = timeToLeave;
+    ticket.outTime = timeToLeave;
+  }
+
+  const isOneHour = ticket.type === 'FACULTY_ONE_HOUR';
+  const typeDesc = isOneHour ? `1-hour permission (Out: ${ticket.leaveTime})` : '4:00 PM permission';
+
+  ticket.examCellAction = {
+    granted: true,
+    approvedAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    remarks: remarks || `Permission accepted for ${typeDesc}. Forwarded to security.`,
+    examCellHeadName,
+    timeToLeave: ticket.leaveTime
+  };
+
+  await saveOutpasses(tickets);
+  return ticket;
+};
+
+// Exam Cell Head rejects Staff leave
+export const examCellRejectStaffLeave = async (ticketId, { examCellHeadName = 'Exam Cell Head', reason = 'Permission denied by Exam Cell Head.' } = {}) => {
+  const tickets = getAllOutpasses();
+  const ticket = tickets.find(t => t.id === ticketId);
+  if (!ticket) throw new Error('Exam cell leave application not found');
+
+  const now = new Date();
+  ticket.status = 'REJECTED';
+  ticket.rejectionStage = 'EXAM_CELL';
+  ticket.rejectionReason = reason;
+  ticket.examCellAction = {
+    granted: false,
+    actionAt: now.toISOString(),
+    displayTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    displayDate: now.toLocaleDateString('en-GB'),
+    reason,
+    examCellHeadName
+  };
+
+  await saveOutpasses(tickets);
+  return ticket;
+};
+
+// ===================================================
+// EXAM CELL STAFF REGISTRY — Multi-Device Sync
+// ===================================================
+
+export const getExamCellStaffFromSync = () => {
+  try {
+    const raw = localStorage.getItem(EXAM_CELL_STAFF_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const saveExamCellStaffToSync = async (staffList) => {
+  if (!Array.isArray(staffList)) return;
+  try {
+    localStorage.setItem(EXAM_CELL_STAFF_CACHE_KEY, JSON.stringify(staffList));
+    window.dispatchEvent(new CustomEvent('lectra_exam_cell_staff_updated', { detail: staffList }));
+
+    const syncTicket = {
+      id: SYS_CONFIG_EXAM_CELL_STAFF_ID,
+      applicantType: 'SYSTEM_CONFIG',
+      type: 'EXAM_CELL_STAFF_REGISTRY',
+      staff: staffList,
+      updatedAt: new Date().toISOString()
+    };
+
+    const rawAll = localStorage.getItem(STORAGE_KEY);
+    const allTickets = rawAll ? JSON.parse(rawAll) : [];
+    const filtered = allTickets.filter(t => t && t.id !== SYS_CONFIG_EXAM_CELL_STAFF_ID);
+    filtered.push(syncTicket);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+
+    await fetch(`/api/student-attendance/outpass/tickets?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      body: JSON.stringify({ tickets: [syncTicket] })
+    });
+  } catch (e) {
+    console.warn('Exam cell staff sync warning:', e);
+  }
+};
 
 export const getOfficeStaffFromSync = () => {
   try {

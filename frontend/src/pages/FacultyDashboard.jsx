@@ -36,6 +36,8 @@ import {
   applyFacultyLeave, 
   applyHodLeave,
   applyOfficeLeave,
+  applyExamCellHeadLeave,
+  applyExamCellStaffLeave,
   getFacultyMonthlyLeaveUsage, 
   getFacultyLeaveHistory, 
   subscribeToOutpasses,
@@ -98,16 +100,36 @@ const FacultyDashboard = () => {
     }
   }, [user]);
 
+  // Exam Cell Head detection
+  const isExamCellHead = React.useMemo(() => {
+    return user?.role === 'EXAM_CELL' || user?.role === 'EXAM_CELL_HEAD' || user?.facultyType === 'EXAM_CELL_HEAD';
+  }, [user]);
+
+  // Exam Cell Staff detection: leaves route to Exam Cell Head
+  const isExamCellStaff = React.useMemo(() => {
+    if (user?.role === 'EXAM_CELL_STAFF' || user?.facultyType === 'EXAM_CELL_STAFF') return true;
+    try {
+      const metaList = JSON.parse(localStorage.getItem('lectra_exam_cell_staff_registry') || '[]');
+      const meta = metaList.find(m => 
+        (m.empid && String(m.empid).toLowerCase() === String(user?.userId).toLowerCase()) ||
+        (m.name && String(m.name).trim().toLowerCase() === String(user?.name).trim().toLowerCase())
+      );
+      return Boolean(meta);
+    } catch (e) {
+      return false;
+    }
+  }, [user]);
+
   // HOD user detection: HOD applies permissions here with routing to AO -> Security
   const isHodUser = user?.role === 'HOD' || user?.role === 'SUB_ADMIN';
 
   // STRICT REQUIREMENT: Except role Teaching, no other role can hit attendance, view call logs, make calls or mentorship! They only can apply leave.
   const isTeachingFaculty = React.useMemo(() => {
     if (user?.role !== 'FACULTY') return false;
-    if (isNonTeaching || isOfficeStaff || isHodUser) return false;
-    if (user?.facultyType === 'NON_TEACHING' || user?.facultyType === 'OFFICE') return false;
+    if (isNonTeaching || isOfficeStaff || isHodUser || isExamCellHead || isExamCellStaff) return false;
+    if (user?.facultyType === 'NON_TEACHING' || user?.facultyType === 'OFFICE' || user?.facultyType === 'EXAM_CELL' || user?.facultyType === 'EXAM_CELL_STAFF' || user?.facultyType === 'EXAM_CELL_HEAD') return false;
     return true;
-  }, [user, isNonTeaching, isOfficeStaff, isHodUser]);
+  }, [user, isNonTeaching, isOfficeStaff, isHodUser, isExamCellHead, isExamCellStaff]);
 
   // All non-teaching roles are bypassed from classroom attendance, calls, and mentorship
   const isBypassedAttendance = !isTeachingFaculty;
@@ -239,8 +261,8 @@ const FacultyDashboard = () => {
   const handleAssignSelfAsMentor = async () => {
     setMentorAssignError('');
     setMentorAssignSuccess('');
-    if (isNonTeaching || isOfficeStaff) {
-      setMentorAssignError('Non-teaching and office staff cannot be assigned as class mentors.');
+    if (isNonTeaching || isOfficeStaff || isExamCellHead || isExamCellStaff) {
+      setMentorAssignError('Non-teaching, office, and exam cell staff cannot be assigned as class mentors.');
       return;
     }
     if (!selectedSectionToAssign) {
@@ -350,6 +372,28 @@ const FacultyDashboard = () => {
           purpose: leavePurpose
         });
         setLeaveSuccess(`HOD permission request submitted! Ref ID: ${ticket.id}. Forwarded to Administrative Officer (AO) for approval.`);
+      } else if (isExamCellHead) {
+        ticket = await applyExamCellHeadLeave({
+          headUserId: user?.userId || user?.name || 'EXAM_CELL_HEAD',
+          headName: user?.name || 'Exam Cell Head',
+          department: facultyDept || 'Examination Cell',
+          type: leaveType,
+          date: leaveDate || todayDate,
+          leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveType === 'FACULTY_OD' ? (leaveTime || 'On Duty (Full Day)') : leaveTime,
+          purpose: leavePurpose
+        });
+        setLeaveSuccess(`Exam Cell Head permission request submitted! Ref ID: ${ticket.id}. Forwarded to Administrative Officer (AO) for approval.`);
+      } else if (isExamCellStaff) {
+        ticket = await applyExamCellStaffLeave({
+          staffUserId: user?.userId || user?.name || 'EXAM_CELL_STAFF',
+          staffName: user?.name || 'Exam Cell Staff',
+          department: facultyDept || 'Examination Cell',
+          type: leaveType,
+          date: leaveDate || todayDate,
+          leaveTime: leaveType === 'FACULTY_4PM' ? '04:00 PM' : leaveType === 'FACULTY_OD' ? (leaveTime || 'On Duty (Full Day)') : leaveTime,
+          purpose: leavePurpose
+        });
+        setLeaveSuccess(`Exam Cell staff permission request submitted! Ref ID: ${ticket.id}. Forwarded to Exam Cell Head for approval.`);
       } else if (isOfficeStaff) {
         ticket = await applyOfficeLeave({
           staffUserId: user?.userId || user?.name || 'OFFICE',
@@ -542,8 +586,8 @@ const FacultyDashboard = () => {
 
   // Submit Bulk Attendance
   const handleSaveAttendance = async () => {
-    if (isNonTeaching || isOfficeStaff) {
-      setError('Non-teaching and office staff cannot submit student attendance.');
+    if (isNonTeaching || isOfficeStaff || isExamCellHead || isExamCellStaff) {
+      setError('Non-teaching, office, and exam cell staff cannot submit student attendance.');
       return;
     }
     setSavingAttendance(true);

@@ -79,8 +79,10 @@ import {
   hodAcceptCertificate,
   hodForwardCertificateToAO,
   hodForwardCertificateToOffice,
+  hodForwardCertificateToExamCell,
   hodRejectCertificate,
-  isHodDirectlyAcceptableCertificate
+  isHodDirectlyAcceptableCertificate,
+  isMarksMemoCertificate
 } from '../services/outpassService';
 import {
   exportOverallData,
@@ -561,6 +563,20 @@ const Dashboard = ({ initialTab }) => {
       setTimeout(() => setCertActionSuccess(''), 4500);
     } catch (err) {
       setCertActionError(err.message || 'Failed to forward certificate to Office');
+    }
+  };
+
+  const handleForwardCertToExamCellHOD = async (cert) => {
+    try {
+      setCertActionError('');
+      await hodForwardCertificateToExamCell(cert.id, {
+        hodName: user?.name || 'Head of Department (HOD)',
+        remarks: 'Verified by HOD and forwarded to Examination Cell for Marks Memo / Certificate issuance.'
+      });
+      setCertActionSuccess(`Marks memo request for ${cert.studentName} (${cert.certificateName}) forwarded to Examination Cell!`);
+      setTimeout(() => setCertActionSuccess(''), 4500);
+    } catch (err) {
+      setCertActionError(err.message || 'Failed to forward certificate to Exam Cell');
     }
   };
 
@@ -2712,6 +2728,7 @@ const Dashboard = ({ initialTab }) => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {deptCerts.map((cert) => {
                     const isDirectAccept = isHodDirectlyAcceptableCertificate(cert.certificateName);
+                    const isMemo = isMarksMemoCertificate(cert.certificateName);
                     return (
                       <div
                         key={cert.id}
@@ -2727,6 +2744,11 @@ const Dashboard = ({ initialTab }) => {
                                 <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase border border-emerald-500/30 flex items-center gap-1">
                                   <BadgeCheck size={11} />
                                   HOD Direct Accept Allowed
+                                </span>
+                              ) : isMemo ? (
+                                <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-700 dark:text-purple-300 font-black text-[10px] uppercase border border-purple-500/30 flex items-center gap-1">
+                                  <GraduationCap size={11} />
+                                  Exam Cell Forward
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-black text-[10px] uppercase border border-indigo-500/30 flex items-center gap-1">
@@ -2780,21 +2802,36 @@ const Dashboard = ({ initialTab }) => {
                           <button
                             type="button"
                             onClick={() => handleAcceptCertHOD(cert)}
-                            className="flex-1 min-w-[140px] py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+                            className="flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
                             title="Directly accept and close with completed status"
                           >
                             <BadgeCheck size={15} />
                             <span>Accept (Completed)</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleForwardCertToAOHOD(cert)}
-                            className="flex-1 min-w-[140px] py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer active:scale-95"
-                            title="Forward request to Administrative Officer (AO)"
-                          >
-                            <Send size={15} />
-                            <span>Forward to AO</span>
-                          </button>
+                          
+                          {/* If Marks Memo, show Forward to Exam Cell; otherwise Forward to AO */}
+                          {isMemo ? (
+                            <button
+                              type="button"
+                              onClick={() => handleForwardCertToExamCellHOD(cert)}
+                              className="flex-1 min-w-[140px] py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/20 transition-all cursor-pointer active:scale-95"
+                              title="Forward marks memo request to Examination Cell"
+                            >
+                              <GraduationCap size={15} />
+                              <span>Forward to Exam Cell</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleForwardCertToAOHOD(cert)}
+                              className="flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer active:scale-95"
+                              title="Forward request to Administrative Officer (AO)"
+                            >
+                              <Send size={15} />
+                              <span>Forward to AO</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={() => handleRejectCertHOD(cert)}

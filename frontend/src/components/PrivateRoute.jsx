@@ -38,6 +38,8 @@ const PrivateRoute = ({ children, allowedRoles }) => {
       defaultRoute = '/ao-dashboard';
     } else if (user?.role === 'OFFICE') {
       defaultRoute = '/office-dashboard';
+    } else if (user?.role === 'EXAM_CELL') {
+      defaultRoute = '/exam-cell-dashboard';
     } else if (user?.role === 'HOD' || user?.role === 'SUB_ADMIN' || user?.role === 'SUPER_ADMIN') {
       defaultRoute = '/dashboard';
     }

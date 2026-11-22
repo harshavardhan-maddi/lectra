@@ -18,6 +18,7 @@ import FacultyDashboard from './pages/FacultyDashboard';
 import WatchmanDashboard from './pages/WatchmanDashboard';
 import AODashboard from './pages/AODashboard';
 import OfficeDashboard from './pages/OfficeDashboard';
+import ExamCellDashboard from './pages/ExamCellDashboard';
 import PWAUpdateNotification from './components/PWAUpdateNotification';
 import { ToastProvider } from './context/ToastContext';
 import CookieConsentBanner from './components/CookieConsentBanner';
@@ -45,6 +46,9 @@ const HomeRedirect = () => {
   }
   if (user.role === 'OFFICE') {
     return <Navigate to="/office-dashboard" replace />;
+  }
+  if (user.role === 'EXAM_CELL') {
+    return <Navigate to="/exam-cell-dashboard" replace />;
   }
   if (user.role === 'HOD' || user.role === 'SUB_ADMIN' || user.role === 'SUPER_ADMIN') {
     return <Navigate to="/dashboard" replace />;
@@ -125,6 +129,18 @@ const AppRoutes = () => {
           <PrivateRoute allowedRoles={['OFFICE', 'SUPER_ADMIN']}>
             <Layout>
               <OfficeDashboard />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Protected Examination Cell Routes */}
+      <Route
+        path="/exam-cell-dashboard"
+        element={
+          <PrivateRoute allowedRoles={['EXAM_CELL', 'SUPER_ADMIN']}>
+            <Layout>
+              <ExamCellDashboard />
             </Layout>
           </PrivateRoute>
         }

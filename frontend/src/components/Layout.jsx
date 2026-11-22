@@ -277,6 +277,12 @@ const Layout = ({ children }) => {
       { name: 'Pending Requests', path: '/office-dashboard?tab=PENDING', icon: Clock },
       { name: 'Ready for Collection', path: '/office-dashboard?tab=READY', icon: CheckCircle2 }
     );
+  } else if (user?.role === 'EXAM_CELL') {
+    navLinks.push(
+      { name: 'Exam Cell Portal', path: '/exam-cell-dashboard', icon: FileText },
+      { name: 'Staff Permissions', path: '/exam-cell-dashboard?tab=staff', icon: Clock },
+      { name: 'Marks Memos', path: '/exam-cell-dashboard?tab=memos', icon: GraduationCap }
+    );
   } else if (user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') {
     navLinks.push(
       { name: 'Gate Exit Clearance', path: '/watchman-dashboard', icon: DoorOpen },
@@ -347,6 +353,12 @@ const Layout = ({ children }) => {
         { name: 'Certificates Portal', shortName: 'Portal', path: '/office-dashboard', icon: FileText },
         { name: 'Pending', shortName: 'Pending', path: '/office-dashboard?tab=PENDING', icon: Clock },
         { name: 'Ready', shortName: 'Ready', path: '/office-dashboard?tab=READY', icon: CheckCircle2 }
+      );
+    } else if (user?.role === 'EXAM_CELL') {
+      items.push(
+        { name: 'Exam Cell Portal', shortName: 'Portal', path: '/exam-cell-dashboard', icon: FileText },
+        { name: 'Staff Permissions', shortName: 'Staff', path: '/exam-cell-dashboard?tab=staff', icon: Clock },
+        { name: 'Marks Memos', shortName: 'Memos', path: '/exam-cell-dashboard?tab=memos', icon: GraduationCap }
       );
     } else if (user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') {
       items.push(
@@ -456,6 +468,10 @@ const Layout = ({ children }) => {
                   <p className="text-[11px] text-customText-muted dark:text-customText-mutedDark truncate">
                     {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') 
                       ? 'Security Head' 
+                      : (user?.role === 'EXAM_CELL')
+                      ? 'Exam Cell Head'
+                      : (user?.facultyType === 'EXAM_CELL' || user?.role === 'EXAM_CELL_STAFF')
+                      ? 'Exam Cell Staff'
                       : (user?.facultyType === 'OFFICE' || user?.role === 'OFFICE_STAFF')
                       ? 'Office Staff'
                       : user?.facultyType === 'NON_TEACHING'
@@ -540,6 +556,10 @@ const Layout = ({ children }) => {
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary-dark font-bold">
                         {(user?.role === 'WATCHMAN' || user?.role === 'SECURITY_HEAD') 
                           ? 'Security' 
+                          : (user?.role === 'EXAM_CELL')
+                          ? 'Exam Cell Head'
+                          : (user?.facultyType === 'EXAM_CELL' || user?.role === 'EXAM_CELL_STAFF')
+                          ? 'Exam Cell Staff'
                           : (user?.facultyType === 'OFFICE' || user?.role === 'OFFICE_STAFF')
                           ? 'Office Staff'
                           : user?.facultyType === 'NON_TEACHING'

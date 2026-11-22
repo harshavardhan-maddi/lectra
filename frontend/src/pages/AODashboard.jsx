@@ -326,13 +326,16 @@ const AODashboard = () => {
     };
   }, [token]);
 
-  // Filter tickets for HOD and Office Staff applicants (routes to AO Login)
+  // Filter tickets for HOD, Office Staff, and Exam Cell Head applicants (routes to AO Login)
   const aoTickets = tickets.filter(t => 
     t.applicantType === 'HOD' || 
     t.applicantType === 'OFFICE' || 
+    t.applicantType === 'EXAM_CELL_HEAD' ||
     t.facultyType === 'OFFICE' || 
+    t.facultyType === 'EXAM_CELL' ||
     t.status === 'FORWARDED_TO_AO' ||
-    (t.department && t.department.toLowerCase().includes('office') && t.status !== 'CLOSED')
+    (t.department && t.department.toLowerCase().includes('office') && t.status !== 'CLOSED') ||
+    (t.department && t.department.toLowerCase().includes('exam') && t.status !== 'CLOSED')
   );
 
   const pendingTickets = aoTickets.filter(t => t.status === 'FORWARDED_TO_AO');
@@ -402,7 +405,11 @@ const AODashboard = () => {
   const handleApprove = (ticket) => {
     try {
       setActionError('');
-      const applicantRole = (ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE') ? 'Office Staff' : 'HOD';
+      const applicantRole = ticket.applicantType === 'EXAM_CELL_HEAD' 
+        ? 'Exam Cell Head' 
+        : (ticket.applicantType === 'OFFICE' || ticket.facultyType === 'OFFICE') 
+        ? 'Office Staff' 
+        : 'HOD';
       aoApproveHodLeave(ticket.id, {
         aoName: user?.name || 'Administrative Officer (AO)',
         remarks: `Leave approved by AO for ${applicantRole}. Forwarded to Campus Security at main gate.`
@@ -428,7 +435,11 @@ const AODashboard = () => {
 
     try {
       setActionError('');
-      const applicantRole = (rejectingTicket.applicantType === 'OFFICE' || rejectingTicket.facultyType === 'OFFICE') ? 'Office Staff' : 'HOD';
+      const applicantRole = rejectingTicket.applicantType === 'EXAM_CELL_HEAD'
+        ? 'Exam Cell Head'
+        : (rejectingTicket.applicantType === 'OFFICE' || rejectingTicket.facultyType === 'OFFICE') 
+        ? 'Office Staff' 
+        : 'HOD';
       aoRejectHodLeave(rejectingTicket.id, {
         aoName: user?.name || 'Administrative Officer (AO)',
         reason: rejectReason.trim()

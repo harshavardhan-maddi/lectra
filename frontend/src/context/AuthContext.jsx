@@ -53,10 +53,12 @@ export const AuthProvider = ({ children }) => {
         storedToken === 'watchman-session-token' ||
         storedToken === 'ao-session-token' ||
         storedToken === 'office-session-token' ||
+        storedToken === 'examcell-session-token' ||
         (storedToken && (
           storedToken.startsWith('watchman-token-') || 
           storedToken.startsWith('ao-token-') || 
           storedToken.startsWith('office-token-') ||
+          storedToken.startsWith('examcell-token-') ||
           storedToken.startsWith('faculty-token-')
         ))
       ) {
@@ -190,6 +192,29 @@ export const AuthProvider = ({ children }) => {
         setUser(officeUser);
         try { recordLogin(officeUser); } catch (e) {}
         return officeUser;
+      }
+    }
+
+    // 4.1 EXAM_CELL (Examination Cell Head / Office) Login fallback credentials
+    if (cleanUserId === 'examcell' || cleanUserId === 'exam_cell' || cleanUserId === 'examcellhead' || cleanUserId === 'examcell_head' || cleanUserId === 'exam') {
+      if (cleanPass === 'examcell' || cleanPass === 'examcell123' || cleanPass === 'exam123' || cleanPass === 'password123' || cleanPass === 'nrtec@nec') {
+        const examCellUser = {
+          id: 8888,
+          name: 'Exam Cell Head',
+          userId: 'examcell',
+          role: 'EXAM_CELL',
+          facultyType: 'EXAM_CELL',
+          designation: 'Controller of Examinations / Exam Cell Head',
+          className: null,
+          department: 'Examination Cell'
+        };
+        localStorage.setItem('token', 'examcell-session-token');
+        localStorage.setItem('user', JSON.stringify(examCellUser));
+        localStorage.setItem('auth_session', JSON.stringify({ userId, password }));
+        setToken('examcell-session-token');
+        setUser(examCellUser);
+        try { recordLogin(examCellUser); } catch (e) {}
+        return examCellUser;
       }
     }
 

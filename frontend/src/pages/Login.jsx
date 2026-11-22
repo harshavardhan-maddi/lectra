@@ -43,7 +43,8 @@ import {
   isAfter410PM,
   isPastTimeToday,
   getCurrentTimeHHMM,
-  isHodDirectlyAcceptableCertificate
+  isHodDirectlyAcceptableCertificate,
+  isMarksMemoCertificate
 } from '../services/outpassService';
 
 export const COLLEGE_DEPARTMENTS = [
@@ -213,6 +214,8 @@ const Login = () => {
       navigate('/ao-dashboard');
     } else if (userProfile.role === 'OFFICE') {
       navigate('/office-dashboard');
+    } else if (userProfile.role === 'EXAM_CELL') {
+      navigate('/exam-cell-dashboard');
     } else {
       navigate('/dashboard');
     }
@@ -1921,6 +1924,8 @@ const Login = () => {
                         {/* Quick Certificate Chips */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {[
+                            'Marks Memo',
+                            'Consolidated Marks Memo (CMM)',
                             'Bonafide Certificate',
                             'Bus Pass Certificate',
                             'Study & Conduct Certificate',
@@ -2048,7 +2053,7 @@ const Login = () => {
                           <span>Certificate Approval & Routing:</span>
                         </p>
                         <p className="text-[11px] leading-relaxed">
-                          <strong>Study Certificate, Custodian Certificate, Bus Pass, and Bonafide Certificate</strong> come to HOD first and are approved directly by HOD. All other certificate types are reviewed by HOD and forwarded to the Administrative Officer (AO).
+                          <strong>Study Certificate, Custodian Certificate, Bus Pass, and Bonafide Certificate</strong> come to HOD first and are approved directly by HOD. <strong>Marks Memos & Grade Sheets</strong> are forwarded by HOD to the <strong>Examination Cell</strong>. All other general certificates are forwarded to the <strong>Administrative Officer (AO)</strong>.
                         </p>
                       </div>
 
@@ -2069,6 +2074,8 @@ const Login = () => {
                         {/* Quick Certificate Chips */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {[
+                            'Marks Memo',
+                            'Consolidated Marks Memo (CMM)',
                             'Bonafide Certificate',
                             'Bus Pass Certificate',
                             'Study & Conduct Certificate',
